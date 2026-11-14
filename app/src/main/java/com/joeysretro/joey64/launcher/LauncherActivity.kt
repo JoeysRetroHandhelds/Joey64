@@ -84,7 +84,10 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private val isTv by lazy { com.joeysretro.joey64.launcher.layout.Tv.isTv(this) }
-    private val keys = KeyNormaliser(tv = { isTv }) { super.dispatchKeyEvent(it) }
+    private val keys = KeyNormaliser(tv = { isTv }, leaveTouchMode = {
+        val v = window.decorView
+        if (v.isInTouchMode) (v.findFocus() ?: v).requestFocusFromTouch()
+    }) { super.dispatchKeyEvent(it) }
     private val model: LibraryModel by viewModels()
     private val importModel: ImportModel by viewModels()
     private val fzModel: FzImportModel by viewModels()
