@@ -2326,6 +2326,16 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
         s_preciseSetByUs = true;
         LOGI("smart sync: page level for this game (precise off)");
     }
+    // RSP: cxd4 for Boss Game Studios' games, which draw nothing with parallel-RSP (black screen, 0 frames presented,
+    // both Adreno and Turnip; 2026-11-14, a Snapdragon 8 Gen 3 tester's reports and Odin 2 Portal p2-gl/boss: Gauntlet
+    // Legends, World Driver Championship and Stunt Racer 64 all play on cxd4 at 60 fps, Mario no Photopie is fine on
+    // parallel). GLideN64 keeps HLE.
+    static const char* const kCxd4RspGames[] = {"NGX", "NWO", "NR3"};
+    auto rsp = g_optionOverrides.find("mupen64plus-rsp-plugin");
+    if (idIn(kCxd4RspGames) && rsp != g_optionOverrides.end() && rsp->second == "parallel") {
+        rsp->second = "cxd4";
+        LOGI("RSP: cxd4 for this game (parallel-RSP draws nothing)");
+    }
     // CPU core: the dynamic recompiler for every game (Sin and Punishment's English patch, the last game on the cached
     // interpreter, runs on it since core 19eff8c compiles code in cartridge ROM). --es opts wins.
     if (!g_optionOverrides.count("mupen64plus-cpucore"))

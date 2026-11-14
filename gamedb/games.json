@@ -511,6 +511,33 @@
       "issues": [
         {"status": "parked", "devices": "all", "what": "bad dump: the boot code (0x40-0xFFF) is all zeros and the header has no name, so it could not boot on a real N64 either; runs 11 s, then compiles at bogus 80800000. The other 11 Turok 3 dumps (6102) play", "evidence": "full run 2026-11-13 f1095"}
       ]
+    },
+    {
+      "id": "NGX", "title": "Gauntlet Legends",
+      "settings": [
+        {"what": "cxd4 RSP with parallel-RDP (GLideN64 keeps HLE)", "where": "libretro_host.cpp kCxd4RspGames", "why": "parallel-RSP draws nothing: black screen, 0 frames presented"}
+      ],
+      "fixed": [
+        {"what": "black screen on parallel-RDP (parallel-RSP)", "fix": "cxd4 RSP for this game (2026-11-14)", "evidence": "Snapdragon 8 Gen 3 tester reports 2026-11-14 (Gauntlet Legends: 10 frames in 22-34 s, plays on GLideN64); Odin 2 Portal p2-gl / p2-boss: black on parallel-RSP, 60 fps on cxd4"}
+      ]
+    },
+    {
+      "id": "NWO", "title": "World Driver Championship",
+      "settings": [
+        {"what": "cxd4 RSP with parallel-RDP (GLideN64 keeps HLE)", "where": "libretro_host.cpp kCxd4RspGames", "why": "parallel-RSP draws nothing: black screen, 0 frames presented"}
+      ],
+      "fixed": [
+        {"what": "black screen on parallel-RDP (parallel-RSP)", "fix": "cxd4 RSP for this game (2026-11-14)", "evidence": "Snapdragon 8 Gen 3 tester reports 2026-11-14 (Gauntlet Legends: 10 frames in 22-34 s, plays on GLideN64); Odin 2 Portal p2-gl / p2-boss: black on parallel-RSP, 60 fps on cxd4"}
+      ]
+    },
+    {
+      "id": "NR3", "title": "Stunt Racer 64",
+      "settings": [
+        {"what": "cxd4 RSP with parallel-RDP (GLideN64 keeps HLE)", "where": "libretro_host.cpp kCxd4RspGames", "why": "parallel-RSP draws nothing: black screen, 0 frames presented"}
+      ],
+      "fixed": [
+        {"what": "black screen on parallel-RDP (parallel-RSP)", "fix": "cxd4 RSP for this game (2026-11-14)", "evidence": "Snapdragon 8 Gen 3 tester reports 2026-11-14 (Gauntlet Legends: 10 frames in 22-34 s, plays on GLideN64); Odin 2 Portal p2-gl / p2-boss: black on parallel-RSP, 60 fps on cxd4"}
+      ]
     }
   ]
 }
