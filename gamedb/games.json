@@ -1,6 +1,6 @@
 {
   "about": "Joey64 per-game database: what each game needs, what is wrong with it and where, and what was fixed. Seed for the M3 profile DB. Rules: gamedb/README.md. Update this file in the same commit as any change to a game's status (new problem found, fixed, regressed, setting added or dropped).",
-  "updated": "2026-11-13",
+  "updated": "2026-11-14",
   "games": [
     {
       "id": "NPF", "title": "Pokemon Snap",
@@ -479,6 +479,42 @@
       "id": "", "crc": "AEC6E579EA9885B0", "md5": "1dea2e7699a150237f65565ac6317eca", "title": "ZZ Gunner (World) (N64brew Game Jam 2021) (homebrew, libdragon + ugfx)",
       "issues": [
         {"status": "parked", "devices": "all", "what": "nothing drawn: waits at 80025ab0 for its DP interrupt; the ugfx RSP task ends (SP broke) without writing any DP register, on HLE, parallel and cxd4", "evidence": "joey64-notes queue.md 19 broken entries, 2026-11-13; dev counters on core branch blk-pclog-dev"}
+      ]
+    },
+    {
+      "id": "NZL", "crc": "87121EFE3149592C", "md5": "ab1ca59d0039e3b34d82db650b54d7b9", "title": "Legend of Zelda, The - Ocarina of Time (Europe) (Beta) (2003-02-13) (GameCube)",
+      "fixed": [
+        {"what": "the app died ~60 s in, going into ZELDA MAP SELECT (2 of 3 tries on the system driver and on Turnip, never on GLideN64): millions of RDP command words with no sync and no finished frame, so GPU memory was never recycled and the process hit Android's 65,530 mapping limit", "fix": "core main 0ef305f (parallel-RDP starts a frame context early after 256 full syncs or 1M command words without a finished frame)", "evidence": "full run 2026-11-13 f0499; Odin 3 8/8 alive after the fix"}
+      ]
+    },
+    {
+      "id": "NZL", "crc": "871E1C92509D8A96", "md5": "3c10b67a76616ae2c162def7528724cf", "title": "Legend of Zelda, The - Ocarina of Time (Europe) (Beta) (2003-02-21) (GameCube) (Debug)",
+      "fixed": [
+        {"what": "the app died ~60 s in, going into ZELDA MAP SELECT (2 of 3 tries on the system driver and on Turnip, never on GLideN64): millions of RDP command words with no sync and no finished frame, so GPU memory was never recycled and the process hit Android's 65,530 mapping limit", "fix": "core main 0ef305f (parallel-RDP starts a frame context early after 256 full syncs or 1M command words without a finished frame)", "evidence": "full run 2026-11-13 f0500; Odin 3 2/2 alive after the fix"}
+      ]
+    },
+    {
+      "id": "NZL", "crc": "917D18F669BC5453", "md5": "09ae099051bdf6377d482d1944171dfc", "title": "Legend of Zelda, The - Ocarina of Time - Master Quest (Europe) (GameCube) (Debug)",
+      "fixed": [
+        {"what": "the app died ~60 s in, going into ZELDA MAP SELECT (2 of 3 tries on the system driver and on Turnip, never on GLideN64): millions of RDP command words with no sync and no finished frame, so GPU memory was never recycled and the process hit Android's 65,530 mapping limit", "fix": "core main 0ef305f (parallel-RDP starts a frame context early after 256 full syncs or 1M command words without a finished frame)", "evidence": "full run 2026-11-13 f0511; Odin 3 14/14 alive after the fix (the flood hit once)"}
+      ]
+    },
+    {
+      "id": "", "crc": "D9068F2AA66EF477", "md5": "affd2c50a0381dc2aff24adb82b289e2", "title": "Evil Australians (World) (Demo) (Aftermarket) (Unl)",
+      "fixed": [
+        {"what": "SIGILL ~30 s in (after Start) on the recompiler; the cached interpreter played it: LDL/LDR from a constant address with address & 7 >= 4 (LDL) or < 4 (LDR) shifted 32-56 bits on 32-bit halves, which emitted invalid instructions (and LDR mixed up its halves)", "fix": "core main (new_dynarec arm64: the doubleword shifted as one 64-bit register; emit_andimm takes all ones)", "evidence": "full run 2026-11-13 f0263; Odin 3 2/2 into the level at 60 fps, same picture as the interpreter"}
+      ]
+    },
+    {
+      "id": "", "crc": "6EE8AAA61517C148", "md5": "faf4d5f46e4e2a7e87584ead6923c284", "title": "Featherlight (World) (v1.1) (N64brew Game Jam 2021) (Aftermarket) (Unl)",
+      "issues": [
+        {"status": "parked", "devices": "all", "what": "jumps to a bogus address (9e20d357) in its first second on the recompiler; black screen on the cached interpreter. Its own write-up says it glitches on real N64 hardware too and only runs on Project64 2.3 with angrylion's RDP and Graphics HLE off", "evidence": "full run 2026-11-13 f0303; Odin 3 2026-11-14 fl-dyn / fl-int; n64squid.com/?p=6425"}
+      ]
+    },
+    {
+      "id": "", "crc": "E47279B5E70E7D2E", "md5": "da557a2f10fb66bf966140fbb066772f", "title": "Turok 3 - Shadow of Oblivion (USA) (Beta) (2000-05-03)",
+      "issues": [
+        {"status": "parked", "devices": "all", "what": "bad dump: the boot code (0x40-0xFFF) is all zeros and the header has no name, so it could not boot on a real N64 either; runs 11 s, then compiles at bogus 80800000. The other 11 Turok 3 dumps (6102) play", "evidence": "full run 2026-11-13 f1095"}
       ]
     }
   ]

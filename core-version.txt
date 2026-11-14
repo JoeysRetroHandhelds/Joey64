@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
 branch: main
-commit: 0ef305fce0e35839861c6645114a3bac9d64c428 2026-11-14 09:44:16 -0600 parallel-RDP: start a frame context early when a game floods the RDP without finishing frames
+commit: f9cc6b9f3b8a52c96d12b5044d55305eb7bf51b5 2026-11-14 10:25:09 -0600 new_dynarec arm64: LDL/LDR from a constant address shift the doubleword as one 64-bit registe
 uncommitted: none
-built: 2026-11-14 09:15
-md5: 3755f78926e85190969e162aa49bf2e7
+built: 2026-11-14 10:12
+md5: cdbac777ba3ee0408adf27e36022a6e7
