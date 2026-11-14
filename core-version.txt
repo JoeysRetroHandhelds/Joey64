@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: rel3
-commit: f6ce4359e71771f1c1fbd473fb47c38479af3b09 2026-11-13 01:49:15 -0600 Cart ROM: a dump cut short of its chip (no whole number of MB) reads as zeros up to the next 
+branch: main
+commit: 0ef305fce0e35839861c6645114a3bac9d64c428 2026-11-14 09:44:16 -0600 parallel-RDP: start a frame context early when a game floods the RDP without finishing frames
 uncommitted: none
-built: 2026-11-13 07:35
-md5: 6d2b6597be2db1e9605232950d7843f1
+built: 2026-11-14 09:15
+md5: 3755f78926e85190969e162aa49bf2e7
