@@ -92,7 +92,7 @@ function event(e) {
         drawn_fps: num(e.drawnFps, "drawnFps", 0, 1000),
         dupes: num(e.dupes, "dupes", 0, 1000),
         underruns: num(e.underruns, "underruns", 0, 100000, { int: true }),
-        ended: oneOf(e.ended, "ended", ["quit", "crash"]),
+        ended: oneOf(e.ended, "ended", ENDED),
         // Added 2026-11-08 (migrations/0002-session-details.sql); each may be missing (an older app).
         frames: num(e.frames, "frames", 0, 1e9, { int: true }),
         first_frame_ms: num(e.firstFrameMs, "firstFrameMs", 0, 600000, { int: true }),
@@ -118,6 +118,10 @@ function event(e) {
         renderer_rule: str(e.rendererRule, "rendererRule", 120),
         trial_level: num(e.trialLevel, "trialLevel", 0, 2, { int: true }),
         picked_by: e.pickedBy === undefined || e.pickedBy === null ? null : oneOf(e.pickedBy, "pickedBy", ["auto", "user"]),
+        // Added 2026-11-14 (migrations/0006-netplay-log.sql): a netplay room's figures, and the log excerpt the app sends
+        // with a session that ended badly or played in a room.
+        netplay: netplay(e.netplay),
+        log: e.log === undefined || e.log === null ? null : logText(e.log),
       };
     case "nocover":
     case "replaced":
@@ -139,6 +143,43 @@ function event(e) {
     default:
       throw new Invalid("unknown event type");
   }
+}
+
+/**
+ * How a session ended. quit and crash from the start; since 2026-11-14 also next (Joey64 restarted the process for
+ * another game or settings), stuck (the core hung), and Android's record of a process that ended mid-game: anr,
+ * killed (memory or resources), closed (swiped away or force stopped), signal, gone (no record).
+ */
+export const ENDED = ["quit", "next", "stuck", "crash", "anr", "killed", "closed", "signal", "gone"];
+
+const NET_ENDS = ["lost", "unreachable", "full", "mismatch", "hostclosed", "outofstep", "left"];
+const NET_NUMBERS = {
+  me: [1, 4, true], players: [1, 4, true], delay: [0, 60, true], delayMax: [0, 60, true], pingAvg: [0, 10000, true],
+  pingMax: [0, 10000, true], seconds: [0, 7 * 24 * 3600, true], waits: [0, 1e6, true], waitSeconds: [0, 7 * 24 * 3600, false],
+  pausedSeconds: [0, 7 * 24 * 3600, false], outOfStep: [0, 1e6, true], left: [0, 4, true],
+};
+
+/** A netplay room's figures (the app's reports/NetStats): known keys only, stored as JSON. */
+function netplay(v) {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "object" || Array.isArray(v)) throw new Invalid("netplay not an object");
+  const out = { role: oneOf(v.role, "netplay role", ["host", "join"]) };
+  for (const k of Object.keys(v)) {
+    if (k === "role") continue;
+    if (k === "end") { out.end = oneOf(v.end, "netplay end", NET_ENDS); continue; }
+    const r = NET_NUMBERS[k];
+    if (!r) throw new Invalid(`netplay ${k} unknown`);
+    out[k] = num(v[k], `netplay ${k}`, r[0], r[1], { int: r[2] });
+  }
+  return JSON.stringify(out);
+}
+
+/** A log excerpt: line breaks and tabs, nothing else below space; at most 16,000 characters. */
+function logText(v) {
+  if (typeof v !== "string") throw new Invalid("log not a string");
+  if (v.length > 16000) throw new Invalid("log too long");
+  if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(v)) throw new Invalid("log has control characters");
+  return v;
 }
 
 /** Crash text may have line breaks and tabs, nothing else below space; at most 2,000 characters. */

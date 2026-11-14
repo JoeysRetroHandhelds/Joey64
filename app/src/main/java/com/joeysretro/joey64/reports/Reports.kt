@@ -160,11 +160,14 @@ class SessionTracker(private val openFile: File, private val pendingDir: File, p
     /** The session so far, for when the process ends without [finish]. Any thread; nothing once finished. */
     @Synchronized fun writeOpen() { if (!done && ms > 0) ReportFiles.write(openFile, event("crash").toString()) }
 
-    /** Quit: the session waits in pending/ for the next send, if [keep] says it's worth sending. */
-    @Synchronized fun finish() {
+    /**
+     * The game screen closed: the session waits in pending/ for the next send, if [keep] says it's worth sending. [ended]:
+     * "quit", "next" (Joey64 restarts the process for another game or for settings) or "stuck" (the core hung in a frame).
+     */
+    @Synchronized fun finish(ended: String = "quit") {
         if (done) return
         done = true
-        if (keep(seconds, allDrawn)) ReportFiles.write(File(pendingDir, "${System.currentTimeMillis()}-${openFile.nameWithoutExtension}.json"), event("quit").toString())
+        if (keep(seconds, allDrawn)) ReportFiles.write(File(pendingDir, "${System.currentTimeMillis()}-${openFile.nameWithoutExtension}.json"), event(ended).toString())
         openFile.delete()
     }
 
@@ -262,9 +265,47 @@ object ReportJson {
             for (k in listOf("driverRule", "rendererRule")) clean(stored.optString(k), 120)?.let { put(k, it) }
             if (stored.has("trialLevel")) stored.optInt("trialLevel", -1).takeIf { it in 0..2 }?.let { put("trialLevel", it) }
             stored.optString("pickedBy").takeIf { it == "auto" || it == "user" }?.let { put("pickedBy", it) }
-            put("ended", if (stored.optString("ended") == "crash") "crash" else "quit")
+            put("ended", stored.optString("ended").takeIf { it in ENDED } ?: "quit")
+            // Added 2026-11-14 (server migrations/0006-netplay-log.sql): the room's figures and the log excerpt.
+            stored.optJSONObject("netplay")?.let { n -> netplay(n)?.let { put("netplay", it) } }
+            stored.optString("log").takeIf { it.isNotEmpty() }?.let { put("log", logText(it)) }
         }
     }
+
+    /**
+     * How a session ended (Joey 2026-11-14): quit; next (Joey64 restarted the process for another game or settings);
+     * stuck (the core hung in a frame); and from Android's record of a process that ended without the game screen
+     * closing: crash, anr (not responding), killed (Android ended it for memory or resources), closed (swiped away or
+     * force stopped), signal (killed by a signal), gone (no record of why).
+     */
+    val ENDED = listOf("quit", "next", "stuck", "crash", "anr", "killed", "closed", "signal", "gone")
+
+    /** Endings that send the log excerpt with the session. */
+    val PROBLEM_ENDED = setOf("stuck", "crash", "anr", "killed", "signal", "gone")
+
+    /** The log excerpt's most characters (server: 16,000). */
+    const val MAX_LOG = 16_000
+
+    /** Line breaks and tabs stay; other control characters go; at most [MAX_LOG], the end kept. */
+    fun logText(s: String): String = s.replace("\r", "").replace(Regex("[\\u0000-\\u0008\\u000b-\\u001f\\u007f]"), " ").takeLast(MAX_LOG)
+
+    /** The netplay part as the server takes it: known keys only, numbers in range (validate.js). */
+    fun netplay(n: JSONObject): JSONObject? {
+        val role = n.optString("role").takeIf { it == "host" || it == "join" } ?: return null
+        return JSONObject().apply {
+            put("role", role)
+            for ((k, max) in NET_NUMBERS) if (n.has(k)) {
+                val v = n.optDouble(k)
+                if (!v.isNaN() && v >= 0) put(k, if (k in NET_DECIMAL) Math.min(v, max) else Math.min(v, max).toLong())
+            }
+            n.optString("end").takeIf { it in NetStats.ENDS }?.let { put("end", it) }
+        }
+    }
+
+    private val NET_NUMBERS = listOf("me" to 4.0, "players" to 4.0, "delay" to 60.0, "delayMax" to 60.0, "pingAvg" to 10_000.0,
+        "pingMax" to 10_000.0, "seconds" to 7 * 24 * 3600.0, "waits" to 1e6, "waitSeconds" to 7 * 24 * 3600.0,
+        "pausedSeconds" to 7 * 24 * 3600.0, "outOfStep" to 1e6, "left" to 4.0)
+    private val NET_DECIMAL = setOf("waitSeconds", "pausedSeconds")
 
     private val NUMBERS = listOf("frames" to 1e9, "framesTimed" to 1e9, "firstFrameMs" to 600_000.0, "p95Ms" to 100.0, "p99Ms" to 100.0,
         "slowFrames" to 1e9, "underruns" to 100_000.0, "lagMs" to 1000.0, "lagMaxMs" to 1000.0, "thermalMax" to 6.0, "headroomMax" to 10.0,

@@ -78,7 +78,7 @@ big, 429 with Retry-After (the rate limiter 60 s; 10 a day an address block, 200
   new database gets them.
 - `migrations/`: changes for a database made before them, each run once (`0002-session-details.sql`: the
   session details, 2026-11-08; `0003-screen.sql`: the screen size, 2026-11-08; `0004-gpu-rules.sql`: Auto's driver and
-  renderer rules, the start-up trial's level and who picked, 2026-11-09, read by `queries/rules.sql`; `0005-states.sql`: players' states, 2026-11-12). Run a migration before deploying the Worker that writes its columns.
+  renderer rules, the start-up trial's level and who picked, 2026-11-09, read by `queries/rules.sql`; `0005-states.sql`: players' states, 2026-11-12; `0006-netplay-log.sql`: netplay figures and log excerpts, 2026-11-14). Run a migration before deploying the Worker that writes its columns.
 - `src/index.js`: the Worker (handlers only: a Worker's main module may export nothing else).
 - `src/validate.js`, `src/store.js`: checking and storing; `src/address.js`: address blocks and their hashes;
   `src/state.js`: POST /v1/state.

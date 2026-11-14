@@ -52,6 +52,13 @@ object ReportSender {
         sweepOpen(ctx, exits)
         val pending = ReportFiles.pending(ctx).listFiles { f -> f.name.endsWith(".json") }.orEmpty().sortedBy { it.name }
         val sessions = pending.mapNotNull { f -> try { f to JSONObject(f.readText()) } catch (e: Exception) { f.delete(); null } }
+        // A session that ended badly, or played in a netplay room, takes its process's log excerpt with it (Joey
+        // 2026-11-14), read now while LogFiles still has it ("<time>-<pid>.json" names the process).
+        for ((f, o) in sessions) if (!o.has("log") && (o.optString("ended") in ReportJson.PROBLEM_ENDED || o.has("netplay"))) {
+            val pid = f.nameWithoutExtension.substringAfter('-').toIntOrNull() ?: continue
+            val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+            logExcerpt(ctx, pid, names)?.let { o.put("log", it); try { ReportFiles.write(f, o.toString()) } catch (e: Exception) { } }
+        }
         val db = LibraryDb.get(ctx)
         val headers = db.headersOf(sessions.mapNotNull { ReportJson.md5(it.second.optString("md5")) }.toSet())
 
@@ -171,15 +178,52 @@ object ReportSender {
     }
 
     /** One of our processes' ends as Android recorded it, and the session it was playing (by pid). */
-    private data class Exit(val pid: Int, val timestamp: Long, val crash: Boolean, var where: String, val summary: String, var md5: String? = null)
+    private data class Exit(val pid: Int, val timestamp: Long, val crash: Boolean, var where: String, val summary: String, var md5: String? = null,
+                            val ended: String = "gone")
 
     private fun exits(ctx: Context): List<Exit> {
         if (Build.VERSION.SDK_INT < 30) return emptyList()
         val list = try { ctx.getSystemService(ActivityManager::class.java).getHistoricalProcessExitReasons(null, 0, 16) } catch (e: Exception) { return emptyList() }
         return list.map { x ->
             val crash = x.reason == ApplicationExitInfo.REASON_CRASH || x.reason == ApplicationExitInfo.REASON_CRASH_NATIVE || x.reason == ApplicationExitInfo.REASON_ANR
-            Exit(x.pid, x.timestamp, crash, if (x.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) "core" else "launcher", if (crash) summary(ctx, x) else "")
+            Exit(x.pid, x.timestamp, crash, if (x.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) "core" else "launcher", if (crash) summary(ctx, x) else "",
+                ended = endedOf(x.reason))
         }
+    }
+
+    /** A session's ending (ReportJson.ENDED) from Android's reason its process ended. */
+    internal fun endedOf(reason: Int): String = when (reason) {
+        ApplicationExitInfo.REASON_CRASH, ApplicationExitInfo.REASON_CRASH_NATIVE -> "crash"
+        ApplicationExitInfo.REASON_ANR -> "anr"
+        ApplicationExitInfo.REASON_LOW_MEMORY, ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE, ApplicationExitInfo.REASON_PERMISSION_CHANGE,
+        ApplicationExitInfo.REASON_DEPENDENCY_DIED, 14 /* REASON_FREEZER, Android 14 */ -> "killed"
+        ApplicationExitInfo.REASON_USER_REQUESTED, ApplicationExitInfo.REASON_USER_STOPPED -> "closed"
+        ApplicationExitInfo.REASON_SIGNALED, ApplicationExitInfo.REASON_EXIT_SELF -> "signal"
+        else -> "gone"
+    }
+
+    /** Lines of a log excerpt: the last ones, and before them the room's own lines from earlier in the process. */
+    private const val LOG_TAIL = 250
+    private const val LOG_NET = 150
+
+    /**
+     * The excerpt of process [pid]'s session log (LogFiles' "-<pid>-app.log") for a problem or netplay session: its last
+     * [LOG_TAIL] lines, after up to [LOG_NET] earlier netplay lines. Paths, public addresses and the room's player names
+     * ([names]) are taken out; null when the log is gone.
+     */
+    private fun logExcerpt(ctx: Context, pid: Int, names: List<String>): String? {
+        val f = com.joeysretro.joey64.LogFiles.dir(ctx).listFiles { x -> x.name.endsWith("-$pid-app.log") }?.maxByOrNull { it.lastModified() } ?: return null
+        val lines = try { f.readLines() } catch (e: Exception) { return null }
+        return excerpt(lines, names)
+    }
+
+    /** [logExcerpt] without the file: pure, unit tested. */
+    internal fun excerpt(lines: List<String>, names: List<String>): String {
+        val tailFrom = maxOf(0, lines.size - LOG_TAIL)
+        val net = lines.subList(0, tailFrom).filter { it.contains("netplay", true) || it.contains("playtogether", true) }.takeLast(LOG_NET)
+        var text = (net + (if (net.isNotEmpty()) listOf("...") else emptyList()) + lines.subList(tailFrom, lines.size)).joinToString("\n")
+        for (n in names.filter { it.trim().length >= 2 }.sortedByDescending { it.length }) text = text.replace(n.trim(), "<player>")
+        return ReportJson.logText(com.joeysretro.joey64.LogMask.addresses(scrub(text)))
     }
 
     private fun summary(ctx: Context, x: ApplicationExitInfo): String {
@@ -233,9 +277,9 @@ object ReportSender {
     private const val PATH_REST = """(?:(?!: )[^\n"'])*"""
 
     /**
-     * Sessions left in open/ by a process that is gone: they didn't end with a quit. One whose process
-     * crashed is sent as ended "crash" (and its crash gets the game's MD5); one stopped otherwise (swiped
-     * away, killed for memory) as "quit".
+     * Sessions left in open/ by a process that is gone: they didn't end with a quit. Each is sent ended as Android
+     * recorded its process's end ([endedOf]: crash, anr, killed, closed, signal; gone with no record), and a crash's
+     * event gets the game's MD5.
      */
     private fun sweepOpen(ctx: Context, exits: List<Exit>) {
         val alive = try {
@@ -250,7 +294,9 @@ object ReportSender {
                 exit.md5 = o.optString("md5")
                 // A Java crash or ANR while playing: the game screen's side, not the library's.
                 if (exit.where == "launcher") exit.where = "host"
-            } else o.put("ended", "quit")
+            }
+            // Why the game screen never closed, as Android recorded it (it was "crash" or "quit" before 2026-11-14).
+            o.put("ended", exit?.ended ?: "gone")
             if (SessionTracker.keep(o.optLong("seconds"), o.optLong("frames", Long.MAX_VALUE))) ReportFiles.write(File(ReportFiles.pending(ctx), "${f.lastModified()}-$pid.json"), o.toString())
             f.delete()
         }

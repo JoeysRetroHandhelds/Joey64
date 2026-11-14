@@ -87,6 +87,13 @@ for (const [name, change] of [
   ["trialLevel out of range", (b) => { b.events[0].trialLevel = 3; }],
   ["trialLevel not a whole number", (b) => { b.events[0].trialLevel = 0.5; }],
   ["pickedBy", (b) => { b.events[0].pickedBy = "dev"; }],
+  ["netplay not an object", (b) => { b.events[0].netplay = "host"; }],
+  ["netplay role", (b) => { b.events[0].netplay = { role: "spectator" }; }],
+  ["netplay unknown key", (b) => { b.events[0].netplay = { role: "host", name: "Joey" }; }],
+  ["netplay ping out of range", (b) => { b.events[0].netplay = { role: "join", pingMax: 99999 }; }],
+  ["netplay end", (b) => { b.events[0].netplay = { role: "join", end: "boom" }; }],
+  ["log too long", (b) => { b.events[0].log = "x".repeat(16001); }],
+  ["log control characters", (b) => { b.events[0].log = "a\u0001b"; }],
 ]) {
   test(`rejected: ${name}`, () => {
     const b = good();
@@ -94,3 +101,16 @@ for (const [name, change] of [
     assert.throws(() => validate(b), Invalid);
   });
 }
+
+test("new endings, netplay figures and a log excerpt are kept", () => {
+  for (const ended of ["next", "stuck", "anr", "killed", "closed", "signal", "gone"]) {
+    const b = good(); b.events[0].ended = ended; assert.equal(validate(b).events[0].ended, ended);
+  }
+  const b = good();
+  b.events[0].netplay = { role: "join", me: 2, players: 2, delay: 4, delayMax: 7, pingAvg: 61, pingMax: 140, seconds: 300, waits: 3, waitSeconds: 4.5, pausedSeconds: 0, outOfStep: 1, left: 0, end: "lost" };
+  b.events[0].log = "line 1\n\tline 2";
+  const e = validate(b).events[0];
+  assert.deepEqual(JSON.parse(e.netplay), b.events[0].netplay);
+  assert.equal(e.log, "line 1\n\tline 2");
+  assert.equal(validate(good()).events[0].netplay, null);
+});

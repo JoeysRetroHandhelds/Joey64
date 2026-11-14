@@ -48,7 +48,9 @@ object JLog {
  */
 object LogFiles {
     private const val TAG = "Joey64"
-    private const val KEEP = 5
+    // 20 since 2026-11-14 (was 5): a whole evening of games, each its own process, so Share logs and the reports'
+    // log excerpts still have the session a problem happened in (Joey's netplay evening was gone by the next day).
+    private const val KEEP = 20
     private const val PREFS = "logfiles"
     private const val LAST_EXIT = "lastExitTime"
     private val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)

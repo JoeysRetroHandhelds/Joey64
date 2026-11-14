@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   drawn_fps  REAL,
   dupes      REAL,            -- duplicate frames a second
   underruns  INTEGER,         -- audio underruns (the buffer ran dry: a crackle) in the session
-  ended      TEXT NOT NULL,   -- "quit" or "crash"
+  ended      TEXT NOT NULL,   -- quit, next, stuck, crash, anr, killed, closed, signal, gone (validate.js ENDED)
   frames          INTEGER,   -- frames drawn; few after 5 s or more is a game that didn't boot
   first_frame_ms  INTEGER,   -- from loading the game to its first frame
   frames_timed    INTEGER,   -- frames in p95_ms / p99_ms
@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   driver_rule     TEXT,      -- Auto's driver rule (GpuRules): "Adreno 6xx-8xx: bundled Turnip" (migrations/0004-gpu-rules.sql)
   renderer_rule   TEXT,      -- Auto's renderer rule, or the per-game one when that won
   trial_level     INTEGER,   -- GpuTrial: 0 Auto's pick, 1 system driver, 2 GLideN64 too; NULL: no trial (Settings picked)
-  picked_by       TEXT       -- "auto" or "user" (driver or renderer set in Settings; the rules then say what Auto would pick)
+  picked_by       TEXT,      -- "auto" or "user" (driver or renderer set in Settings; the rules then say what Auto would pick)
+  netplay         TEXT,      -- JSON: a netplay room's figures (role, players, delay, pings, waits, outOfStep, left, end); NULL: no room
+  log             TEXT       -- the app's log excerpt for a session that ended badly or played in a room (16,000 characters at most)
 );
 CREATE INDEX IF NOT EXISTS sessions_md5 ON sessions (md5);
 

@@ -22,6 +22,8 @@ data class NetInfo(
     val waitingFor: Int,
     /** This game's own player (1-4), 0 when the bridge doesn't say (an older one). */
     val me: Int = 0,
+    /** The room's input delay in frames (the host's, or the one this joiner was given), 0 when not known. */
+    val delay: Int = 0,
 ) {
     companion object {
         val OFF = NetInfo(false, false, 0, false, 0, 0, 0, 0)
@@ -29,7 +31,7 @@ data class NetInfo(
         fun of(v: IntArray?): NetInfo {
             if (v == null || v.size < 4 || v[0] == 0) return OFF
             return NetInfo(true, v[1] != 0, v[2], v[3] and 1 != 0, (v[3] shr 1) and 0xF,
-                v.getOrElse(4) { 0 }, v.getOrElse(5) { 0 }, v.getOrElse(6) { 0 })
+                v.getOrElse(4) { 0 }, v.getOrElse(5) { 0 }, v.getOrElse(6) { 0 }, v.getOrElse(7) { 0 })
         }
     }
 

@@ -895,6 +895,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val st = states ?: return
         val rom = startRom ?: return
         if (quitting) return
+        sessionEnd = "next"
         quitting = true
         overlay?.screen = null
         sessionMark(); menuOpen = false
@@ -1548,7 +1549,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             // Netplay: the room was lost, couldn't be reached, turned this player down, or has another copy (approved netplay screens).
             // A quit the player asked for stops the room's wait (joey64_netplay_abort), and the core then says the
             // connection was lost or the room can't be reached: no problem screen for that.
-            else if (why in 3..6 || why == 8) { if (!quitting) intent?.takeIf { launcherString(EXTRA_MD5) != null }?.let { com.joeysretro.joey64.launcher.GameStartFailed.netEnded(it, why) } }
+            else if (why in 3..6 || why == 8) { com.joeysretro.joey64.reports.NetStats.endOf(why)?.let { if (!quitting) netStats.end = it }; if (!quitting) intent?.takeIf { launcherString(EXTRA_MD5) != null }?.let { com.joeysretro.joey64.launcher.GameStartFailed.netEnded(it, why) } }
             else intent?.takeIf { launcherString(EXTRA_MD5) != null }?.let { com.joeysretro.joey64.launcher.GameStartFailed.romFailed(it, com.joeysretro.joey64.launcher.GameStartFailed.Why.Stopped) }
             finish()
         }
@@ -1675,6 +1676,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     // and the library sends it with the next report. Off: nothing is recorded. Dev starts (--es env/opts,
     // renderer or driver overrides) are tests, not play: not recorded either.
     private var session: com.joeysretro.joey64.reports.SessionTracker? = null
+    /** How this play ends for its report: "quit", or "next" when Joey64 restarts the process for another game or settings. */
+    private var sessionEnd = "quit"
     /** The most cheat codes on at once this session (reports: a game that misbehaves with cheats on). */
     private var cheatsMost = 0
     private val sessionStats = DoubleArray(16)
@@ -2423,6 +2426,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var net = com.joeysretro.joey64.netplay.NetInfo.OFF
     /** This device's player (1-4), 0 until known. */
     private var netMe = 0
+    /** The room's figures for this play's report (Send reports): see reports/NetStats. */
+    private val netStats = com.joeysretro.joey64.reports.NetStats()
+    private var netStatsPolls = 0
     /** Out of step shows once a play; players who left are said once. */
     private var netOutShown = false
     private var netLeftSaid = 0
@@ -2445,6 +2451,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             }
             netPlayers = if (n.inRoom) com.joeysretro.joey64.netplay.NetPlayers.parse(NativeBridge.netplayPlayers()) else emptyList()
             for (p in netPlayers) netNames[p.player] = p.name
+            // Reports: the room's figures go with the session every 2 s, and the names seen so the log excerpt can
+            // leave them out (ReportJson.session never sends them).
+            if (n.inRoom) {
+                netStats.sample(n, netPlayers, android.os.SystemClock.elapsedRealtime())
+                if (netStatsPolls++ % 8 == 0) session?.let { s ->
+                    netStats.json()?.let { s.put("netplay", it) }
+                    s.put("maskNames", org.json.JSONArray(netNames.values.toList()))
+                }
+            }
             if (n.inRoom && !quitting) netShow(n)
             // The players chip (approved), top right; at the bottom right when the stats are top right.
             if (netChip == null && netPlayers.isNotEmpty()) netChip = com.joeysretro.joey64.netplay.NetChip(this@MainActivity, windowManager)
@@ -2474,6 +2489,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             // which says "The host closed the room" (Joey 2026-11-12).
             if (p == 1 && !n.hosting && netMe != 1) {
                 JLog.i(TAG, "netplay: the host closed the room, back to the library")
+                netStats.end = "hostclosed"
                 intent?.takeIf { launcherString(EXTRA_MD5) != null }?.let { com.joeysretro.joey64.launcher.GameStartFailed.netEnded(it, 8) }
                 quitToLibrary()
                 return
@@ -2617,7 +2633,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val clearTask = owner != null
         // The game before is closed on purpose: nothing to recover for it (only its own; another game's stays, F3).
         val closing = owner?.states?.saveName
-        owner?.let { NativeBridge.stop(); it.finish() }
+        owner?.let { it.sessionEnd = "next"; NativeBridge.stop(); it.finish() }
         owner = null
         // Unpacking the new ROM (up to 64 MB, or a zip / 7z) runs on gameIo, as prepareGame does for the first game: on
         // the main thread it risked an ANR, and a missing file or a full disk crashed the app (code audit 3, H2).
@@ -3315,7 +3331,17 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     override fun onDestroy() {
         held?.hide(); held = null
-        if (isFinishing) { fpsHandler.removeCallbacks(sessionTick); session?.finish(); session = null }
+        if (isFinishing) {
+            fpsHandler.removeCallbacks(sessionTick)
+            session?.let { s ->
+                netStats.json()?.let { s.put("netplay", it) }
+                if (netNames.isNotEmpty()) s.put("maskNames", org.json.JSONArray(netNames.values.toList()))
+                // A core stuck in a frame (endStuckProcess follows): its own ending, not a quit.
+                if (gameLoaded && NativeBridge.coreStuckMs() > STUCK_MS) sessionEnd = "stuck"
+                s.finish(sessionEnd)
+            }
+            session = null
+        }
         fpsHandler.removeCallbacks(saveRamWatch)
         getSystemService(android.hardware.input.InputManager::class.java)?.unregisterInputDeviceListener(padListener)
         uiScope.cancel()
