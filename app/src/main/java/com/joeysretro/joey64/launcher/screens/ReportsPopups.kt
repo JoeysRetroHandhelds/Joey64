@@ -33,11 +33,18 @@ const val WHATS_SENT = """This device
 Each game you play
   • The game's ID (its ROM's MD5) and header code
   • Renderer, resolution and the settings you changed
-  • Minutes played, average speed, and whether it closed by itself
+  • Minutes played and average speed
+  • How it ended: you quit, it crashed or stopped responding, or Android closed it
   • Whether it started, and how long its first picture took
   • Stutter (slow frames), audio crackles, and input delay
   • How hot the device got
   • CPU core and graphics timing used, screen refresh rate, how many cheats were on, and whether it started from a save state
+
+Netplay games
+  • Whether you hosted or joined, how many players, input delay, ping, how often and how long the game waited, whether the games went out of step, players who left, and how the room ended. No names, room codes or addresses
+
+Problems
+  • For a game that crashed, froze or was closed by Android, and for netplay games: the last lines of Joey64's own log for that game, with folders, names and outside addresses taken out
 
 Box art
   • Games with no cover, or whose cover you changed: the game's ID and file name
