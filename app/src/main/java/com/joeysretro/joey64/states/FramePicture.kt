@@ -24,8 +24,15 @@ object FramePicture {
      * no wider than that, keeping its shape (a state's picture: at 4x upscaling the 2560x1920 PNG took 650 ms of a
      * quit on the Thor, 2026-11-12).
      */
-    fun capturePng(timeoutMs: Int = 2000, maxWidth: Int = Int.MAX_VALUE): ByteArray? {
-        val capture = NativeBridge.captureFrame(timeoutMs) ?: return null
+    fun capturePng(timeoutMs: Int = 2000, maxWidth: Int = Int.MAX_VALUE): ByteArray? =
+        NativeBridge.captureFrame(timeoutMs)?.let { encodePng(it, maxWidth) }
+
+    /**
+     * A [NativeBridge.captureFrame] capture as PNG bytes, or null if it isn't one. Separate from taking it so a save
+     * state holds the game only for the capture (~15 ms) and encodes on its own thread (2026-11-14, Joey: "saving
+     * states takes too long": on the Thor at 4x the encode was most of the 0.2-0.4 s a save paused).
+     */
+    fun encodePng(capture: ByteArray, maxWidth: Int = Int.MAX_VALUE): ByteArray? {
         val (w, h) = size(capture) ?: return null
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         // ARGB_8888's memory order is R, G, B, A: the capture's own.

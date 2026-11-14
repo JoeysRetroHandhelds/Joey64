@@ -82,30 +82,35 @@ class GameStates(
     @Volatile var failedNeed = 0L
         private set
 
-    /** Saves the game as it is now into [slot]. False if the core's state couldn't be taken or written. */
-    fun save(slot: Int): Boolean {
+    /**
+     * Saves the game as it is now into [slot]. False if the core's state couldn't be taken or written. [taken] runs
+     * once the moment is taken, before anything is written: the game can go on from then (the pause menu closes).
+     */
+    fun save(slot: Int, taken: () -> Unit = {}): Boolean {
         settled()
         failedNeed = 0
         val shot = take(slot) ?: return false
+        taken()
         return write(slot, shot)
     }
 
-    /** One moment of the game, taken before anything is written: the core's state, its achievements' progress, its picture. */
-    class Shot internal constructor(internal val data: ByteArray, internal val achv: ByteArray?, internal val png: ByteArray?,
-        internal val before: UndoSave?, internal val tookMs: Long)
+    /**
+     * One moment of the game, taken before anything is written: the core's state, its achievements' progress, its
+     * picture as the core drew it (made a PNG while the state is written, [write]).
+     */
+    class Shot internal constructor(internal val data: ByteArray, internal val achv: ByteArray?, internal val capture: ByteArray?,
+        internal val tookMs: Long)
 
+    // Only what must be the same moment happens here: the state and the frame it holds (~25 ms on the Thor). Undo's
+    // copy of the slot and the picture's PNG moved to [write] (2026-11-14, Joey: "saving states takes too long": with
+    // them here a save held the game 0.2-0.4 s on the Thor at 4x).
     private fun take(slot: Int): Shot? {
         val t0 = SystemClock.elapsedRealtime()
-        // What the slot held before, for Undo save state (a slot's own quit save rotation isn't kept).
-        val before = if (StateSlots.isAuto(slot)) null else try {
-            UndoSave(slot, readWhole(StateSlots.fileName(saveName, slot)),
-                space.openRead(path(StateSlots.thumbnailName(saveName, slot)))?.use { it.readBytes() }, savedAt(slot))
-        } catch (e: IOException) { null }
         val data = NativeBridge.saveState(TIMEOUT_MS) ?: return null.also { JLog.e(TAG, "slot $slot: the core gave no state") }
         val achv = NativeBridge.stateProgress()
         // The same moment's picture (the game is paused or between frames, so it's the frame the state holds).
-        val png = FramePicture.capturePng(maxWidth = PICTURE_MAX_WIDTH)
-        return Shot(data, achv, png, before, SystemClock.elapsedRealtime() - t0)
+        val capture = NativeBridge.captureFrame(2000)
+        return Shot(data, achv, capture, SystemClock.elapsedRealtime() - t0)
     }
 
     /**
@@ -116,30 +121,56 @@ class GameStates(
         val t1 = SystemClock.elapsedRealtime()
         val end = if (aside) ASIDE else ""
         val name = StateSlots.fileName(saveName, slot) + end
+        // The picture beside it, as RetroArch names it.
+        val thumb = StateSlots.thumbnailName(saveName, slot) + end
+        // What the slot held before, for Undo save state (a slot's own quit save rotation isn't kept); read before
+        // anything of the slot is written.
+        val before = if (StateSlots.isAuto(slot)) null else try {
+            UndoSave(slot, readWhole(StateSlots.fileName(saveName, slot)),
+                space.openRead(path(StateSlots.thumbnailName(saveName, slot)))?.use { it.readBytes() }, savedAt(slot))
+        } catch (e: IOException) { null }
+        val readMs = SystemClock.elapsedRealtime() - t1
+        // The picture is made and written on its own thread while the state is packed and written (on an SD card
+        // data folder each took 0.3-2 s, one after the other). It goes to a file of its own and takes the old one's
+        // place only once the state is written, so a state that can't be written keeps its old picture.
+        var png: ByteArray? = null
+        var pictureWritten = false
+        var pictureMs = 0L
+        val pictureJob = Thread({
+            val p0 = SystemClock.elapsedRealtime()
+            png = shot.capture?.let { FramePicture.encodePng(it, PICTURE_MAX_WIDTH) }
+            png?.let { bytes ->
+                pictureWritten = try { space.openWrite(path(thumb + NEXT)).use { it.write(bytes) }; true } catch (e: IOException) {
+                    JLog.e(TAG, "slot $slot: can't write its picture: $e"); false
+                }
+            }
+            pictureMs = SystemClock.elapsedRealtime() - p0
+        }, "joey64-statepicture").apply { start() }
         return try {
             val file = StateFormat.wrap(shot.data, shot.achv)
-            val packMs = SystemClock.elapsedRealtime() - t1
-            failedNeed = file.size.toLong() + (shot.png?.size ?: 0)
+            val packMs = SystemClock.elapsedRealtime() - t1 - readMs
+            failedNeed = file.size.toLong() + (shot.capture?.size ?: 0) / 8
             writeWhole(name, file)
-            val stateMs = SystemClock.elapsedRealtime() - t1 - packMs
-            // The picture beside it, as RetroArch names it. The old one (RetroArch's, or ours) shows the
-            // moment before, so it goes even when there's no new one.
-            val thumb = StateSlots.thumbnailName(saveName, slot) + end
+            val stateMs = SystemClock.elapsedRealtime() - t1 - readMs - packMs
+            pictureJob.join()
+            // The old picture (RetroArch's, or ours) shows the moment before, so it goes even when there's no new one.
             // The picture is extra: the state is saved even when it can't be written.
-            val pictureOk = shot.png != null && try { writeWhole(thumb, shot.png); true } catch (e: IOException) {
-                JLog.e(TAG, "slot $slot: can't write its picture: $e"); false
-            }
+            runCatching { space.delete(path(thumb)) }
+            val pictureOk = pictureWritten && space.rename(path(thumb + NEXT), thumb)
             if (!pictureOk) {
-                runCatching { space.delete(path(thumb)) }
-                if (shot.png == null) JLog.e(TAG, "slot $slot: no picture from the core")
+                runCatching { space.delete(path(thumb + NEXT)) }
+                if (png == null) JLog.e(TAG, "slot $slot: no picture from the core")
+                else if (pictureWritten) JLog.e(TAG, "slot $slot: can't put its picture in place")
             }
-            if (shot.before != null) undoSave = shot.before
+            if (before != null) undoSave = before
             failedNeed = 0
-            JLog.i(TAG, "saved $name: ${shot.data.size} bytes, ${file.size} written, picture ${shot.png?.size ?: 0}; " +
-                "taking it ${shot.tookMs} ms, packing and writing ${SystemClock.elapsedRealtime() - t1} ms " +
-                "(packing $packMs, the state $stateMs, the picture ${SystemClock.elapsedRealtime() - t1 - packMs - stateMs})")
+            JLog.i(TAG, "saved $name: ${shot.data.size} bytes, ${file.size} written, picture ${png?.size ?: 0}; " +
+                "taking it ${shot.tookMs} ms, then ${SystemClock.elapsedRealtime() - t1} ms " +
+                "(undo copy $readMs, packing $packMs, the state $stateMs; the picture alongside $pictureMs)")
             true
         } catch (e: IOException) {
+            pictureJob.join()
+            runCatching { space.delete(path(thumb + NEXT)) }
             JLog.e(TAG, "can't write slot $slot" + "\n" + Log.getStackTraceString(e)); false
         }
     }
@@ -479,6 +510,8 @@ class GameStates(
         private const val RECOVERY_STATE = "state"
         private const val RECOVERY_INFO = "info.properties"
         private const val RECOVERY_PICTURE = "picture.png"
+        /** A state's new picture while the state is written ([write]). */
+        private const val NEXT = ".next"
         private const val GAMES_DIR = "games"
         /** A new quit save's files wait under their names plus this until the kept ones have moved down ([saveQuit]). */
         private const val ASIDE = ".new"

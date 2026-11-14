@@ -1974,13 +1974,16 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             overlay?.screen = null
             stateHandler.post {
                 val savedAt = if (save) null else st.savedAt(slot)
-                val ok = if (save) st.save(slot) else st.load(slot, undoable = true)
+                // A save closes the menu as soon as the moment is taken; writing it goes on behind the game
+                // (2026-11-14, Joey: "saving states takes too long": the menu stayed 1-4 s on the Thor).
+                var closed = false
+                val ok = if (save) st.save(slot) { closed = true; runOnUiThread { closeMenu() } } else st.load(slot, undoable = true)
                 // A state loaded by hand: the game is somewhere real again, so quitting writes the auto slot.
                 if (ok && !save) { startLoadFailed = false; loadedThisPlay = true }
                 if (ok && save) savedThisPlay = true
                 runOnUiThread {
                     if (ok && slot != StateSlots.AUTO) setCurrentSlot(slot)
-                    closeMenu()
+                    if (!closed) closeMenu()
                     if (save) popSaved(slot, ok) else popLoaded(slot, ok, savedAt)
                 }
             }
