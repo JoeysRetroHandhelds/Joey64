@@ -502,12 +502,24 @@ std::chrono::steady_clock::time_point g_loadStart;   // loadGame's start, for th
 std::atomic<double> g_firstFrameMs{-1};
 std::atomic<int> g_sessInterpreter{-1};             // the CPU core loadGame chose: 1 interpreter, 0 dynarec
 
+// Tester logs (Joey 2026-11-14): the stats window's frames over 33 ms with when they came (seconds since the game
+// started loading) and how long they took, the first kSlowList of them, so a dip in a session log can be put next to
+// what the player saw. Emulation thread only.
+constexpr int kSlowList = 8;
+struct SlowFrame { float at, ms; };
+SlowFrame g_slowList[kSlowList];
+int g_slowListCount = 0;
+
 void noteFrameTime(double ms) {
     uint32_t n = g_frameRingCount.load(std::memory_order_relaxed);
     g_frameRing[n % kFrameRing] = (float)ms;
     g_frameRingCount.store(n + 1, std::memory_order_release);
     if (ms > g_statSlowestMs) g_statSlowestMs = ms;
-    if (ms > 33.0) { ++g_statSlowFrames; g_sessSlowFrames.fetch_add(1, std::memory_order_relaxed); }
+    if (ms > 33.0) {
+        if (g_statSlowFrames < kSlowList)
+            g_slowList[g_statSlowFrames] = {std::chrono::duration<float>(std::chrono::steady_clock::now() - g_loadStart).count(), (float)ms};
+        ++g_statSlowFrames; g_sessSlowFrames.fetch_add(1, std::memory_order_relaxed);
+    }
     g_sessFrameHist[std::min(std::max((int)ms, 0), kSessBuckets - 1)].fetch_add(1, std::memory_order_relaxed);
 }
 // For the counter ("60 FPS | 20 DL/s | 100%"): emulated frames (retro_run calls, the game's speed) and new
@@ -958,6 +970,7 @@ void retrySwapchainIfDue() {
 }
 
 std::string gpuClockText();
+std::string clocksText();
 // Logs emulated frames/s (retro_run calls), presented and duped frames every 5 s.
 void logStats() {
     using clock = std::chrono::steady_clock;
@@ -1001,6 +1014,19 @@ void logStats() {
          g_statRunMs / g_statRuns, g_statWaitMs / g_statRuns, g_statAudioWaitMs / g_statRuns, fillMs,
          targetMs, underruns, g_audio.outputLatencyMs(), lat, g_statSlowestMs, g_statSlowFrames,
          gpuClockText().c_str(), Thermal::text().c_str(), audioIn, audioOut);
+    if (g_statSlowFrames > 0) {
+        std::string list;
+        char one[40];
+        for (int i = 0; i < std::min(g_statSlowFrames, kSlowList); ++i) {
+            snprintf(one, sizeof one, "%s%.1f s %.1f ms", i ? ", " : "", g_slowList[i].at, g_slowList[i].ms);
+            list += one;
+        }
+        LOGI("slow frames: %s%s", list.c_str(), g_statSlowFrames > kSlowList ? ", ..." : "");
+    }
+    {
+        std::string c = clocksText();
+        if (!c.empty()) LOGI("clocks: %s", c.c_str());
+    }
     g_statRuns = g_statPresents = g_statDupes = 0;
     g_statRunMs = g_statWaitMs = g_statAudioWaitMs = g_statSlowestMs = 0;
     g_statSlowFrames = 0;
@@ -1016,6 +1042,54 @@ std::string gpuClockText() {
     if (!f || fscanf(f, "%ld", &hz) != 1 || hz <= 0) { if (f) fclose(f); readable = false; LOGI("GPU clock: not readable here"); return ""; }
     fclose(f);
     return ", gpu " + std::to_string(hz / 1000000) + " MHz";
+}
+
+// Tester logs (Joey 2026-11-14): every 5 s, each CPU cluster's clock and the most it may run at now (a lowered
+// most is the kernel's thermal or power limit), the GPU's clock against its own limit and how busy it is, so a dip
+// in a session log shows whether the device slowed down. Files that can't be read are left out for the session.
+static long readLong(const char* path) {
+    FILE* f = fopen(path, "r");
+    if (!f) return -1;
+    long v = -1;
+    if (fscanf(f, "%ld", &v) != 1) v = -1;
+    fclose(f);
+    return v;
+}
+std::string clocksText() {
+    static int policies = -1;            // policy numbers found, as a bit set
+    if (policies < 0) {
+        policies = 0;
+        char path[96];
+        for (int i = 0; i < 16; ++i) {
+            snprintf(path, sizeof path, "/sys/devices/system/cpu/cpufreq/policy%d/scaling_cur_freq", i);
+            if (readLong(path) > 0) policies |= 1 << i;
+        }
+        if (!policies) LOGI("clocks: CPU clocks not readable here");
+    }
+    std::string out;
+    char path[96], one[64];
+    for (int i = 0; i < 16; ++i) {
+        if (!(policies & (1 << i))) continue;
+        snprintf(path, sizeof path, "/sys/devices/system/cpu/cpufreq/policy%d/scaling_cur_freq", i);
+        long cur = readLong(path);
+        snprintf(path, sizeof path, "/sys/devices/system/cpu/cpufreq/policy%d/scaling_max_freq", i);
+        long max = readLong(path);
+        if (cur <= 0) continue;
+        if (max > 0) snprintf(one, sizeof one, "%scpu%d %ld/%ld", out.empty() ? "" : ", ", i, cur / 1000, max / 1000);
+        else snprintf(one, sizeof one, "%scpu%d %ld", out.empty() ? "" : ", ", i, cur / 1000);
+        out += one;
+    }
+    if (!out.empty()) out += " MHz";
+    long gcur = readLong("/sys/class/kgsl/kgsl-3d0/gpuclk");
+    if (gcur > 0) {
+        long gmax = readLong("/sys/class/kgsl/kgsl-3d0/max_gpuclk");
+        if (gmax > 0) snprintf(one, sizeof one, "%sgpu %ld/%ld MHz", out.empty() ? "" : ", ", gcur / 1000000, gmax / 1000000);
+        else snprintf(one, sizeof one, "%sgpu %ld MHz", out.empty() ? "" : ", ", gcur / 1000000);
+        out += one;
+        long busy = readLong("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage");
+        if (busy >= 0) { snprintf(one, sizeof one, ", %ld%% busy", busy); out += one; }
+    }
+    return out;
 }
 
 // ---- save RAM ---------------------------------------------------------------
