@@ -92,7 +92,7 @@ object ExpansionPak {
  */
 object EmuAuto {
     val INTERPRETER_GAMES = emptySet<String>()
-    val SMOOTHER_GAMES = setOf("NGE", "NFU", "NKT", "NYS")
+    val SMOOTHER_GAMES = emptySet<String>() // every game at its original rate since 2026-11-14 (Joey); Overclock is the setting
 
     fun cpuCore(gameCode: String?): String = if (gameCode?.take(3) in INTERPRETER_GAMES) "interpreter" else "recompiler"
 

@@ -2330,13 +2330,11 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
     // interpreter, runs on it since core 19eff8c compiles code in cartridge ROM). --es opts wins.
     if (!g_optionOverrides.count("mupen64plus-cpucore"))
         g_optionOverrides["mupen64plus-cpucore"] = "dynamic_recompiler";
-    // Smoother timing: CountPerOp=1 (Project64's counter factor 1) for games that ran below their frame rate on
-    // hardware, where MainActivity sets N64_SMOOTHER=1 (strong devices). Odin 3 (odin3-smooth): GoldenEye 49.7 -> 59.9,
-    // Conker 21.4 -> 28.6, Mario Kart 64 26.5 -> 28.1, Yoshi's Story 28.6 -> 30.0 fps. --es opts wins.
-    static const char* const kSmootherGames[] = {"NGE", "NFU", "NKT", "NYS"};
-    const char* smoother = getenv("N64_SMOOTHER");
-    if (smoother && *smoother == '1' && idIn(kSmootherGames) && !g_optionOverrides.count("mupen64plus-CountPerOp"))
-        g_optionOverrides["mupen64plus-CountPerOp"] = "1";
+    // Every game runs at its original frame rate (Joey 2026-11-14: "All games should run at original framerate, we can
+    // have a setting for anyone that wants the opposite"): no game gets a faster CPU on its own any more. From
+    // 2026-11-06 GoldenEye, Conker, Mario Kart 64 and Yoshi's Story had CountPerOp=1 on Adreno 730+ (N64_SMOOTHER=1,
+    // still set by GpuRules for the Overclock popup), and GoldenEye drew up to 60 frames a second. Overclock 2x/4x is
+    // the setting for anyone who wants it.
     g_sessInterpreter = g_optionOverrides["mupen64plus-cpucore"] == "dynamic_recompiler" ? 0 : 1;
     LOGI("game id %s, parallel-RDP %s, %s", id.c_str(), g_rdpSync ? "synchronous" : "async",
          g_optionOverrides["mupen64plus-cpucore"].c_str());

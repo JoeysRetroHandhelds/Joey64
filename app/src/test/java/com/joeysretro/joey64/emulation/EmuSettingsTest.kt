@@ -91,10 +91,11 @@ class EmuSettingsTest {
     @Test fun autoPicks() {
         assertEquals("recompiler", EmuAuto.cpuCore("NGUJ"))
         assertEquals("recompiler", EmuAuto.cpuCore("NSME"))
-        assertEquals("2x", EmuAuto.overclock("NGEE", true))
-        assertEquals("normal", EmuAuto.overclock("NGEE", false))
+        // Every game at its original rate (2026-11-14): Auto is Normal for the four that were faster too.
+        for (g in listOf("NGEE", "NKTE", "NFUE", "NYSE")) assertEquals("normal", EmuAuto.overclock(g, true))
+        assertEquals("normal", EmuAuto.overclock("NKTE", false))
         assertEquals("normal", EmuAuto.overclock("NSME", true))
-        assertNull(EmuAuto.overclock("NGEE", null))
+        assertNull(EmuAuto.overclock("NKTE", null))
     }
 
     /** The popups' Auto lines copy the host's lists: they must stay the same. */
@@ -105,6 +106,8 @@ class EmuSettingsTest {
         // The host picks the recompiler for every game: no interpreter list there, none here.
         assertFalse(cpp.contains("kInterpreterGames"))
         assertTrue(EmuAuto.INTERPRETER_GAMES.isEmpty())
-        assertEquals(EmuAuto.SMOOTHER_GAMES, list("kSmootherGames"))
+        // No game gets a faster CPU on its own (original frame rates): no list there, none here.
+        assertFalse(cpp.contains("kSmootherGames"))
+        assertTrue(EmuAuto.SMOOTHER_GAMES.isEmpty())
     }
 }
