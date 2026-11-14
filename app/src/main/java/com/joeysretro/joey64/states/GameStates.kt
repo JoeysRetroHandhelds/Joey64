@@ -28,13 +28,31 @@ class GameStates(
     private val space: FileSpace = com.joeysretro.joey64.launcher.storage.DataFolders.current(context).space,
 ) {
     private val recoveryDir = Recovery.dirOf(context, saveName)
+    private val appContext = context.applicationContext
+    /** A quit save waiting to go into the data folder ([writeQuit], [commitStaged]). */
+    private val stagedDir = QuitStage.dirOf(context, saveName)
 
     private fun path(name: String) = listOf(DataKind.States.dir, name)
 
     /** Waits for this game's quit save still being written ([writeLater]), so what's read here is the newest. */
     private fun settled() { awaitWrites(saveName, WRITE_WAIT_MS) }
 
-    fun exists(slot: Int): Boolean { settled(); return space.exists(path(StateSlots.fileName(saveName, slot))) }
+    fun exists(slot: Int): Boolean {
+        settled()
+        return synchronized(viewLock) {
+            when (val from = shownFrom(slot)) {
+                STAGED -> true
+                NONE -> false
+                else -> space.exists(path(StateSlots.fileName(saveName, from)))
+            }
+        }
+    }
+
+    /**
+     * Where [slot] is read from now: while a quit save waits in [stagedDir] the folder's Auto is about to become Auto
+     * 2 and so on, so the slots are shown as they'll be once it's in ([folderSlotWhileStaged]). Call under [viewLock].
+     */
+    private fun shownFrom(slot: Int): Int = QuitStage.read(stagedDir)?.let { folderSlotWhileStaged(slot, it.keep) } ?: slot
 
     // ---- Undo load state / Undo save state (approved mockup 2026-11-08, scratchpad build_undo.py) ----
     // One of each, in memory, until the game closes. Undo load: where the game was just before the last
@@ -181,22 +199,42 @@ class GameStates(
     /** When [slot] was saved, or null if it's empty. */
     fun savedAt(slot: Int): Long? {
         settled()
-        val name = StateSlots.fileName(saveName, slot)
-        return space.list(listOf(DataKind.States.dir)).firstOrNull { it.name == name }?.modified
+        return synchronized(viewLock) {
+            val staged = QuitStage.read(stagedDir)
+            when (val from = staged?.let { folderSlotWhileStaged(slot, it.keep) } ?: slot) {
+                STAGED -> staged?.savedAt
+                NONE -> null
+                else -> {
+                    val name = StateSlots.fileName(saveName, from)
+                    space.list(listOf(DataKind.States.dir)).firstOrNull { it.name == name }?.modified
+                }
+            }
+        }
     }
 
     /** Auto, then Slots 1-10, then the older quit saves there are (Auto 2 ...), read from the folder in one listing. */
     fun slotFiles(): List<SlotFile> {
         settled()
-        val entries = space.list(listOf(DataKind.States.dir)).associateBy { it.name }
-        val older = (2..StateSlots.AUTO_MAX).map { StateSlots.auto(it) }.filter { StateSlots.fileName(saveName, it) in entries }
-        return (listOf(StateSlots.AUTO) + (1..StateSlots.COUNT) + older).map { slot ->
-            val state = entries[StateSlots.fileName(saveName, slot)]
-            val thumb = StateSlots.thumbnailName(saveName, slot)
-            val picture = if (state != null && thumb in entries) {
-                try { space.openRead(path(thumb))?.use { it.readBytes() } } catch (e: IOException) { null }
-            } else null
-            SlotFile(slot, state?.modified, picture)
+        return synchronized(viewLock) {
+            val entries = space.list(listOf(DataKind.States.dir)).associateBy { it.name }
+            val staged = QuitStage.read(stagedDir)
+            fun from(slot: Int) = staged?.let { folderSlotWhileStaged(slot, it.keep) } ?: slot
+            fun there(slot: Int) = when (val f = from(slot)) { STAGED -> true; NONE -> false; else -> StateSlots.fileName(saveName, f) in entries }
+            val older = (2..StateSlots.AUTO_MAX).map { StateSlots.auto(it) }.filter { there(it) }
+            (listOf(StateSlots.AUTO) + (1..StateSlots.COUNT) + older).map { slot ->
+                when (val f = from(slot)) {
+                    STAGED -> SlotFile(slot, staged!!.savedAt, staged.picture())
+                    NONE -> SlotFile(slot, null, null)
+                    else -> {
+                        val state = entries[StateSlots.fileName(saveName, f)]
+                        val thumb = StateSlots.thumbnailName(saveName, f)
+                        val picture = if (state != null && thumb in entries) {
+                            try { space.openRead(path(thumb))?.use { it.readBytes() } } catch (e: IOException) { null }
+                        } else null
+                        SlotFile(slot, state?.modified, picture)
+                    }
+                }
+            }
         }
     }
 
@@ -215,9 +253,31 @@ class GameStates(
      */
     fun takeQuit(): Shot? { settled(); failedNeed = 0; return take(StateSlots.AUTO) }
 
-    /** Writes [takeQuit]'s [shot] as [saveQuit] does. */
+    /**
+     * Writes [takeQuit]'s [shot] as [saveQuit] does, in two steps (2026-11-14, Joey: "exiting a game and trying to get
+     * back into that game or another has a delay": Play waited for this write, 1.5-8 s on the Thor's SD card). First
+     * to Joey64's own storage ([QuitStage], a few tenths of a second): from then on it's the Auto save state everywhere
+     * here, and Play waits only for this. Then [commitLater] puts it in the data folder on a thread of its own; a
+     * process that ends first leaves it staged, and the next launcher or game start carries on ([commitAllLater]).
+     */
     fun writeQuit(shot: Shot, keep: Int): Boolean {
         val k = keep.coerceIn(1, StateSlots.AUTO_MAX)
+        val t0 = SystemClock.elapsedRealtime()
+        val ok = synchronized(gameLock(saveName)) {
+            // An earlier quit save of this game still waiting goes in first (two quits a few seconds apart).
+            if (QuitStage.read(stagedDir) != null) commitStaged()
+            // Staged as the core gave it: packing (deflate, 0.6-0.9 s on the Portal) waits for the commit.
+            val png = shot.capture?.let { FramePicture.encodePng(it, PICTURE_MAX_WIDTH) }
+            synchronized(viewLock) { QuitStage.write(stagedDir, shot.data, shot.achv, png, System.currentTimeMillis(), k) }
+                .also { if (it) JLog.i(TAG, "quit save of $saveName staged: ${shot.data.size} bytes, picture ${png?.size ?: 0}; " +
+                    "taking it ${shot.tookMs} ms, then ${SystemClock.elapsedRealtime() - t0} ms") }
+        }
+        if (ok) commitLater(appContext, saveName)
+        // Joey64's own storage refused it (full): straight to the data folder, as before.
+        return ok || writeQuitDirect(shot, k)
+    }
+
+    private fun writeQuitDirect(shot: Shot, k: Int): Boolean {
         if (k == 1 || !exists(StateSlots.AUTO)) {
             if (!write(StateSlots.AUTO, shot)) return false
             for (n in StateSlots.AUTO_MAX downTo k + 1) removeSlot(StateSlots.auto(n))
@@ -230,6 +290,52 @@ class GameStates(
         moveSlot(StateSlots.auto(2), StateSlots.AUTO)
         return false
     }
+
+    /**
+     * Puts the staged quit save in the data folder, the kept ones moving down; the caller holds [gameLock]. The slow
+     * part (writing it beside them, [ASIDE]) is outside [viewLock], so reads go on meanwhile; the renames are inside
+     * it, so a read sees the slots before or after, never halfway. False when it's still staged (to try again later).
+     */
+    private fun commitStaged(): Boolean {
+        val st = QuitStage.read(stagedDir) ?: return true
+        val t0 = SystemClock.elapsedRealtime()
+        val name = StateSlots.fileName(saveName, StateSlots.AUTO)
+        val thumb = StateSlots.thumbnailName(saveName, StateSlots.AUTO)
+        try {
+            val bytes = StateFormat.wrap(st.mem(), st.achv())
+            failedNeed = bytes.size.toLong()
+            writeWhole(name + ASIDE, bytes)
+            val png = st.picture()
+            if (png == null) space.delete(path(thumb + ASIDE))
+            else try { writeWhole(thumb + ASIDE, png) } catch (e: IOException) {
+                JLog.e(TAG, "quit save of $saveName: can't write its picture: $e"); space.delete(path(thumb + ASIDE))
+            }
+            failedNeed = 0
+        } catch (e: IOException) {
+            JLog.e(TAG, "quit save of $saveName: can't put it in the data folder yet, kept staged: $e"); return false
+        }
+        val writeMs = SystemClock.elapsedRealtime() - t0
+        synchronized(viewLock) {
+            // The process is about to end (switchGame): the renames wait for the next start rather than be cut off.
+            if (stopping) { JLog.i(TAG, "quit save of $saveName: written beside, put in place at the next start"); return false }
+            val k = st.keep
+            for (n in StateSlots.AUTO_MAX downTo k) removeSlot(StateSlots.auto(n))
+            for (n in k - 1 downTo 1) moveSlot(StateSlots.auto(n), StateSlots.auto(n + 1))
+            if (!putInPlace(StateSlots.AUTO)) {
+                if (k > 1) moveSlot(StateSlots.auto(2), StateSlots.AUTO)
+                return false
+            }
+            space.setModified(path(name), st.savedAt)
+            if (space.exists(path(thumb))) space.setModified(path(thumb), st.savedAt)
+            QuitStage.clear(stagedDir)
+        }
+        JLog.i(TAG, "quit save of $saveName in the data folder: writing $writeMs ms, " +
+            "all ${SystemClock.elapsedRealtime() - t0} ms")
+        return true
+    }
+
+    /** [commitStaged] for this game, now (the Saves page's Delete, a backup, a data folder move). */
+    fun commitNow(): Boolean = synchronized(gameLock(saveName)) { commitStaged() }
 
     /** Puts [write]'s aside files in [slot]'s place, which must be free; false (and the aside files gone) when it can't. */
     private fun putInPlace(slot: Int): Boolean {
@@ -250,6 +356,7 @@ class GameStates(
     /** Deletes [slot]'s state and picture (the Saves page); true when it's gone. */
     fun deleteSlot(slot: Int): Boolean {
         settled()
+        if (StateSlots.isAuto(slot)) commitNow()
         removeSlot(slot)
         return !exists(slot)
     }
@@ -276,9 +383,22 @@ class GameStates(
     fun load(slot: Int, undoable: Boolean = false): Boolean {
         settled()
         val name = StateSlots.fileName(saveName, slot)
-        val bytes = readWhole(name) ?: return false.also { JLog.e(TAG, "no $name") }
+        // A staged quit save is the core's own data, not packed ([writeQuit]).
+        var staged: Pair<ByteArray, ByteArray?>? = null
+        val bytes = synchronized(viewLock) {
+            when (val from = shownFrom(slot)) {
+                STAGED -> { staged = try { QuitStage.read(stagedDir)?.let { it.mem() to it.achv() } } catch (e: IOException) { null }; null }
+                NONE -> null
+                else -> readWhole(StateSlots.fileName(saveName, from))
+            }
+        }
+        if (bytes == null && staged == null) return false.also { JLog.e(TAG, "no $name") }
         val before = if (undoable) NativeBridge.saveState(TIMEOUT_MS)?.let { UndoLoad(slot, it, NativeBridge.stateProgress()) } else null
-        val ok = loadBytes(name, bytes)
+        val ok = staged?.let { (mem, achv) ->
+            NativeBridge.loadState(mem, achv, TIMEOUT_MS).also {
+                if (it) JLog.i(TAG, "load $name (staged): done (${mem.size} bytes)") else JLog.e(TAG, "load $name (staged): FAILED")
+            }
+        } ?: loadBytes(name, bytes!!)
         if (ok && before != null) undoLoad = before
         return ok
     }
@@ -361,7 +481,13 @@ class GameStates(
     fun startPicture(slot: Int?): ByteArray? = try {
         if (slot != null) settled()
         if (slot == null) File(recoveryDir, RECOVERY_PICTURE).takeIf { it.exists() }?.readBytes()
-        else space.openRead(path(StateSlots.thumbnailName(saveName, slot)))?.use { it.readBytes() }
+        else synchronized(viewLock) {
+            when (val from = shownFrom(slot)) {
+                STAGED -> QuitStage.read(stagedDir)?.picture()
+                NONE -> null
+                else -> space.openRead(path(StateSlots.thumbnailName(saveName, from)))?.use { it.readBytes() }
+            }
+        }
     } catch (e: IOException) { null }
 
     /** The game was quit cleanly: nothing to recover. */
@@ -483,6 +609,57 @@ class GameStates(
                         lock.notifyAll()
                     }
                 }
+            }
+        }
+
+        // ---- staged quit saves going into the data folder ([writeQuit], [commitStaged]) ----
+        private val committer = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "joey64-quit-commit") }
+        private val gameLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+        private fun gameLock(saveName: String): Any = gameLocks.getOrPut(saveName) { Any() }
+        /** Held while the slots are read, and while a commit renames them. */
+        private val viewLock = Object()
+        @Volatile private var stopping = false
+
+        /** Puts [saveName]'s staged quit save in the data folder, on the commit thread. */
+        fun commitLater(context: Context, saveName: String) {
+            val app = context.applicationContext
+            committer.execute {
+                try { GameStates(app, saveName).commitNow() } catch (e: Exception) { JLog.e(TAG, "quit save of $saveName: $e") }
+            }
+        }
+
+        /** Every game's staged quit save into the data folder, on the commit thread (launcher and game start). */
+        fun commitAllLater(context: Context) { for (name in QuitStage.waiting(context)) commitLater(context, name) }
+
+        /** Every staged quit save into the data folder before returning (a backup, a data folder move). */
+        fun commitAllNow(context: Context) {
+            for (name in QuitStage.waiting(context)) try { GameStates(context, name).commitNow() } catch (e: Exception) {
+                JLog.e(TAG, "quit save of $name: $e")
+            }
+        }
+
+        /**
+         * The process ends soon (switchGame, a stuck core): a commit's renames don't start from here, and one
+         * renaming now is waited for, so none is cut off halfway. What's left stays staged for the next start.
+         */
+        fun stopCommits() { stopping = true; synchronized(viewLock) {} }
+
+        /** [folderSlotWhileStaged]: the staged quit save itself. */
+        internal const val STAGED = -2
+        /** [folderSlotWhileStaged]: nothing (an older one past what's kept, going when it goes in). */
+        internal const val NONE = -1
+
+        /**
+         * The folder's slot that [slot] shows while a quit save waits staged with [keep] kept: Auto is the staged one,
+         * Auto n the folder's Auto n-1 (while n is kept, else [NONE]), other slots themselves.
+         */
+        internal fun folderSlotWhileStaged(slot: Int, keep: Int): Int {
+            if (!StateSlots.isAuto(slot)) return slot
+            val n = StateSlots.autoNumber(slot)
+            return when {
+                n == 1 -> STAGED
+                n <= keep.coerceIn(1, StateSlots.AUTO_MAX) -> StateSlots.auto(n - 1)
+                else -> NONE
             }
         }
 

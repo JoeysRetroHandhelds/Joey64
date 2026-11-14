@@ -84,6 +84,8 @@ object DataFolderMove {
             val oldReadable = from.isInternal || (from.space as? TreeSpace)?.readable() == true
             val res = if (!oldReadable) null else {
                 SrmSync.pushAll(context)
+                // Into the old folder first, so the move takes them along.
+                com.joeysretro.joey64.states.GameStates.commitAllNow(context)
                 DataMover.settleSaves(from.space, target.space, DataMover.move(from.space, target.space, DataFolders.KINDS), fromIsWorkingCopy = from.isInternal)
             }
             DataFolderRules.hideFromGallery(target.space, DataFolders.KINDS)

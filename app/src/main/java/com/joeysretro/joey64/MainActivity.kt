@@ -122,6 +122,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // would reload the core under the running game and end it with no quit save (code audit 4, A-H1, Thor). This
         // instance closes at once, so the game's own instance comes back to the front, untouched.
         if (owner != null) { JLog.w(TAG, "a start with no ROM while a game runs: ignored"); finish(); return }
+        // Quit saves a process ended before they were in the data folder (switchGame) go in now, behind the game.
+        GameStates.commitAllLater(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Dev check (2026-11-05 recheck): whether this device offers sustained performance mode (checked before only on the Flip and Portal)
         JLog.w(TAG, "sustained performance mode supported: " +
@@ -2619,6 +2621,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val main = Handler(mainLooper)
         Thread({
             GameStates.awaitWrites(null, GameStates.WRITE_WAIT_MS)
+            GameStates.stopCommits()
             main.post {
                 if (com.joeysretro.joey64.launcher.LauncherActivity.started) afterLauncherSaved {
                     RestartActivity.restart(app, Intent(app, com.joeysretro.joey64.launcher.LauncherActivity::class.java)
@@ -2675,6 +2678,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 }
                 // This screen only hands over: gone before the new one comes, so Back from it doesn't land here.
                 if (!clearTask) finish()
+                // A staged quit save going into the data folder waits for the new process (GameStates.commitAllLater).
+                GameStates.stopCommits()
                 RestartActivity.restart(this, next)
             }
         }

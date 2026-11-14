@@ -133,6 +133,8 @@ class LauncherActivity : ComponentActivity() {
         // Thermal fallback moved from Video to Emulation (2026-11-08): the store moves an older Video file's
         // value over as it opens, before Video can write that file again without it.
         com.joeysretro.joey64.emulation.EmuStore(this)
+        // Quit saves staged in Joey64's own storage that a process ended before they were in the data folder.
+        com.joeysretro.joey64.states.GameStates.commitAllLater(this)
         // RetroAchievements: the kept account signs in now, so Settings shows it with its points.
         com.joeysretro.joey64.achievements.RaBridge.init(this)
         // Debug builds: adb shell am broadcast -a com.joeysretro.joey64.RA_FAKE --ez on true shows the

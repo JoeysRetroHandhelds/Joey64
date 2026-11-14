@@ -108,6 +108,7 @@ fun SavesTab(onHints: (List<Hint>) -> Unit, onImport: () -> Unit, modifier: Modi
             val n = withContext(Dispatchers.IO) {
                 try {
                     SrmSync.pushAll(context)
+                    com.joeysretro.joey64.states.GameStates.commitAllNow(context)
                     context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
                         AppBackup.write(context, DataFolders.current(context).space, backupParts, out) { k -> if (k % 20 == 0) status = "backup" to "Backing up · $k files…" }
                     }
