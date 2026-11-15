@@ -626,7 +626,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         speed = null; speedTry = null; speedGood = level
         val md5Now = earlyMd5()
         var speedGone: GpuSpeed.Start.Gone? = null
-        if (trialPick != null && trialPick.good && level < chain.value.size && md5Now != null && devString("env") == null &&
+        if (trialPick != null && trialPick.good && level < chain.value.size && md5Now != null && (devString("env") == null || devString("env")!!.matches(Regex("N64_TRIAL_BLACK=[0-9:]+"))) &&
             devString("opts") == null && GpuRules.gameRenderer(md5Now) == null) {
             val sp = GpuSpeed(trialStore(), install, trialGpuName, chain.value.size)
             val listLevel = GpuOrder.pick(GpuOrder.cached(this, trialGpuName), chain.value, level)
@@ -1052,7 +1052,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 trialChecking = true
                 trialCheck.execute {
                     // Debug: --es env N64_TRIAL_BLACK=0:1 makes those levels' pictures count as black, to see the cards.
-                    val fake = BuildConfig.DEBUG && android.system.Os.getenv("N64_TRIAL_BLACK")?.split(':')?.contains("${trialInfo?.level}") == true
+                    val fake = BuildConfig.DEBUG && android.system.Os.getenv("N64_TRIAL_BLACK")?.split(':')?.contains("${if (speedTry != null) speedLevel else trialInfo?.level}") == true
                     val lit = !fake && GpuRules.lit(NativeBridge.captureFrame(500))
                     runOnUiThread { trialChecking = false; if (lit && !isFinishing) trialDrew() }
                 }
