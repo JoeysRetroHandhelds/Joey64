@@ -198,6 +198,8 @@ object NativeBridge {
     external fun contentFps(): Double
     /** The newest frame times in ms (each frame's work, without waits), oldest first, into [out]; returns how many. */
     external fun frameTimes(out: FloatArray): Int
+    /** Auto's speed check: [0] the work of every frame not fast-forwarded (ms), [1] how many, since the game loaded. */
+    external fun workTotals(out: DoubleArray)
     /**
      * Send reports: the run's numbers since the game loaded into [out] (13 or more); returns how many.
      * 0 audio underruns, 1 poll->display ms mean (-1 none, OpenGL), 2 its max (0-2 from the 11th second on, past the boot), 3 highest thermal status

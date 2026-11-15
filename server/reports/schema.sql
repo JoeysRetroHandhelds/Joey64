@@ -55,7 +55,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   trial_level     INTEGER,   -- GpuTrial: 0 Auto's pick, 1 system driver, 2 GLideN64 too; NULL: no trial (Settings picked)
   picked_by       TEXT,      -- "auto" or "user" (driver or renderer set in Settings; the rules then say what Auto would pick)
   netplay         TEXT,      -- JSON: a netplay room's figures (role, players, delay, pings, waits, outOfStep, left, end); NULL: no room
-  log             TEXT       -- the app's log excerpt for a session that ended badly or played in a room (16,000 characters at most)
+  log             TEXT,      -- the app's log excerpt for a session that ended badly or played in a room (16,000 characters at most)
+  work_ms         REAL,      -- mean frame work time (ms, fast-forward left out), for the drivers' ranking (migrations/0007-driver-speed.sql)
+  driver_id       TEXT       -- the driver that ran: a GpuRules id ("turnip", "armsx2"...), "system" or "custom"
 );
 CREATE INDEX IF NOT EXISTS sessions_md5 ON sessions (md5);
 

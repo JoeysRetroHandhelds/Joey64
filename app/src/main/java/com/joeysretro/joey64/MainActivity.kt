@@ -620,11 +620,31 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val level = trialPick?.level ?: 0
         trialChain = chain.value
         trialInfo = trialPick
+        // Auto looks for a faster driver once the trial has a good one (approved drvspeed mockup 2026-11-15): a try of
+        // a later driver for a slow game, or of the players' reports' pick, runs instead of the good level. Not for a
+        // dev start (env or opts extras) or a game Auto runs on GLideN64.
+        speed = null; speedTry = null; speedGood = level
+        val md5Now = earlyMd5()
+        var speedGone: GpuSpeed.Start.Gone? = null
+        if (trialPick != null && trialPick.good && level < chain.value.size && md5Now != null && devString("env") == null &&
+            devString("opts") == null && GpuRules.gameRenderer(md5Now) == null) {
+            val sp = GpuSpeed(trialStore(), install, trialGpuName, chain.value.size)
+            val listLevel = GpuOrder.pick(GpuOrder.cached(this, trialGpuName), chain.value, level)
+            when (val st = sp.start(md5Now, level, listLevel)) {
+                is GpuSpeed.Start.Run -> speedTry = st.t
+                is GpuSpeed.Start.Gone -> speedGone = st
+                GpuSpeed.Start.None -> {}
+            }
+            speed = sp; speedMd5 = md5Now; speedInstall = install
+        }
+        val runLevel = speedTry?.level ?: level
+        speedLevel = runLevel
         // The driver this start runs: a dev driver, a dev switch or Settings' pick, else the trial's level of the chain
         // (past the chain's end: the system driver with GLideN64).
         val stepDriver: GpuRules.Driver = autoInstead ?: GpuRules.Driver.byId(devString("driver") ?: videoDriver)
-            ?: chain.value.getOrNull(level) ?: GpuRules.Driver.SYSTEM
+            ?: chain.value.getOrNull(runLevel) ?: GpuRules.Driver.SYSTEM
         val lib = dev ?: stepDriver.asset?.let { bundledDriver(it) }
+        if (speedTry != null && stepDriver.asset != null && lib == null) { speedFailNow("not in this build"); return "gliden64" }
         // A bundled driver this build doesn't have: the trial moves on (no game start spent on it)
         if (dev == null && trialPick != null && !trialPick.good && level < chain.value.size && stepDriver.asset != null && lib == null) {
             trialFailNow("not in this build"); return "gliden64"
@@ -654,6 +674,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 return "gliden64"
             }
         }
+        // A speed try's driver that doesn't load, or can't run parallel-RDP: failed, and the next start says so.
+        if (speedTry != null && (custom == null || !custom.vulkan11 || custom.storage16 != 1)) {
+            speedFailNow(if (custom == null) "doesn't load on this GPU" else "can't run parallel-RDP"); return "gliden64"
+        }
+        speedStartPopup(speedGone)
         if (autoInstead != null) {
             val picked = GpuRules.Driver.byId(videoDriver)?.shown ?: videoDriver.orEmpty()
             JLog.w(TAG, "GPU driver $picked picked in Settings: ${GpuRules.failedLabel(pickFailed)} before; using Auto's pick ${autoInstead.shown}")
@@ -681,6 +706,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         storageRangeMb = gpu?.storageRangeMb ?: 0
         customDriverInUse = custom != null
         statsDriver = statsDriverName(lib?.takeIf { custom != null }, dev != null, gpu?.driver.orEmpty())
+        driverIdNow = when { custom == null -> "system"; dev != null -> "custom"; else -> stepDriver.id }
         val cpuinfo = try { File("/proc/cpuinfo").readText() } catch (e: Exception) { null }
         val rendererPick = GpuRules.autoRenderer(gpu != null && gpu.vulkan11, gpu != null && gpu.storage16 == 1, custom != null, gpuFamily,
             GpuRules.littleCoresOnly(cpuinfo), upscale, tryStock = trialPick != null && level < chain.value.size)
@@ -691,6 +717,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // Settings' "Auto · ..." below.
         val gamePick = if (parallelForGpu) GpuRules.gameRenderer(earlyMd5()) else null
         val parallel = parallelForGpu && gamePick == null
+        if (!parallel && speed != null) {
+            // Only parallel-RDP's speed is compared (the driver doesn't change GLideN64)
+            speedTry?.let { speed?.failed(it.level, false) }
+            speed = null; speedTry = null
+        }
         if (gpu != null && gpu.vulkan11 && gpu.storage16 != 1) JLog.w(TAG, "GPU ${gpu.name}: no 16-bit or 8-bit storage buffers, parallel-RDP can't run")
         JLog.i(TAG, "GPU: ${gpu ?: "no Vulkan"}, driver ${if (custom != null) lib!!.relativeTo(gpuDriverDir).path else "system"}, " +
             "default renderer ${if (parallel) "parallel" else "gliden64"}")
@@ -702,7 +733,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // whether Auto picked at all (Settings did when autoOnly is false; the rules then say what Auto would pick).
         // trialLevel stays 0-2 for the server (0 Auto's first driver, 1 a later one, 2 GLideN64); the drivers tried and
         // what each did go in the driver rule.
-        val pickNote = if (autoInstead != null) "picked $videoDriver ${pickFailed}, so ${autoInstead.id}; " else ""
+        val pickNote = (if (autoInstead != null) "picked $videoDriver ${pickFailed}, so ${autoInstead.id}; " else "") +
+            (speedTry?.let { "speed try ${stepDriver.id}${if (it.fromList) " (list)" else ""} over ${chain.value.getOrNull(level)?.id}; " } ?: "")
         gpuWhy = GpuWhy((pickNote + trialRule(auto.rule, stepDriver, trialPick)).take(120), gamePick?.rule ?: rendererPick.rule,
             trialPick?.level?.let { if (trialGl) 2 else if (it == 0) 0 else 1 }, if (autoOnly) "auto" else "user")
         // What Auto picks here, for Settings › Video's "Auto · ..." (the launcher can't probe Vulkan itself):
@@ -713,8 +745,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (devString("driver") == null && videoDriver == null) prefs.putString("driver", when {
             custom == null -> "system"
             dev != null -> "custom"
+            speedTry != null -> chain.value.getOrNull(level)?.id ?: stepDriver.id
             else -> stepDriver.id
         })
+        speedNote()?.let { prefs.putString("speed_note", it) }
         prefs.apply()
         devString("renderer")?.let { return it }
         // Settings › Video › Renderer: parallel-RDP only where it can start (Vulkan 1.1 with 16- and 8-bit storage), else
@@ -739,7 +773,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     /** When the trial's start loaded (uptime ms), and whether it was taken back: once only (code audit 3, p1 L7). */
     private var trialAt = 0L
     private var trialCancelled = false
-    private fun cancelTrial() { if (!trialCancelled) { trialCancelled = true; trial?.cancel() } }
+    private fun cancelTrial() { if (!trialCancelled) { trialCancelled = true; trial?.cancel(); if (speedTry != null) speed?.cancel() } }
     /** The drivers Auto tries on this GPU (GpuRules.chain) and this start's place in the trial, from [setupGpu]. */
     private var trialChain: List<GpuRules.Driver> = emptyList()
     private var trialInfo: GpuTrial.Pick? = null
@@ -761,6 +795,125 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         trialRestarting = true
         finish()
         RestartActivity.restart(this, trialNextStart())
+    }
+
+    // ---- Auto's speed check (approved drvspeed mockup 2026-11-15, scratchpad build_drvspeed.py) ----
+    private var speed: GpuSpeed? = null
+    /** This start's try of a faster driver; null on the good level. */
+    private var speedTry: GpuSpeed.Try? = null
+    /** The trial's good level, and the level this start runs (the try's or the good one). */
+    private var speedGood = 0
+    private var speedLevel = 0
+    private var speedMd5: String? = null
+    private var speedInstall = ""
+    /** The try's picture showed. */
+    private var speedDrew = false
+
+    private fun chainName(level: Int) = trialChain.getOrNull(level)?.shown ?: "?"
+
+    /** The try's driver can't work here ([reason], for the log): failed, and the game screen starts again on the good level. */
+    private fun speedFailNow(reason: String) {
+        val t = speedTry ?: return
+        speed?.failed(t.level, true)
+        JLog.w(TAG, "GPU speed: ${chainName(t.level)} $reason, starting again with ${chainName(speedGood)}")
+        trialRestarting = true
+        finish()
+        RestartActivity.restart(this, trialNextStart())
+    }
+
+    /** At the start: pop-up 1 or 4 for a try's first start, or the word that the last try didn't start. */
+    private fun speedStartPopup(gone: GpuSpeed.Start.Gone?) {
+        val p = when {
+            gone != null -> {
+                JLog.w(TAG, "GPU speed: ${chainName(gone.level)} didn't start (${gone.why.ifEmpty { "checks" }}), back to ${chainName(speedGood)}")
+                InGamePopup("gpuspeed", InGamePopup.Kind.GpuBack, "${chainName(gone.level)} didn't start in this game",
+                    "Back to ${chainName(speedGood)}", "")
+            }
+            speedTry?.begun == false -> speedTry!!.let { t ->
+                JLog.i(TAG, "GPU speed: trying ${chainName(t.level)} over ${chainName(speedGood)}${if (t.fromList) " (the reports' list)" else ""}")
+                if (t.fromList) InGamePopup("gpuspeed", InGamePopup.Kind.GpuFaster,
+                    "Faster on the ${trialGpuName.replace("(TM)", "").replace(Regex("\\s+"), " ").trim()} in players' reports",
+                    "Switching to ${chainName(t.level)}", "Joey64 checks it on this device as you play")
+                else InGamePopup("gpuspeed", InGamePopup.Kind.GpuFaster, "Trying a faster driver", chainName(t.level),
+                    "${chainName(speedGood)} ran this game below full speed")
+            }
+            else -> null
+        } ?: return
+        overlay?.show(p) ?: earlyPops.add(p)
+    }
+
+    /** No picture in time on the try's driver: card 3, then the game screen starts again on the good level. */
+    private fun speedNoPicture() {
+        val t = speedTry ?: return
+        speed?.failed(t.level, false)
+        trial = null; speedTry = null
+        JLog.w(TAG, "GPU speed: ${chainName(t.level)} drew no picture, back to ${chainName(speedGood)}")
+        if (!menuOpen) overlay?.screen = com.joeysretro.joey64.launcher.ingame.GpuTrialCard.speedCard(chainName(t.level), chainName(speedGood))
+        fpsHandler.postDelayed({ restartForTrial() }, TRIAL_CARD_MS)
+    }
+
+    /** Settings' "speed_note": each tried driver's work a frame here, the one in use first, then fastest first, failed last. */
+    private fun speedNote(): String? {
+        val sp = speed ?: return null
+        val sum = sp.summary()
+        if (sum.size < 2) return null
+        val ordered = sum.entries.sortedWith(compareBy({ it.key != speedGood }, { it.value == null }, { it.value ?: 0.0 }))
+        return ordered.mapNotNull { (l, ms) -> trialChain.getOrNull(l)?.let { "${it.id}:${ms?.let { m -> "%.1f".format(java.util.Locale.ROOT, m) } ?: "-"}" } }
+            .joinToString(",")
+    }
+
+    /** Work a frame over stretches of normal play, every [SPEED_POLL_MS]; added to the store every [SPEED_FLUSH_MS]. */
+    private val speedBuf = DoubleArray(2)
+    /** The work totals when this game loaded (the host's count the whole process). */
+    private val workBase = DoubleArray(2)
+    /** This start's driver for reports: a [GpuRules.Driver] id, "system" or "custom" (a dev driver). */
+    private var driverIdNow = "system"
+    private var speedLast: DoubleArray? = null
+    private var speedAcc = GpuSpeed.Measure(0.0, 0, 0, 0)
+    private var speedFlushAt = 0L
+    private val speedSample = object : Runnable {
+        override fun run() {
+            if (speed == null || isFinishing || quitting) return
+            NativeBridge.workTotals(speedBuf)
+            val now = android.os.SystemClock.elapsedRealtime()
+            val run = NativeBridge.framesRun()
+            val ok = sessionCounting && !slowMotion && !rewindHeld && !net.inRoom && (speedTry == null || speedDrew)
+            val last = speedLast
+            if (ok && last != null && speedBuf[1] >= last[1]) speedAcc += GpuSpeed.Measure(speedBuf[0] - last[0],
+                (speedBuf[1] - last[1]).toLong(), now - last[3].toLong(), (run - last[2].toInt()).toLong().coerceAtLeast(0))
+            speedLast = if (ok) doubleArrayOf(speedBuf[0], speedBuf[1], run.toDouble(), now.toDouble()) else null
+            if (now - speedFlushAt >= SPEED_FLUSH_MS) speedFlush(true)
+            fpsHandler.postDelayed(this, SPEED_POLL_MS)
+        }
+    }
+
+    /** Adds the stretch so far and asks what's next; [popups]: on screen (not from onStop). */
+    private fun speedFlush(popups: Boolean) {
+        speedFlushAt = android.os.SystemClock.elapsedRealtime()
+        val sp = speed ?: return
+        val md5 = speedMd5 ?: return
+        val m = speedAcc; speedAcc = GpuSpeed.Measure(0.0, 0, 0, 0)
+        sp.measure(md5, speedLevel, m)
+        val skip = trialInfo?.history?.map { it.first }?.toSet().orEmpty()
+        when (val v = sp.judge(md5, speedLevel, speedGood, NativeBridge.contentFps(), skip)) {
+            is GpuSpeed.Verdict.Next -> JLog.i(TAG, "GPU speed: ${chainName(speedGood)} is slow in this game, ${chainName(v.level)} next start")
+            is GpuSpeed.Verdict.Kept -> {
+                GpuTrial(trialStore(), speedInstall, trialGpuName, trialChain.size).keep(v.level)
+                speedGood = v.level; speedTry = null
+                JLog.i(TAG, "GPU speed: ${chainName(v.level)} kept, faster than ${chainName(v.from)}")
+                getSharedPreferences("device", MODE_PRIVATE).edit().putString("driver", trialChain.getOrNull(v.level)?.id).apply()
+                if (popups) overlay?.show(InGamePopup("gpuspeed", InGamePopup.Kind.GpuOk, "Faster driver found", chainName(v.level),
+                    "Joey64 will use it on this device from now on"))
+            }
+            is GpuSpeed.Verdict.Back -> {
+                speedTry = null
+                JLog.i(TAG, "GPU speed: ${chainName(v.level)} wasn't faster than ${chainName(v.to)}, back to it")
+                if (popups) overlay?.show(InGamePopup("gpuspeed", InGamePopup.Kind.GpuBack, "${chainName(v.level)} wasn't faster in this game",
+                    "Back to ${chainName(v.to)}", "From the next start"))
+            }
+            GpuSpeed.Verdict.None -> {}
+        }
+        speedNote()?.let { getSharedPreferences("device", MODE_PRIVATE).edit().putString("speed_note", it).apply() }
     }
 
     /** The same start again (the same game, state and extras), for the trial's next driver. */
@@ -815,10 +968,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun trialDrew() {
         val t = trial ?: return
         t.drew(); trial = null
+        if (speedTry != null && !speedDrew) { speedDrew = true; speed?.drew(); JLog.i(TAG, "GPU speed: ${chainName(speedLevel)} drew a picture") }
         JLog.i(TAG, "GPU trial: a picture was drawn, good")
         val p = trialInfo ?: return
         if (overlay?.screen is com.joeysretro.joey64.launcher.ingame.PauseScreen.GpuTry) overlay?.screen = null
-        if (p.history.isNotEmpty() && p.level < trialChain.size) {
+        if (!p.good && p.history.isNotEmpty() && p.level < trialChain.size) {
             val p2 = InGamePopup("gpuok", InGamePopup.Kind.GpuOk, "parallel-RDP is running", "With ${trialChain[p.level].shown}",
                 "Joey64 will use it on this device from now on", stayMs = 5_000)
             overlay?.show(p2) ?: earlyPops.add(p2)
@@ -891,8 +1045,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             // Out of time, once the last frame check is back (a new one starts every poll, so it's tested first)
             val p = trialInfo
             val net = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null
-            if (p != null && !p.good && p.level < trialChain.size && !net && !trialChecking &&
-                ((!drawn && trialRunMs >= TRIAL_NO_FRAME_MS) || trialRunMs >= TRIAL_BLACK_MS)) { trialNoPicture(); return }
+            val speedWait = speedTry != null && !speedDrew
+            if (((p != null && !p.good && p.level < trialChain.size) || speedWait) && !net && !trialChecking &&
+                ((!drawn && trialRunMs >= TRIAL_NO_FRAME_MS) || trialRunMs >= TRIAL_BLACK_MS)) { if (speedWait) speedNoPicture() else trialNoPicture(); return }
             if (drawn && !trialChecking) {
                 trialChecking = true
                 trialCheck.execute {
@@ -1698,9 +1853,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             else android.system.Os.unsetenv("N64_STATE_RING")
         }
         trial?.begin(); trialAt = android.os.SystemClock.uptimeMillis()
+        if (speedTry != null) speed?.begin()
+        NativeBridge.workTotals(workBase)
         if (NativeBridge.loadGame(rom, saveName)) {
             NativeBridge.start(); started = true; owner = this; gameLoaded = true
             if (trial != null) fpsHandler.postDelayed(trialWatch, TRIAL_POLL_MS)
+            if (speed != null && android.system.Os.getenv("N64_NETPLAY") == null && android.system.Os.getenv("N64_NETPLAY_SERVE") == null) {
+                speedFlushAt = android.os.SystemClock.elapsedRealtime(); fpsHandler.postDelayed(speedSample, SPEED_POLL_MS)
+            } else speed = null
             startStates(saveName)
             startSession(rom, saveName)
             fpsHandler.postDelayed(shutdownWatch, SHUTDOWN_POLL_MS)
@@ -1914,6 +2074,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             put("settings", settings)
             put("gpu", gpuName.replace("(TM) ", ""))
             put("driver", statsDriver)
+            put("driverId", driverIdNow)
             @Suppress("DEPRECATION") val shown = if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay
             shown?.refreshRate?.takeIf { it > 0 }?.let { put("refreshHz", Math.round(it)) }
             put("fromState", launcherString(EXTRA_LOAD_STATE) != null)
@@ -3521,6 +3682,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     override fun onStop() {
         super.onStop()
         held?.hide()
+        if (mine && started && speed != null) { speedLast = null; speedFlush(false) }
         if (!mine || isFinishing || quitting || !started) return
         val st = states ?: return
         if (recoveryEveryMs > 0 && !startLoadFailed) stateHandler.post {
@@ -3564,6 +3726,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             session?.let { s ->
                 netStats.json()?.let { s.put("netplay", it) }
                 if (netNames.isNotEmpty()) s.put("maskNames", org.json.JSONArray(netNames.values.toList()))
+                // The mean work a frame (not fast-forward) for the reports' driver ranking (approved drvspeed, screen 4)
+                NativeBridge.workTotals(speedBuf)
+                val wf = speedBuf[1] - workBase[1]
+                if (wf > 0) s.put("workMs", Math.round((speedBuf[0] - workBase[0]) / wf * 100) / 100.0)
                 // A core stuck in a frame (endStuckProcess follows): its own ending, not a quit.
                 if (gameLoaded && NativeBridge.coreStuckMs() > STUCK_MS) sessionEnd = "stuck"
                 s.finish(sessionEnd)
@@ -3737,6 +3903,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         private const val TRIAL_QUICK_QUIT_MS = 5_000L
         /** The driver trial's watch (approved gputry mockup 2026-11-15): how often, and how long a start gets. */
         private const val TRIAL_POLL_MS = 500L
+        private const val SPEED_POLL_MS = 1_000L
+        private const val SPEED_FLUSH_MS = 30_000L
         private const val TRIAL_NO_FRAME_MS = 10_000L
         private const val TRIAL_BLACK_MS = 20_000L
         /** How long the card says which driver comes next before the game screen restarts. */

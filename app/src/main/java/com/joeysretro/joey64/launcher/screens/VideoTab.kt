@@ -179,6 +179,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     // One list with the panel beside it (approved 2026-11-11, setlist_mock.png): Picture, then Look, then Advanced.
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
     val failedDrivers = remember { failedDrivers(context) }
+    val speedTried = remember { speedTried(context) }
     val changed = target != null && rowKeys[focused].orEmpty().any { it in own }
     val (title, text) = when (focused) {
         "ws" -> "Widescreen" to extraText(ExtraKind.Widescreen, hardcore, target != null && extras?.widescreen?.isEmpty() == true)
@@ -187,13 +188,15 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     }
     val help = if (changed) "Changed for this game. ${allGamesNote(focused, VideoSettings.resolve(all, null), gameCode)}" else text
         .let { h -> if (focused != "drv") h else driverFailNote(v[VideoKey.Driver], failedDrivers)?.let { "$h $it" } ?: h }
+        .let { h -> if (focused != "drv" || v[VideoKey.Driver] != "auto") h else speedLine(speedTried)?.let { "$h $it" } ?: h }
     val choiceKey = mapOf("res" to VideoKey.Resolution, "asp" to VideoKey.Aspect, "int" to VideoKey.Integer, "ori" to VideoKey.Orientation,
         "cut" to VideoKey.Cutout, "bfi" to VideoKey.Bfi, "rend" to VideoKey.Renderer, "drv" to VideoKey.Driver, "pace" to VideoKey.Pacing)[focused]
     val info = when {
         choiceKey != null -> VideoChoices.of(choiceKey).let { chs ->
             com.joeysretro.joey64.launcher.components.PanelInfo(title, help,
                 chs.map { val bad = if (choiceKey == VideoKey.Driver) com.joeysretro.joey64.GpuRules.failedLabel(failedDrivers[it.value]) else null
-                    com.joeysretro.joey64.launcher.components.PanelChoice(it.label, bad ?: it.detail, it.value == v[choiceKey], it.experimental, detailWarn = bad != null) }) { i ->
+                    val fastest = if (choiceKey == VideoKey.Driver && it.value == "auto") speedDetail(speedTried) else null
+                    com.joeysretro.joey64.launcher.components.PanelChoice(it.label, bad ?: fastest ?: it.detail, it.value == v[choiceKey], it.experimental, detailWarn = bad != null) }) { i ->
                 set(choiceKey, chs[i].value) }
         }
         focused == "ws" || focused == "fps" -> {
@@ -445,13 +448,15 @@ private fun ExtraPopup(title: String, subtitle: String?, options: List<ExtraOpti
 private fun ChoicePopup(k: VideoKey, current: String, sub: String? = null, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     val choices = VideoChoices.of(k)
     val failed = if (k == VideoKey.Driver) failedDrivers(LocalContext.current) else emptyMap()
+    val tried = if (k == VideoKey.Driver) speedTried(LocalContext.current) else emptyList()
     JoeyDialog(onDismiss = onDismiss, hints = listOf(Hint("A", "Select"), Hint("B", "Close")), width = 470.dp) {
         Column {
             PopupTitle(title(k), sub)
             for (ch in choices) {
                 val on = ch.value == current
                 val bad = com.joeysretro.joey64.GpuRules.failedLabel(failed[ch.value])
-                JoeyRow(ch.label, Modifier.initialFocus(on), detail = bad ?: ch.detail, detailWarn = bad != null, experimental = ch.experimental,
+                val fastest = if (k == VideoKey.Driver && ch.value == "auto") speedDetail(tried) else null
+                JoeyRow(ch.label, Modifier.initialFocus(on), detail = bad ?: fastest ?: ch.detail, detailWarn = bad != null, experimental = ch.experimental,
                     trailing = if (on) { _ -> PickerTick() } else null) { onPick(ch.value) }
             }
         }
@@ -609,6 +614,28 @@ private fun failedDrivers(context: Context): Map<String, String> = try {
     com.joeysretro.joey64.GpuRules.failedPicks(lastPick(context, "driver_failed"),
         context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString())
 } catch (e: Exception) { emptyMap() }
+
+/**
+ * The drivers Auto's speed check tried on this device (approved drvspeed mockup 2026-11-15, screen 5): driver id to its
+ * work a frame (ms), or null for one that didn't start; the one in use first. MainActivity writes "speed_note".
+ */
+private fun speedTried(context: Context): List<Pair<String, Double?>> = lastPick(context, "speed_note").orEmpty().split(',').mapNotNull { e ->
+    val id = e.substringBefore(':'); if (com.joeysretro.joey64.GpuRules.Driver.byId(id) == null) null else id to e.substringAfter(':', "").toDoubleOrNull()
+}
+
+/** Auto's line when the speed check compared drivers here: "fastest of 3 tried". */
+private fun speedDetail(tried: List<Pair<String, Double?>>): String? = if (tried.size >= 2) "fastest of ${tried.size} tried" else null
+
+/** "Tried here: ARMSX2 Turnip 9.8 ms a frame, Turnip Gen8 11.6 ms, Turnip R2 didn't start." */
+private fun speedLine(tried: List<Pair<String, Double?>>): String? {
+    if (tried.size < 2) return null
+    var unit = true
+    return "Tried here: " + tried.joinToString(", ") { (id, ms) ->
+        val name = com.joeysretro.joey64.GpuRules.Driver.byId(id)?.shown ?: id
+        if (ms == null) "$name didn't start"
+        else ("$name ${"%.1f".format(java.util.Locale.ROOT, ms)} ms" + if (unit) " a frame" else "").also { unit = false }
+    } + "."
+}
 
 /** The GPU driver row's help line when the picked driver didn't work here last time. */
 private fun driverFailNote(picked: String, failed: Map<String, String>): String? {

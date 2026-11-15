@@ -14,6 +14,11 @@ const HEADER = /^[A-Za-z0-9 ]{4}$/;
 
 export class Invalid extends Error {}
 
+function driverId(v) {
+  if (typeof v !== "string" || !/^[a-z0-9]{1,16}$/.test(v)) throw new Invalid("driverId not a driver id");
+  return v;
+}
+
 function str(v, name, max, { optional = true } = {}) {
   if (v === undefined || v === null) {
     if (optional) return null;
@@ -118,6 +123,10 @@ function event(e) {
         renderer_rule: str(e.rendererRule, "rendererRule", 120),
         trial_level: num(e.trialLevel, "trialLevel", 0, 2, { int: true }),
         picked_by: e.pickedBy === undefined || e.pickedBy === null ? null : oneOf(e.pickedBy, "pickedBy", ["auto", "user"]),
+        // Added 2026-11-15 (migrations/0007-driver-speed.sql): the mean work a frame (ms, not fast-forward) and the
+        // driver that ran ("turnip", "armsx2", "system", "custom"), for devtools/driver-order.py's ranking.
+        work_ms: num(e.workMs, "workMs", 0, 200),
+        driver_id: e.driverId === undefined || e.driverId === null ? null : driverId(e.driverId),
         // Added 2026-11-14 (migrations/0006-netplay-log.sql): a netplay room's figures, and the log excerpt the app sends
         // with a session that ended badly or played in a room.
         netplay: netplay(e.netplay),

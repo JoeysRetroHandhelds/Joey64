@@ -275,6 +275,8 @@ object ReportJson {
             for (k in listOf("driverRule", "rendererRule")) clean(stored.optString(k), 120)?.let { put(k, it) }
             if (stored.has("trialLevel")) stored.optInt("trialLevel", -1).takeIf { it in 0..2 }?.let { put("trialLevel", it) }
             stored.optString("pickedBy").takeIf { it == "auto" || it == "user" }?.let { put("pickedBy", it) }
+            // Added 2026-11-15 (server migrations/0007-driver-speed.sql): the driver that ran, for the drivers' ranking.
+            stored.optString("driverId").takeIf { Regex("[a-z0-9]{1,16}").matches(it) }?.let { put("driverId", it) }
             put("ended", stored.optString("ended").takeIf { it in ENDED } ?: "quit")
             // Added 2026-11-14 (server migrations/0006-netplay-log.sql): the room's figures and the log excerpt.
             stored.optJSONObject("netplay")?.let { n -> netplay(n)?.let { put("netplay", it) } }
@@ -319,7 +321,7 @@ object ReportJson {
 
     private val NUMBERS = listOf("frames" to 1e9, "framesTimed" to 1e9, "firstFrameMs" to 600_000.0, "p95Ms" to 100.0, "p99Ms" to 100.0,
         "slowFrames" to 1e9, "underruns" to 100_000.0, "lagMs" to 1000.0, "lagMaxMs" to 1000.0, "thermalMax" to 6.0, "headroomMax" to 10.0,
-        "thermalDrops" to 1e6, "refreshHz" to 500.0, "cheats" to 1000.0)
+        "thermalDrops" to 1e6, "refreshHz" to 500.0, "cheats" to 1000.0, "workMs" to 200.0)
     private val WHOLE = setOf("frames", "framesTimed", "firstFrameMs", "p95Ms", "p99Ms", "slowFrames", "underruns", "thermalMax", "thermalDrops", "refreshHz", "cheats")
 
     /** At most 60 settings, names up to 48 characters, string values up to 64. */

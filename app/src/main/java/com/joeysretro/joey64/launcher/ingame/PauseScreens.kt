@@ -88,8 +88,10 @@ sealed interface PauseScreen {
     /**
      * Auto's driver trial (approved gputry mockup 2026-11-15, screens 1-2): [failed] didn't start parallel-RDP and the game
      * screen restarts with [next]. Over the (black) game, which keeps running; no rows, B quits to the library.
+     * [speed]: a faster driver's try didn't start, and [next] is the one in use (approved drvspeed mockup, screen 3).
      */
-    data class GpuTry(val failed: String, val next: String, val either: Boolean, val steps: List<GpuStep>, val progress: Float) : PauseScreen
+    data class GpuTry(val failed: String, val next: String, val either: Boolean, val steps: List<GpuStep>, val progress: Float,
+                      val speed: Boolean = false) : PauseScreen
     /** No driver worked (screens 3b-3c): starts with GLideN64, the game paused until answered. [reportsOn]: Send reports is on. */
     data class GpuNone(val steps: List<GpuStep>, val reportsOn: Boolean) : PauseScreen
 }
@@ -102,6 +104,11 @@ object GpuTrialCard {
     const val TRY_TITLE = "Getting parallel-RDP going on this device"
     const val NONE_TITLE = "parallel-RDP can't run on this device yet"
     const val GLIDE = "GLideN64"
+    const val SPEED_TITLE = "Trying a faster driver"
+
+    /** Screen 3 of the drvspeed mockup: [tried] showed no picture, the game screen starts again on [back]. */
+    fun speedCard(tried: String, back: String) = PauseScreen.GpuTry(tried, back, false,
+        listOf(GpuStep(GpuStep.Mark.Failed, "$tried: no picture"), GpuStep(GpuStep.Mark.Good, "$back: back to it")), 0.6f, speed = true)
 
     /** [names]: the chain's drivers; [history]: level to reason; [level]: this start's ([names].size: GLideN64). */
     fun steps(names: List<String>, history: List<Pair<Int, String>>, level: Int): List<GpuStep> {
@@ -436,8 +443,13 @@ private fun GpuTrialPopup(screen: PauseScreen, actions: PauseActions) {
     when (screen) {
         is PauseScreen.GpuTry -> JoeyDialog(onDismiss = { actions.gpuQuit() }, hints = listOf(Hint("B", "Quit to library")), width = 470.dp) {
             Column {
-                PopupTitle(GpuTrialCard.TRY_TITLE)
+                PopupTitle(if (screen.speed) GpuTrialCard.SPEED_TITLE else GpuTrialCard.TRY_TITLE)
                 com.joeysretro.joey64.launcher.components.PromptText(buildAnnotatedString {
+                    if (screen.speed) {
+                        withStyle(bold) { append(screen.failed) }; append(" didn't start. Going back to ")
+                        withStyle(bold) { append(screen.next) }; append("…")
+                        return@buildAnnotatedString
+                    }
                     if (screen.either) { withStyle(bold) { append(screen.failed) }; append(" didn't start either. Restarting with ") }
                     else { append("parallel-RDP didn't start with "); withStyle(bold) { append(screen.failed) }; append(". Restarting with ") }
                     withStyle(bold) { append(screen.next) }

@@ -82,7 +82,11 @@ data class InGamePopup(
         /** Auto's driver trial found one that draws (approved gputry mockup 2026-11-15, screen 3a). */
         GpuOk,
         /** A driver picked in Settings that didn't work here: Auto's pick runs (approved drvnote mockup 2026-11-15). */
-        GpuNote }
+        GpuNote,
+        /** Auto tries a faster driver (approved drvspeed mockup 2026-11-15, screens 1, 4). */
+        GpuFaster,
+        /** The tried driver wasn't faster, or didn't start: back to the one in use (screen 2b). */
+        GpuBack }
 }
 
 /**
@@ -164,14 +168,17 @@ fun InGamePopupCard(p: InGamePopup) {
         InGamePopup.Kind.DPadSwap -> R.drawable.ic_rail_controls
         InGamePopup.Kind.GpuOk -> R.drawable.ic_circle_check
         InGamePopup.Kind.GpuNote -> R.drawable.ic_alert
+        InGamePopup.Kind.GpuFaster -> R.drawable.ic_bolt
+        InGamePopup.Kind.GpuBack -> R.drawable.ic_arrow_back_up
     }
     JoeyToast(icon, p.label, p.name, p.line, iconTint = when (p.kind) {
         InGamePopup.Kind.Problem, InGamePopup.Kind.ChallengeFailed -> JoeyTheme.colors.error
         InGamePopup.Kind.Account, InGamePopup.Kind.Achievement, InGamePopup.Kind.Progress, InGamePopup.Kind.Game,
-        InGamePopup.Kind.NoAchievements, InGamePopup.Kind.AchievementsOff,
+        InGamePopup.Kind.NoAchievements, InGamePopup.Kind.AchievementsOff, InGamePopup.Kind.GpuFaster,
         InGamePopup.Kind.Turbo, InGamePopup.Kind.TurboOff, InGamePopup.Kind.NetBlocked -> JoeyTheme.colors.gold
         InGamePopup.Kind.NetWait, InGamePopup.Kind.GpuNote -> JoeyTheme.colors.tagMissable
         InGamePopup.Kind.GpuOk -> JoeyTheme.colors.good
+        InGamePopup.Kind.GpuBack -> JoeyTheme.colors.textDim
         else -> null
     }, badge = p.badge, compact = p.compact, framed = p.framed, extra = p.extra, bar = p.bar, chip = p.chip, warn = p.warn)
 }

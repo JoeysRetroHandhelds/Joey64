@@ -555,8 +555,16 @@ struct SlowFrame { float at, ms; };
 SlowFrame g_slowList[kSlowList];
 int g_slowListCount = 0;
 
+// Auto's speed check (approved drvspeed mockup 2026-11-15): every frame's work in this process, fast-forward left out
+// (it runs at another resolution), read as totals by workTotals; the app takes the differences over stretches of play.
+std::atomic<double> g_workSum{0};
+std::atomic<uint32_t> g_workFrames{0};
 void noteFrameTime(double ms) {
     uint32_t n = g_frameRingCount.load(std::memory_order_relaxed);
+    if (!g_fastForward.load(std::memory_order_relaxed)) {
+        g_workSum.store(g_workSum.load(std::memory_order_relaxed) + ms, std::memory_order_relaxed);
+        g_workFrames.fetch_add(1, std::memory_order_relaxed);
+    }
     g_frameRing[n % kFrameRing] = (float)ms;
     g_frameRingCount.store(n + 1, std::memory_order_release);
     if (ms > g_statSlowestMs) g_statSlowestMs = ms;
@@ -2848,6 +2856,11 @@ JNIEXPORT jstring JNICALL JNI(netplayPlayers)(JNIEnv* env, jobject) {
     return toJava(env, g_npRoster);
 }
 
+// Auto's speed check: [0] the work of every frame not fast-forwarded, ms, [1] how many frames, in this process.
+JNIEXPORT void JNICALL JNI(workTotals)(JNIEnv* env, jobject, jdoubleArray out) {
+    double v[] = {g_workSum.load(), (double)g_workFrames.load()};
+    if (env->GetArrayLength(out) >= 2) env->SetDoubleArrayRegion(out, 0, 2, v);
+}
 JNIEXPORT jint JNICALL JNI(framesRun)(JNIEnv*, jobject) {
     return (jint)g_framesRun.load();
 }

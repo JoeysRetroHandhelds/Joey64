@@ -657,6 +657,8 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
             if (playedMd5 != null) _askState.value = com.joeysretro.joey64.staterequest.StateRequests.check(app, playedMd5)
             // Rings no ask will use (answered, off the list, a session that crashed): ~84 MB each (code audit 4, C-M1).
             com.joeysretro.joey64.staterequest.StateRequests.sweep(app)
+            // The players' reports' fastest drivers per GPU, read again weekly (approved drvspeed mockup 2026-11-15, screen 4)
+            com.joeysretro.joey64.GpuOrder.refresh(app)
         }
         if (!com.joeysretro.joey64.reports.ReportPrefs.asked(app)) _askReports.value = true
         val p = plays

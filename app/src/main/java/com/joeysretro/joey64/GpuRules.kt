@@ -374,6 +374,9 @@ class GpuTrial(private val store: Store, install: String, systemGpu: String, val
         return true
     }
 
+    /** A faster level was found ([GpuSpeed]): it's the good one from now on. */
+    fun keep(level: Int) { val s = read(); write(State(level, 0, true, s.told)) }
+
     /** The end card (no driver worked) was answered: it isn't shown again for this install and GPU. */
     fun told() { val s = read(); write(s.copy(told = true)) }
 

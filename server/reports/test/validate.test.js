@@ -24,6 +24,8 @@ test("a good report keeps every event, trimmed to the tables", () => {
   assert.equal(r.events[0].driver_rule, "Adreno 6xx-8xx: bundled Turnip");
   assert.equal(r.events[0].renderer_rule, "custom driver: parallel-RDP");
   assert.equal(r.events[0].trial_level, 0);
+  assert.equal(r.events[0].work_ms, 9.8);
+  assert.equal(r.events[0].driver_id, "turnip");
   assert.equal(r.events[0].picked_by, "auto");
 });
 
@@ -38,13 +40,15 @@ test("an older app's session, without the details, is taken", () => {
   const b = good();
   for (const k of ["frames", "firstFrameMs", "framesTimed", "p95Ms", "p99Ms", "slowFrames", "lagMs", "lagMaxMs", "thermalMax",
     "headroomMax", "thermalDrops", "rdpSync", "cpuCore", "refreshHz", "cheats", "fromState", "driverRule", "rendererRule", "trialLevel",
-    "pickedBy"]) delete b.events[0][k];
+    "pickedBy", "workMs", "driverId"]) delete b.events[0][k];
   const r = validate(b);
   assert.equal(r.events[0].frames, null);
   assert.equal(r.events[0].cpu_core, null);
   assert.equal(r.events[0].driver_rule, null);
   assert.equal(r.events[0].trial_level, null);
   assert.equal(r.events[0].picked_by, null);
+  assert.equal(r.events[0].work_ms, null);
+  assert.equal(r.events[0].driver_id, null);
 });
 
 test("fields a report has no business carrying are dropped", () => {
@@ -83,6 +87,8 @@ for (const [name, change] of [
   ["screenW out of range", (b) => { b.device.screenW = 99999; }],
   ["dpi not a whole number", (b) => { b.device.dpi = 369.5; }],
   ["driverRule too long", (b) => { b.events[0].driverRule = "x".repeat(121); }],
+  ["workMs too big", (b) => { b.events[0].workMs = 201; }],
+  ["driverId not an id", (b) => { b.events[0].driverId = "Turnip R2"; }],
   ["rendererRule not a string", (b) => { b.events[0].rendererRule = 4; }],
   ["trialLevel out of range", (b) => { b.events[0].trialLevel = 3; }],
   ["trialLevel not a whole number", (b) => { b.events[0].trialLevel = 0.5; }],
