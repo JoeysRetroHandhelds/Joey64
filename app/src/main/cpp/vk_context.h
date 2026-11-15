@@ -64,6 +64,9 @@ public:
     // linearly to the screen (sharp-bilinear), instead of one linear scale. Pixels keep crisp edges
     // without the uneven widths of plain nearest. Can be switched while running.
     void setSharp(bool on) { sharp_ = on; }
+    // Fast-forward below the chosen resolution draws with Sharp pixels' blit (Joey 2026-11-14), so the 1x or 2x
+    // picture stays crisp instead of a soft stretch.
+    void setFfSharp(bool on) { ffSharp_ = on; }
     // The last picture the core handed over, at its own size, as top-down RGBA8 (screenshots, state
     // pictures). Between frames on the emulation thread only; waits for the GPU. False if there's none.
     bool capture(std::vector<uint8_t>& rgba, unsigned& w, unsigned& h);
@@ -184,6 +187,7 @@ private:
     VkFormat format_ = VK_FORMAT_UNDEFINED;
     // Sharp display: the whole-number prescale target, made (or remade) when the size or format changes.
     std::atomic<bool> sharp_{false};
+    std::atomic<bool> ffSharp_{false};
     VkImage sharpImage_ = VK_NULL_HANDLE;
     VkDeviceMemory sharpMem_ = VK_NULL_HANDLE;
     uint32_t sharpW_ = 0, sharpH_ = 0;

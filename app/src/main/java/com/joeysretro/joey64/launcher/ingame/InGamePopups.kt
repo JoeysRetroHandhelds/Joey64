@@ -36,6 +36,8 @@ import java.io.File
  * [stayMs] overrides how long it stays (the short ones), else Settings › Pop-ups stay for;
  * [PopupQueue.UNTIL_HIDDEN] stays until it's hidden (Paused), letting newer ones show over it meanwhile.
  * [bar] (0 to 1) draws a bar under the lines (the volume).
+ * [chip]: the small chip (fast-forward, rewind, slow motion; approved ffchip mockup A 2026-11-14), [name] only,
+ * in orange with [warn].
  */
 data class InGamePopup(
     val key: String,
@@ -49,6 +51,8 @@ data class InGamePopup(
     val extra: String? = null,
     val stayMs: Long? = null,
     val bar: Float? = null,
+    val chip: Boolean = false,
+    val warn: Boolean = false,
 ) {
     enum class Kind { Saved, Loaded, Slot, Screenshot, Reset, Problem, Account, Achievement, Progress, ChallengeFailed, Game, Stats,
         /** The hotkeys' (approved hotkeys mockup 2026-11-07). */
@@ -162,7 +166,7 @@ fun InGamePopupCard(p: InGamePopup) {
         InGamePopup.Kind.Turbo, InGamePopup.Kind.TurboOff, InGamePopup.Kind.NetBlocked -> JoeyTheme.colors.gold
         InGamePopup.Kind.NetWait -> JoeyTheme.colors.tagMissable
         else -> null
-    }, badge = p.badge, compact = p.compact, framed = p.framed, extra = p.extra, bar = p.bar)
+    }, badge = p.badge, compact = p.compact, framed = p.framed, extra = p.extra, bar = p.bar, chip = p.chip, warn = p.warn)
 }
 
 /**

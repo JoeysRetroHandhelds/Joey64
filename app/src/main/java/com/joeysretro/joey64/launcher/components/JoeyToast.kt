@@ -8,6 +8,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -53,6 +56,8 @@ import java.io.File
  *  - [compact]: 30 dp badge, label and name only (progress, challenge failed).
  *  - [framed]: the yellow border and larger italic name of Beaten and Mastered.
  *  - [extra]: one more grey line with the offline mark ("Offline · sends when you're back online").
+ *  - [chip]: the small chip of fast-forward, rewind and slow motion (approved ffchip mockup A, 2026-11-14): the icon
+ *    and [name] on one line ("4x", "3 s"), [bar] as a thin line under them, [warn] draws the name in orange.
  */
 @Composable
 fun JoeyToast(
@@ -69,9 +74,32 @@ fun JoeyToast(
     extra: String? = null,
     /** 0 to 1: a bar under the lines (the volume pop-up, approved hotkeys mockup 2026-11-07). */
     bar: Float? = null,
+    chip: Boolean = false,
+    warn: Boolean = false,
 ) {
     val c = JoeyTheme.colors
     val shape = RoundedCornerShape(8.dp)
+    if (chip) {
+        Column(
+            modifier = modifier
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
+                .padding(12.dp)
+                .width(IntrinsicSize.Max) // the bar as wide as the icon and words
+                .background(c.surface.copy(alpha = 0.82f), shape)
+                .border(1.dp, c.border, shape)
+                .padding(start = 7.dp, top = 4.dp, end = 10.dp, bottom = if (bar != null) 5.dp else 4.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(icon), contentDescription = null, tint = iconTint ?: c.good, modifier = Modifier.size(18.dp))
+                Text(name, style = JoeyTheme.type.button, color = if (warn) c.tagMissable else c.text, maxLines = 1,
+                    modifier = Modifier.padding(start = 6.dp))
+            }
+            if (bar != null) Box(Modifier.padding(top = 3.dp).fillMaxWidth().height(3.dp).background(c.chip, RoundedCornerShape(2.dp))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(bar.coerceIn(0f, 1f)).background(c.good, RoundedCornerShape(2.dp)))
+            }
+        }
+        return
+    }
     val size = when { compact -> 30.dp; framed -> 44.dp; else -> 40.dp }
     val picture = rememberBadge(badge)
     Row(

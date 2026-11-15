@@ -756,7 +756,7 @@ void VkContext::present(bool newImage) {
         // down (under 2:1, so the 2x2 blit filter sees every pixel). Rounding down instead left OoT's
         // 640x480 at 1x on the Flip's 752-line screen, a plain linear 1.57x stretch.
         // Sharp pixels: the dev switch (setSharp) or Settings › Video › Shader (look.glsl's id 1).
-        bool sharp = sharp_ || Display::opts().has(1);
+        bool sharp = sharp_ || ffSharp_ || Display::opts().has(1);
         uint32_t kx = sharp ? std::max(1, (dstW + (int32_t)cropW - 1) / (int32_t)cropW) : 1;
         uint32_t ky = sharp ? std::max(1, (dstH + (int32_t)cropH - 1) / (int32_t)cropH) : 1;
         VkImageBlit whole{}; // the Picture pass's window, copied as it is

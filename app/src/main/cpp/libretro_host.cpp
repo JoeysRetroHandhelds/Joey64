@@ -364,11 +364,34 @@ std::atomic<bool> g_cheatsChanged{false};
 std::vector<std::pair<std::string, std::string>> g_liveOptions;
 std::mutex g_liveOptionsMutex;
 std::atomic<bool> g_liveOptionsChanged{false};
-// Upscaling costs the GPU most of the fast-forward headroom (Odin 3 at 4x: Peach's Fury 1.5x, GoldenEye 1.03x),
-// so fast-forward renders at 1x. The setting in use before is restored after ("" = none was overridden).
+// Upscaling costs the GPU most of the fast-forward headroom (Odin 3 at 4x: Peach's Fury 1.5x, GoldenEye 1.03x).
+// Fast-forward used to drop straight to 1x, which Joey found jarring (2026-11-14). Now it keeps the resolution and
+// steps down one level at a time (8x, 4x, 2x, 1x) only while the game can't hold the chosen speed (ffStepDown, in
+// the pacing below); a game that holds it never changes. N64_FF_UPSCALE=drop gives the old 1x at once,
+// N64_FF_KEEP_UPSCALE=1 never steps down. The setting in use before is restored after ("" = none was overridden).
 constexpr const char* kUpscaleKey = "mupen64plus-parallel-rdp-upscaling";
 std::string g_upscaleBeforeFf;
 bool g_upscaleFfApplied = false;
+// Below the chosen resolution fast-forward looks like Settings › Video › Look's Sharp (Joey 2026-11-14): VI
+// anti-aliasing and VI bilinear off (they smear a 1x picture) and Sharp pixels' blit; the values before ("" = not
+// overridden) come back with the resolution.
+static const char* const kFfSharpKeys[2] = {"mupen64plus-parallel-rdp-vi-aa", "mupen64plus-parallel-rdp-vi-bilinear"};
+std::string g_ffSharpBefore[2];
+static void ffSharpOn() {
+    for (int i = 0; i < 2; i++) {
+        auto it = g_optionOverrides.find(kFfSharpKeys[i]);
+        g_ffSharpBefore[i] = it != g_optionOverrides.end() ? it->second : "";
+        g_optionOverrides[kFfSharpKeys[i]] = "False";
+    }
+    g_vk.setFfSharp(true);
+}
+static void ffSharpOff() {
+    for (int i = 0; i < 2; i++) {
+        if (g_ffSharpBefore[i].empty()) g_optionOverrides.erase(kFfSharpKeys[i]);
+        else g_optionOverrides[kFfSharpKeys[i]] = g_ffSharpBefore[i];
+    }
+    g_vk.setFfSharp(false);
+}
 static void applyLiveOptions() {
     std::vector<std::pair<std::string, std::string>> next;
     {
@@ -376,7 +399,7 @@ static void applyLiveOptions() {
         next.swap(g_liveOptions);
     }
     for (auto& [k, v] : next) {
-        // The upscale hotkeys during fast-forward: it keeps 1x, and the new value is the one it restores.
+        // The upscale hotkeys during a fast-forward that stepped down: the new value is the one it restores.
         if (k == kUpscaleKey && g_upscaleFfApplied) {
             g_upscaleBeforeFf = v;
             LOGI("option override (live, after fast-forward): %s = %s", k.c_str(), v.c_str());
@@ -386,6 +409,26 @@ static void applyLiveOptions() {
         LOGI("option override (live): %s = %s", k.c_str(), v.c_str());
     }
     if (!next.empty()) g_optionsDirty = true;
+}
+
+// One parallel-RDP resolution level down for this fast-forward (see kUpscaleKey). False at 1x, with
+// N64_FF_KEEP_UPSCALE=1, or off parallel-RDP.
+static bool ffStepDown() {
+    static const bool keep = getenv("N64_FF_KEEP_UPSCALE") && atoi(getenv("N64_FF_KEEP_UPSCALE"));
+    if (keep || !g_vulkan) return false;
+    auto it = g_optionOverrides.find(kUpscaleKey);
+    const std::string now = it != g_optionOverrides.end() ? it->second : "1x";
+    const char* next = now == "8x" ? "4x" : now == "4x" ? "2x" : now == "2x" ? "1x" : nullptr;
+    if (!next) return false;
+    if (!g_upscaleFfApplied) {
+        g_upscaleBeforeFf = it != g_optionOverrides.end() ? it->second : "";
+        g_upscaleFfApplied = true;
+        ffSharpOn();
+    }
+    g_optionOverrides[kUpscaleKey] = next;
+    g_optionsDirty = true;
+    LOGI("fast-forward: can't hold the speed at %s, stepping down to %s", now.c_str(), next);
+    return true;
 }
 // Debug: RDRAM dump requested from the UI thread, written by the emulation thread between frames.
 std::mutex g_dumpMutex;
@@ -1521,6 +1564,7 @@ void runLoop() {
     double ffGapSum = 0, ffGapSq = 0;
     auto ffLastWake = ffNext, ffStepAt = ffNext, ffLogAt = ffNext; // fast-forward's even pacing
     double ffWorkEma = 0, ffPace = 0;
+    int ffShort = 0, ffWinFrames = 0;
     int ffLate = 0, ffFrames = 0;
     int rewindTick = 0;
     bool rewindStepped = false;
@@ -1628,22 +1672,24 @@ void runLoop() {
             // async (g_ffKeepSync) keep it throughout.
             if (g_vulkan) {
                 g_optionOverrides["mupen64plus-parallel-rdp-synchronous"] = (g_rdpSync && (!ff || g_ffKeepSync)) ? "True" : "False";
-                static const bool keepUpscale = getenv("N64_FF_KEEP_UPSCALE") && atoi(getenv("N64_FF_KEEP_UPSCALE"));
-                if (ff && !keepUpscale) {
+                static const bool dropAtOnce = getenv("N64_FF_UPSCALE") && !strcmp(getenv("N64_FF_UPSCALE"), "drop");
+                if (ff && dropAtOnce) {
                     auto it = g_optionOverrides.find(kUpscaleKey);
                     g_upscaleBeforeFf = it != g_optionOverrides.end() ? it->second : "";
                     g_optionOverrides[kUpscaleKey] = "1x";
                     g_upscaleFfApplied = true;
+                    ffSharpOn();
                 } else if (!ff && g_upscaleFfApplied) {
                     if (g_upscaleBeforeFf.empty()) g_optionOverrides.erase(kUpscaleKey);
                     else g_optionOverrides[kUpscaleKey] = g_upscaleBeforeFf;
                     g_upscaleFfApplied = false;
+                    ffSharpOff();
                 }
                 g_optionsDirty = true;
             }
             ffNext = std::chrono::steady_clock::now();
             // each fast-forward starts again from the chosen speed (even pacing, below)
-            ffWorkEma = 0; ffPace = 0; ffLate = 0; ffFrames = 0;
+            ffWorkEma = 0; ffPace = 0; ffLate = 0; ffFrames = 0; ffShort = 0; ffWinFrames = 0;
             ffLastWake = ffStepAt = ffLogAt = ffNext;
         }
         if (ff) {
@@ -1662,12 +1708,24 @@ void runLoop() {
             const double slotMs = 1e3 / (g_av.timing.fps * pace);
             if (frames > 0 && work < 250) workEma = workEma > 0 ? workEma * 0.9 + work * 0.1 : work;
             if (frames > 0 && work > slotMs * 1.5) late++;
-            frames++;
+            frames++; ffWinFrames++;
             if (!even) pace = want;
             else if (now - stepAt >= std::chrono::milliseconds(500) && workEma > 0) {
+                // The speed really reached in this 0.5 s: the average work can look fine while a few long frames
+                // (Perfect Dark at 2x on the Odin 2 Portal, 2026-11-14: work 3.1 ms, paced 2.9x of 4x) hold it back.
+                const double winS = std::chrono::duration<double>(now - stepAt).count();
+                const double reached = ffWinFrames / (winS * g_av.timing.fps);
+                ffWinFrames = 0;
                 stepAt = now;
                 const double holds = 1e3 / (g_av.timing.fps * workEma);
                 pace = std::max(1.0, std::min({want, holds * 0.9, pace * 1.1}));
+                // Step the resolution down one level after 1 s that can't hold, or doesn't reach, 90% of the chosen
+                // speed; it goes on down to 1x while that lasts.
+                ffShort = (holds < want * 0.9 || reached < want * 0.9) ? ffShort + 1 : 0;
+                if (ffShort >= 2 && ffStepDown()) {
+                    ffShort = -2; // the renderer rebuilds: give the new level 1 s more before judging it
+                    workEma = 0; pace = 0;
+                }
             }
             pace = std::min(pace, want);
             const double speed = pace;

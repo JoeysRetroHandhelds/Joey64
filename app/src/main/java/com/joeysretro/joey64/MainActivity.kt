@@ -428,16 +428,22 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         NativeBridge.setFastForwardSpeed(percent)
         if (on != fastForward) { sessionMark(); fastForward = on; NativeBridge.setFastForward(on) }
         if (on && slowMotion) setSlowMotion(false) // straight to fast-forward
-        // On screen while it's on, as Slow motion's (Joey 2026-11-11); Adaptive's speed follows the trigger, so the
-        // same pop-up is shown again with each new speed (an id already showing is updated in place, as Rewind's).
+        // On screen while it's on, as Slow motion's (Joey 2026-11-11), as the small chip "4x" (approved ffchip mockup A,
+        // 2026-11-14); Adaptive's speed follows the trigger, so the same chip is shown again with each new speed (an id
+        // already showing is updated in place, as Rewind's).
         if (on) { if (percent != ffShown) { ffShown = percent
-            overlay?.show(InGamePopup("ff", InGamePopup.Kind.FastForward, "Fast forward", "$percent%",
-                if (hotkeys.ffMode == FastForwardMode.Toggle) "Press again to go back to full speed" else "Let go to go back to full speed",
+            overlay?.show(InGamePopup("ff", InGamePopup.Kind.FastForward, "Fast forward", speedTimes(percent), "", chip = true,
                 stayMs = com.joeysretro.joey64.launcher.ingame.PopupQueue.UNTIL_HIDDEN)) } }
         else if (ffShown != 0) { ffShown = 0; overlay?.hide("ff", waiting = true) }
     }
     /** The speed the fast-forward pop-up shows; 0: not shown. */
     private var ffShown = 0
+
+    /** 400 -> "4x", 150 -> "1.5x", 125 -> "1.25x" (the fast-forward chip). */
+    private fun speedTimes(percent: Int): String {
+        val s = "%.2f".format(java.util.Locale.ROOT, percent / 100.0).trimEnd('0').trimEnd('.')
+        return "${s}x"
+    }
 
     // ---- Slow motion and Rewind (approved mockup 2026-11-08; Controls > Hotkeys) -----------------------------
     // Slow motion: Toggle or Hold, at Hotkeys.slowSpeed; a pop-up stays while it's on. Rewind: held, the game goes
@@ -445,6 +451,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var slowMotion = false
     private var slowHeld = false
     private var rewindHeld = false
+    /** This press of rewind has shown the full "Can't go further back" pop-up. */
+    private var rewindEndShown = false
     /** The rewind settings last given to the host (a change starts the recording over). */
     private var rewindApplied: Triple<Boolean, Int, Int>? = null
 
@@ -454,8 +462,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         sessionMark(); slowMotion = on
         if (on && fastForward) { ffHeld = false; setFastForward(false) }
         NativeBridge.setSlowMotion(if (on) hotkeys.slowSpeed else 0)
-        if (on) overlay?.show(InGamePopup("slow", InGamePopup.Kind.SlowMotion, "Slow motion", "${hotkeys.slowSpeed}%",
-            if (hotkeys.slowMode == SlowMode.Hold) "Let go to go back to full speed" else "Press again to go back to full speed",
+        if (on) overlay?.show(InGamePopup("slow", InGamePopup.Kind.SlowMotion, "Slow motion", "${hotkeys.slowSpeed}%", "", chip = true,
             stayMs = com.joeysretro.joey64.launcher.ingame.PopupQueue.UNTIL_HIDDEN))
         else overlay?.hide("slow", waiting = true)
         JLog.i(TAG, "slow motion ${if (on) "on, ${hotkeys.slowSpeed}%" else "off"}")
@@ -494,9 +501,16 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val i = NativeBridge.rewindInfo()
         val kept = Hotkeys.rewindSecondsLabel(hotkeys.rewindSeconds)
         val bar = if (i[1] > 0) i[0].toFloat() / i[1] else 0f
-        if (i[3] == 1) overlay?.show(InGamePopup("rewind", InGamePopup.Kind.Rewind, "Rewinding", "Can't go further back",
-            "$kept kept: Controls › Hotkeys › Rewind", stayMs = com.joeysretro.joey64.launcher.ingame.PopupQueue.UNTIL_HIDDEN, bar = 0f))
-        else overlay?.show(InGamePopup("rewind", InGamePopup.Kind.Rewind, "Rewinding", "${(i[2] + 30) / 60} s back", "",
+        // The small chip (approved ffchip mockup A, 2026-11-14): how far back, the bar as a thin line; at the end it says
+        // so in orange, and the full pop-up with where to keep more shows once per press.
+        if (i[3] == 1) {
+            overlay?.show(InGamePopup("rewind", InGamePopup.Kind.Rewind, "Rewinding", "Can't go further", "", chip = true, warn = true,
+                stayMs = com.joeysretro.joey64.launcher.ingame.PopupQueue.UNTIL_HIDDEN, bar = 0f))
+            if (!rewindEndShown) { rewindEndShown = true
+                overlay?.show(InGamePopup("rewindend", InGamePopup.Kind.Rewind, "Rewinding", "Can't go further back",
+                    "$kept kept: Controls › Hotkeys › Rewind")) }
+        }
+        else overlay?.show(InGamePopup("rewind", InGamePopup.Kind.Rewind, "Rewinding", "${(i[2] + 30) / 60} s", "", chip = true,
             stayMs = com.joeysretro.joey64.launcher.ingame.PopupQueue.UNTIL_HIDDEN, bar = bar))
     }
 
@@ -509,7 +523,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 pop("rewind", InGamePopup.Kind.Problem, "Rewind", "Rewind is off", "Turn it on in Controls › Hotkeys › Rewind")
                 return
             }
-            sessionMark(); rewindHeld = true
+            sessionMark(); rewindHeld = true; rewindEndShown = false
             if (fastForward) { ffHeld = false; setFastForward(false) }
             NativeBridge.setRewinding(true)
             fpsHandler.removeCallbacks(rewindPoll)
