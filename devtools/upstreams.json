@@ -6,8 +6,8 @@
       "repo": "libretro/parallel-n64",
       "branch": "master",
       "path": "mupen64plus-video-paraLLEl",
-      "seen": "41a7da2aba847cb7ca27e14579f0fef0e4bdffe1",
-      "why": "libretro's reworked parallel-RDP, much newer than the author's public copy; port its speed changes (emulator-review.md)"
+      "seen": "03b056b650916007c6d1bd0d01bb01fac5bacda8",
+      "why": "libretro's reworked parallel-RDP, much newer than the author's public copy; port its speed changes (emulator-review.md). Up to 03b056b read 2026-11-15: from 11-12 libretro rewrites parallel-RDP in C (not ours to take); four bugs it fixed on the way are in our C++ copy too and ported (core 431aec4: 79cf993, 5c3fd3b, a08bedc, b1213d1); the lock-free pool fixes (f80b843, 499816b) are for code we do not have; 288f3a0 already holds in ours; 804ba99 not a bug here"
     },
     {
       "name": "parallel-RDP (author's public copy)",
