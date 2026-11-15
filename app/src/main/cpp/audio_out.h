@@ -40,6 +40,8 @@ public:
     // the emulation ran at full speed meanwhile: underruns then raise the target by 10 ms (devices
     // whose frames sometimes miss a vsync need more queued), up to kMaxTargetMs.
     void takeStats(bool keepingUp, double& fillMs, double& targetMs, int& underruns);
+    // Underruns since the last takeStats (N64_FRAME_TRACE).
+    int underrunsNow() const { return underruns_.load(std::memory_order_relaxed); }
     // Audio frames per second since the last call: from the game (write) and taken by the device's callbacks. The
     // T820 report (2026-11-08) drained the ring at 61 emulated fps in windows where half the frames repeat; these
     // tell a game that brings less audio from a device that plays faster than its stated rate.
@@ -94,6 +96,7 @@ private:
     size_t lastW_ = 0;       // write index at the last waitForRoom
     double avgWrite_ = -1;   // running average of samples written per frame (-1 = none yet)
     double excess_ = 0;      // fading sum of (written - average), samples
+    double peak_ = 0;        // the most written in one frame lately, fading (~1%/frame), samples: see waitForRoom
     double step_ = 1.0;      // source frames per output frame
     double pos_ = 0.0;       // position between prev_ and the next source frame
     int16_t prev_[2] = {0, 0};

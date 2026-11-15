@@ -850,12 +850,13 @@ size_t audio_batch(const int16_t* d, size_t frames) {
     g_frameAudio += frames;
     return frames;
 }
-// Dev: N64_FRAME_TRACE=1 logs 300 frames from frame 900 on (after the state load), 30 per line: audio frames the
+// Dev: N64_FRAME_TRACE=1 logs 600 frames from frame 900 on (after the state load; N64_FRAME_TRACE_FROM moves it), 30 per line: audio frames the
 // core gave in each retro_run, ms waited for audio room before it, ms between frame starts. Finds bursty pacing.
 void traceFrame(double audioWaitMs) {
     static const bool on = getenv("N64_FRAME_TRACE") && *getenv("N64_FRAME_TRACE") == '1';
     static std::chrono::steady_clock::time_point last;
-    static std::string a, w, s;
+    static std::string a, w, s, u;
+    static int lastUr = 0;
     static int n = 0;
     auto now = std::chrono::steady_clock::now();
     double since = std::chrono::duration<double, std::milli>(now - last).count();
@@ -863,14 +864,18 @@ void traceFrame(double audioWaitMs) {
     size_t audio = g_frameAudio;
     g_frameAudio = 0;
     uint32_t f = g_framesRun.load();
-    if (!on || f < 900 || f >= 1200) return;
+    static const uint32_t from = getenv("N64_FRAME_TRACE_FROM") ? (uint32_t)atoi(getenv("N64_FRAME_TRACE_FROM")) : 900;
+    if (!on || f < from || f >= from + 600) return;
     char b[32];
     snprintf(b, sizeof b, "%zu ", audio); a += b;
     snprintf(b, sizeof b, "%.1f ", audioWaitMs); w += b;
     snprintf(b, sizeof b, "%.1f ", since); s += b;
+    int ur = g_audio.underrunsNow();
+    snprintf(b, sizeof b, "%d ", ur >= lastUr ? ur - lastUr : ur); u += b;
+    lastUr = ur;
     if (++n == 30) {
-        LOGI("trace: audio frames %s| audio wait ms %s| frame start gap ms %s", a.c_str(), w.c_str(), s.c_str());
-        a.clear(); w.clear(); s.clear(); n = 0;
+        LOGI("trace: audio frames %s| audio wait ms %s| frame start gap ms %s| underruns %s", a.c_str(), w.c_str(), s.c_str(), u.c_str());
+        a.clear(); w.clear(); s.clear(); u.clear(); n = 0;
     }
 }
 // Taps are held for kMinPressPolls polls: some games (Pokemon Snap's tutorial) ignore a press

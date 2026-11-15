@@ -85,10 +85,10 @@ bool AudioOut::openStream() {
     grow_ = mode != 1;
     target_ = (size_t)dstRate * startMs / 1000 * 2;
     pos_ = 0.0; prev_[0] = prev_[1] = 0;
-    cap_ = (size_t)dstRate / 5 * 2; // ~200 ms stereo
+    cap_ = (size_t)dstRate * 2 * 2 / 5; // ~400 ms stereo: room for a game's 100 ms lump on top of the wait's ceiling
     ring_.assign(cap_, 0);
     r_ = w_ = 0;
-    lastW_ = 0; avgWrite_ = -1; excess_ = 0;
+    lastW_ = 0; avgWrite_ = -1; excess_ = 0; peak_ = 0;
     { const char* sm = getenv("N64_AUDIO_SMOOTH"); smoothMode_ = sm && *sm == '1' ? 1 : sm && *sm == '0' ? 0 : -1; }
     smooth_ = smoothMode_ == 1;
     if (smoothMode_ >= 0) LOGI("audio: smoothed audio wait forced %s (N64_AUDIO_SMOOTH)", smooth_ ? "on" : "off");
@@ -134,13 +134,26 @@ void AudioOut::waitForRoom() {
     if (!stream_) return;
     // Waits only above target + one frame of audio: where vsync paces the frames (fill near the
     // target via rate control), audio then never delays a frame past its vsync.
-    size_t ceiling = target_ + (size_t)dstRate_ / 60 * 2;
+    const size_t frameAudio = (size_t)dstRate_ / 60 * 2;
+    size_t ceiling = target_ + frameAudio;
+    // Samples written since the last call (one frame's audio).
+    size_t w = w_.load(std::memory_order_relaxed);
+    double wrote = (double)((w + cap_ - lastW_) % cap_);
+    lastW_ = w;
+    // A game that hands over its sound in lumps: Pokemon Puzzle League's intro gives 100 ms (4,410 frames) every
+    // sixth frame and nothing between. Waiting down to target + a frame after a lump left too little for the empty
+    // frames after it (Odin 3 Portal: 174 + 147 underruns in its first 10 s). The ceiling is raised by the largest
+    // frame's audio lately above a normal frame's; it fades by 1% a frame (~3 s back to normal once the lumps stop).
+    peak_ = std::max(wrote, peak_ * 0.99);
+    const size_t lump = peak_ > 2.0 * frameAudio ? (size_t)(peak_ - frameAudio) : 0;
+    // With the smoothed wait (fast panels) the fading excess below covers a lump, its waits spread over the empty
+    // frames (this rule alone bunched them: one 38-50 ms wait after each lump), now the ring lets it reach 100 ms.
+    // The excess fades 3% a frame, so it ends a little below zero by the next lump: two frames more while lumps come
+    // (35 short underruns in Puzzle League's intro without them).
+    if (!smooth_) ceiling += lump; else if (lump) ceiling += 2 * frameAudio;
     if (smooth_) {
-        // Samples written since the last call (one frame's audio), against their running average; a burst raises
-        // the ceiling by what it brought above the average, an empty frame lowers it, so frames start evenly.
-        size_t w = w_.load(std::memory_order_relaxed);
-        double wrote = (double)((w + cap_ - lastW_) % cap_);
-        lastW_ = w;
+        // Against their running average; a burst raises the ceiling by what it brought above the average, an empty
+        // frame lowers it, so frames start evenly.
         if (frames_ > 0) {
             avgWrite_ = avgWrite_ < 0 ? wrote : avgWrite_ + 0.02 * (wrote - avgWrite_);
             double lim = (double)cap_ / 4;
