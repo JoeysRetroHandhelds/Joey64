@@ -29,6 +29,9 @@
       ],
       "issues": [
         {"status": "open", "devices": "all", "what": "rooms in gameplay (pre-rendered backgrounds + 3D) only checked up to the intro video and save screen; check in-game from a save, also on the Flip", "evidence": "README RE2 gameplay item"}
+      ],
+      "fixed": [
+        {"devices": "Duo, Odin 3, Odin 3 Portal, Odin 2 Portal (all smart sync)", "what": "compat run sometimes ended on a static black screen (13 of 142 runs, every device, old cores too): parallel-RDP copied a stale 512x150 picture (0x189a00-0x1af200) back over data the CPU had written since, the overlay code at 0x8017b410 became zeros and noise and the game ran into it. Each render pass copies back its colour image from row 0 and its depth range at the mask image; the tracker locked only the scissor rows, and depth only for draws that write z", "fix": "smart sync also locks those colour rows and depth ranges on pages the GPU has drawn on before; core cafdd1e (N64_RDP_SMART_PRDP_RANGES=0 restores the old way)", "evidence": "2026-11-15: before 2-4 of 8 runs blank on Duo / Odin 3 / Odin 3 Portal / Odin 2 Portal, after 0 of 24; speed unchanged (Paper Mario Odin 3 1.73 / 1.72 ms); compat o3p/duo/o2p/o3-prdp2 82/82 each (morning-2026-11-15.md)"}
       ]
     },
     {
