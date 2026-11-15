@@ -35,12 +35,13 @@
       "id": "NCU", "title": "Cruis'n USA",
       "settings": [
         {"what": "synchronous parallel-RDP, also in fast-forward", "where": "kSyncRdpGames", "why": "async: black screen"},
-        {"what": "page-level smart sync (N64_RDP_SMART_PRECISE=0)", "where": "libretro_host.cpp kPageSmartGames", "why": "precise smart sync: the RSP loops forever in a race (Joey's Thor 2026-11-13, from their RetroArch state; Odin 2 Portal stuck4/stuck5: precise froze in round 1 every run, page-level and plain sync played 14 rounds)"}
+        {"what": "page-level smart sync (N64_RDP_SMART_PRECISE=0)", "where": "libretro_host.cpp kPageSmartGames", "why": "precise smart sync: the RSP loops forever in a race (Joey's Thor 2026-11-13, from their RetroArch state; Odin 2 Portal stuck4/stuck5: precise froze in round 1 every run, page-level and plain sync played 14 rounds)"},
+        {"what": "dynarec accesses that miss the drawn bytes go through the alias without a wait (N64_RDP_SMART_EMULATE=1)", "where": "libretro_host.cpp, kPageSmartGames", "why": "a CPU variable at 0x1657a0 shares a page with the framebuffer: Odin 2 Portal 4x race 3.96 -> 3.30 ms, waits 424 -> 344 per 600; 0 crashes in 8 runs on the Odin 3, 6 on the Odin 2 Portal (2026-11-15, core 1fab880)"}
       ],
       "issues": [
         {"status": "open", "what": "async with texture load snapshots (N64_RDP_TEX_SNAPSHOT=1): plays on the Duo, still black on the Flip, so it stays synchronous", "devices": "Flip", "evidence": "duo-ts-async-on / flip-ts-async-on, README item 33"},
         {"status": "open", "what": "bench state stops on the Controller Pak notice, so its bench numbers are a static menu (150-1190 fps swings); needs a state in a race", "evidence": "README bench states item"},
-        {"status": "open", "devices": "Thor (Adreno 740, Turnip)", "what": "slow at 4x with page-level smart sync: 555 CPU waits per 600 SyncFulls, each for the whole 4x frame (13 ms frames, GPU 70% busy): a CPU variable at 0x1657a0 shares a page with the framebuffer at 0x165900", "evidence": "Joey's Thor log 2026-11-14 16:56; Odin 3 Portal N64_RDP_SMART_DEBUG (dbg1-3: 284 of 600 waits on page 0x165000)"}
+        {"status": "open", "devices": "Thor (Adreno 740, Turnip)", "what": "slow at 4x with page-level smart sync: 555 CPU waits per 600 SyncFulls, each for the whole 4x frame (13 ms frames, GPU 70% busy): a CPU variable at 0x1657a0 shares a page with the framebuffer at 0x165900; emulate (settings) takes the Odin 2 Portal, the Thor's chip, from 3.96 to 3.30 ms; not checked on the Thor", "evidence": "Joey's Thor log 2026-11-14 16:56; Odin 3 Portal N64_RDP_SMART_DEBUG (dbg1-3: 284 of 600 waits on page 0x165000)"}
       ],
       "fixed": [
         {"what": "RSP looped on the boot screen with precise smart sync", "fix": "copies (DMA, RSP, C code) always wait, core 2938164"},
