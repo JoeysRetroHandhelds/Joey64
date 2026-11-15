@@ -219,6 +219,8 @@ std::string g_systemDir, g_saveDir;
 std::string g_ddCart; // a 64DD disk's cartridge (NativeBridge.setDdCart), "" = the disk alone
 // The game's own border (display_opts.h viTrim), from the core after each new picture; null: a core without it.
 static void (*g_viTrim)(int*) = nullptr;
+// The core's smart-sync CPU waits on the GPU so far (joey64_rdp_waits; null on an older core).
+static unsigned (*g_rdpWaits)() = nullptr;
 static void readViTrim() {
     static const bool off = getenv("N64_VI_TRIM") && *getenv("N64_VI_TRIM") == '0';
     int t[4] = {0, 0, 0, 0};
@@ -1493,6 +1495,11 @@ void runLoop() {
     const char* turboEnv = getenv("N64_GPU_TURBO");
     GpuClockPin clockPin;
     if (turboEnv && *turboEnv == '2') LOGI("GPU clock pin %s", clockPin.start() ? "on" : "failed");
+    // DEV (N64_GPU_TURBO=3, Paper Mario 2026-11-14): the pin only while the game makes the CPU wait on the GPU (10+
+    // smart-sync waits a second), off after 5 quiet seconds. A wait is short GPU work then idle, so Standard mode's
+    // governor keeps the GPU low (Portal: 401 MHz, 12.8 ms a frame; pinned 8.05 ms).
+    const bool pinOnWaits = turboEnv && *turboEnv == '3';
+    bool pinOn = false; int64_t pinCheckAt = 0; unsigned pinWaitsBefore = 0; int pinQuiet = 0;
     // DEV (N64_GPU_COUNTERS=1): Adreno GPU clock and busy % every 5 s, read through a KGSL context of our own
     GpuCounters gpuCounters;
     // Dev (item 31 heat runs): N64_FF_START=1 starts in fast-forward, as if R3 had been pressed
@@ -1801,6 +1808,18 @@ void runLoop() {
                 const int presentsBefore = g_statPresents;
                 runCoreFrame();
                 auto t3 = std::chrono::steady_clock::now();
+                if (pinOnWaits && g_rdpWaits) {
+                    const int64_t nowMs = steadyMs();
+                    if (nowMs - pinCheckAt >= 1000) {
+                        pinCheckAt = nowMs;
+                        const unsigned w = g_rdpWaits(), d = w - pinWaitsBefore;
+                        pinWaitsBefore = w;
+                        if (d >= 10) {
+                            pinQuiet = 0;
+                            if (!pinOn) { pinOn = clockPin.start(); LOGI("GPU clock pin %s: %u GPU waits in the last second", pinOn ? "on" : "failed", d); }
+                        } else if (pinOn && ++pinQuiet >= 5) { clockPin.stop(); pinOn = false; LOGI("GPU clock pin off: no GPU waits for 5 s"); }
+                    }
+                }
                 if (ff && ffDueOn && ffDue && g_statPresents != presentsBefore) { // a new picture went out: the slot is used
                     ffDue = false;
                     if (ffShown++ > 0) {
@@ -2130,6 +2149,7 @@ JNIEXPORT jboolean JNICALL JNI(loadCore)(JNIEnv* env, jobject, jstring path, jst
     if (!ok) return JNI_FALSE;
     core.load_game_special = reinterpret_cast<decltype(core.load_game_special)>(dlsym(core.handle, "retro_load_game_special"));
     g_viTrim = reinterpret_cast<void (*)(int*)>(dlsym(core.handle, "joey64_vi_trim"));
+    g_rdpWaits = reinterpret_cast<unsigned (*)()>(dlsym(core.handle, "joey64_rdp_waits"));
     { std::atomic<int>* v = Display::viTrim(); for (int i = 0; i < 4; ++i) v[i] = 0; }
 
     core.set_environment(environment);
