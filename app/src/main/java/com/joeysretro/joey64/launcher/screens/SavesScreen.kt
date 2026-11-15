@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -33,7 +35,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -150,7 +154,17 @@ fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (String) ->
         // A deleted state's row went: focus goes back to the first row.
         val keys = listOf("bu", "rs", "del") + d.states.map { "s:${it.slot}" }
         val at = if (focused in keys) focused else keys.first()
-        TwoColumns(Modifier.weight(1f), left = {
+        // The right panel's picture is no taller than leaves room for its lines (Odin 2 Portal 1920x1080: the
+        // Last backup line was cut off at the bottom, and the panel has nothing to focus to scroll to it). What the
+        // right column holds besides the picture is measured, so the picture takes all the height that's left (a fixed
+        // guess left empty space, Joey 2026-11-14).
+        BoxWithConstraints(Modifier.weight(1f)) {
+        val density = LocalDensity.current
+        var rightH by remember { mutableIntStateOf(0) }
+        var pictureH by remember { mutableIntStateOf(0) }
+        val besidePicture = if (rightH > 0) with(density) { (rightH - pictureH).toDp() } else 120.dp
+        val pictureMaxW = ((maxHeight - besidePicture - 2.dp) * 4f / 3f).coerceAtLeast(80.dp)
+        TwoColumns(Modifier.fillMaxSize(), left = {
             SectionLabel("In-game save")
             JoeyRow("Back up now", Modifier.initialFocus(at == "bu"), enabled = hasSave,
                 onFocused = { if (it) focused = "bu" }) {
@@ -181,11 +195,12 @@ fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (String) ->
                 Text(it, style = JoeyTheme.type.row, color = c.textFaint, modifier = Modifier.padding(horizontal = s.rowPadH, vertical = 10.dp))
             }
         }) {
+            Column(Modifier.onSizeChanged { rightH = it.height }) {
             SectionLabel(" ")
             val state = d.states.firstOrNull { "s:${it.slot}" == at }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(c.surface).border(1.dp, c.border, RoundedCornerShape(8.dp)).padding(10.dp)) {
                 val picture = state?.let { d.pictures[it.slot] }
-                Box(Modifier.fillMaxWidth(0.78f).aspectRatio(4f / 3f).clip(RoundedCornerShape(6.dp)).background(c.chip), contentAlignment = Alignment.Center) {
+                Box(Modifier.widthIn(max = pictureMaxW / 0.78f).fillMaxWidth(0.78f).aspectRatio(4f / 3f).onSizeChanged { pictureH = it.height }.clip(RoundedCornerShape(6.dp)).background(c.chip), contentAlignment = Alignment.Center) {
                     if (picture != null) Image(picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     else Icon(painterResource(if (state != null) R.drawable.ic_camera else R.drawable.ic_device_floppy), contentDescription = null,
                         tint = c.textFaint, modifier = Modifier.size(54.dp))
@@ -207,6 +222,8 @@ fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (String) ->
                     }
                 }
             }
+            }
+        }
         }
         Spacer(Modifier.height(6.dp))
         val n = d.backups.size

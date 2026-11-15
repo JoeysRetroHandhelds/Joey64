@@ -215,6 +215,7 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
 
         // The whole window's shape decides the layout (one column, the bottom bar); debug builds can set another size.
         com.joeysretro.joey64.launcher.layout.DevFrame { com.joeysretro.joey64.launcher.layout.TvSafeArea(JoeyTheme.colors.page) { ProvideScreenLayout(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(JoeyTheme.colors.page)) {
             if (s == null) return@Column
             val folders = s.romFolders.map { it.toUri() }
@@ -425,7 +426,6 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
                                 Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(bottom = 12.dp))
                         }
                     }
-                    if (home) UpdatedToast(updates, Modifier.align(Alignment.TopEnd))
             }
             val onPage = place == RailPlace.Settings || place == RailPlace.Controls || place == RailPlace.Search || place == RailPlace.Achievements ||
                 place == RailPlace.Netplay || cheatsFor != null || achievementsFor != null || gameSettingsFor != null || savesFor != null || screenshotsFor != null
@@ -453,6 +453,10 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
             if (home) com.joeysretro.joey64.launcher.screens.NetplayRoomPopups(model)
             // A netplay start that couldn't read its file says so on the Netplay page too (the library and Search draw their own).
             if (home && place != RailPlace.Library && place != RailPlace.Search) com.joeysretro.joey64.launcher.screens.StartFailedPopup(model)
+        }
+        // "Updated" in the window's top right corner, over the bar's empty end (Joey 2026-11-14: "should be top right
+        // aligned"; it sat below the bar), on the library as before.
+        if (s != null && s.romFolders.isNotEmpty() && s.setupDone) UpdatedToast(updates, Modifier.align(Alignment.TopEnd))
         }
         } } }
     }
