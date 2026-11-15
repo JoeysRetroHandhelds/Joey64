@@ -287,8 +287,16 @@ class GameStates(
         for (n in StateSlots.AUTO_MAX downTo k) removeSlot(StateSlots.auto(n))
         for (n in k - 1 downTo 1) moveSlot(StateSlots.auto(n), StateSlots.auto(n + 1))
         if (putInPlace(StateSlots.AUTO)) return true
-        moveSlot(StateSlots.auto(2), StateSlots.AUTO)
+        unshift(k)
         return false
+    }
+
+    /**
+     * A new auto save state that couldn't be put in place: the kept ones move back up, so each is where it was (review
+     * 2026-11-15: only the newest moved back, the rest stayed one down, and each retry dropped one more).
+     */
+    private fun unshift(k: Int) {
+        for (n in 1 until k) moveSlot(StateSlots.auto(n + 1), StateSlots.auto(n))
     }
 
     /**
@@ -322,7 +330,7 @@ class GameStates(
             for (n in StateSlots.AUTO_MAX downTo k) removeSlot(StateSlots.auto(n))
             for (n in k - 1 downTo 1) moveSlot(StateSlots.auto(n), StateSlots.auto(n + 1))
             if (!putInPlace(StateSlots.AUTO)) {
-                if (k > 1) moveSlot(StateSlots.auto(2), StateSlots.AUTO)
+                unshift(k)
                 return false
             }
             space.setModified(path(name), st.savedAt)

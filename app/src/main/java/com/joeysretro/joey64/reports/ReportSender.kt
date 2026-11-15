@@ -227,7 +227,9 @@ object ReportSender {
         val tailFrom = maxOf(0, lines.size - LOG_TAIL)
         val net = lines.subList(0, tailFrom).filter { it.contains("netplay", true) || it.contains("playtogether", true) }.takeLast(LOG_NET)
         var text = (net + (if (net.isNotEmpty()) listOf("...") else emptyList()) + lines.subList(tailFrom, lines.size)).joinToString("\n")
-        for (n in names.filter { it.trim().length >= 2 }.sortedByDescending { it.length }) text = text.replace(n.trim(), "<player>")
+        // Whole names only (review 2026-11-15: a plain replace made "Joey64" "<player>64" for a player called Joey).
+        for (n in names.map { it.trim() }.filter { it.length >= 2 }.sortedByDescending { it.length })
+            text = text.replace(Regex("(?<![\\p{L}\\p{N}_])" + Regex.escape(n) + "(?![\\p{L}\\p{N}_])"), "<player>")
         return ReportJson.logText(com.joeysretro.joey64.LogMask.addresses(scrub(text)))
     }
 

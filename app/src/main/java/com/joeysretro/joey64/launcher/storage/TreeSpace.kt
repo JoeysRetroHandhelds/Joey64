@@ -248,6 +248,15 @@ class TreeSpace(
         return TreeWalk.walk(root, dir, maxDepth, lenient = false) { id -> childrenOrNull(id)?.map { it.docId to it.entry } }
     }
 
+    /** [walkOrNull], but a folder below [dir] that can't be listed is left out and named to [failed] (parent id, its id); null only when [dir] itself can't be. */
+    fun walkLenient(dir: List<String>, failed: (parent: String, id: String) -> Unit, maxDepth: Int = 4): List<Pair<List<String>, Pair<String, SpaceEntry>>>? {
+        val root = (if (dir.isEmpty()) rootDocId else dirId(dir, create = false)) ?: return null
+        var rootFailed = false
+        val out = TreeWalk.walk(root, dir, maxDepth, lenient = true, failed = { p, id -> if (id == root) rootFailed = true else failed(p, id) }) { id ->
+            childrenOrNull(id)?.map { it.docId to it.entry } }
+        return if (rootFailed) null else out
+    }
+
     /** The folders and files in [dir], or null when it couldn't be listed (unlike [list], which reads that as empty). */
     fun listOrNull(dir: List<String>): List<SpaceEntry>? =
         dirId(dir, create = false)?.let { id -> childrenOrNull(id)?.map { it.entry } }

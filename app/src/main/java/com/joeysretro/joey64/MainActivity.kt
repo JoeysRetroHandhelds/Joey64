@@ -615,8 +615,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val autoOnly = dev == null && devString("driver") == null && videoDriver == null && devString("renderer") == null &&
             video[com.joeysretro.joey64.video.VideoKey.Renderer] != "gliden64" && video[com.joeysretro.joey64.video.VideoKey.Renderer] != "parallel"
         trialGpuName = system?.name ?: "none"
-        val trialPick = if (autoOnly) GpuTrial(trialStore(), packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString(),
-            trialGpuName, chain.value.size).also { trial = it }.decide() else null
+        val trialPick = if (autoOnly) GpuTrial(trialStore(), install, trialGpuName, chain.value.size).also { trial = it }.apply {
+            // After an update, start on the driver Auto ran before (review 2026-11-15)
+            GpuRules.Driver.byId(devicePrefs.getString("driver", null))?.let { d -> carry(chain.value.indexOf(d)) }
+        }.decide() else null
         val level = trialPick?.level ?: 0
         trialChain = chain.value
         trialInfo = trialPick
@@ -628,7 +630,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         var speedGone: GpuSpeed.Start.Gone? = null
         if (trialPick != null && trialPick.good && level < chain.value.size && md5Now != null && (devString("env") == null || devString("env")!!.matches(Regex("N64_TRIAL_BLACK=[0-9:]+"))) &&
             devString("opts") == null && GpuRules.gameRenderer(md5Now) == null) {
-            val sp = GpuSpeed(trialStore(), install, trialGpuName, chain.value.size)
+            val sp = GpuSpeed(trialStore(), install, trialGpuName, chain.value.size, upscale)
             val listLevel = GpuOrder.pick(GpuOrder.cached(this, trialGpuName), chain.value, level)
             when (val st = sp.start(md5Now, level, listLevel)) {
                 is GpuSpeed.Start.Run -> speedTry = st.t
@@ -1860,7 +1862,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             if (trial != null) fpsHandler.postDelayed(trialWatch, TRIAL_POLL_MS)
             if (speed != null && android.system.Os.getenv("N64_NETPLAY") == null && android.system.Os.getenv("N64_NETPLAY_SERVE") == null) {
                 speedFlushAt = android.os.SystemClock.elapsedRealtime(); fpsHandler.postDelayed(speedSample, SPEED_POLL_MS)
-            } else speed = null
+            } else { if (speedTry != null) speed?.cancel(); speed = null } // netplay: not measured, and the try's start doesn't count
             startStates(saveName)
             startSession(rom, saveName)
             fpsHandler.postDelayed(shutdownWatch, SHUTDOWN_POLL_MS)
@@ -3682,7 +3684,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     override fun onStop() {
         super.onStop()
         held?.hide()
-        if (mine && started && speed != null) { speedLast = null; speedFlush(false) }
+        if (mine && started && speed != null) { speedLast = null; speedFlush(false); speed?.ended() }
         if (!mine || isFinishing || quitting || !started) return
         val st = states ?: return
         if (recoveryEveryMs > 0 && !startLoadFailed) stateHandler.post {
@@ -3695,6 +3697,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (!mine) return
         if (!menuOpen && !hotkeyPaused) NativeBridge.pause(false)
         if (started) { reportGameState(loading = false); requestAudioFocus() }
+        if (started && speedTry != null && speedDrew) speed?.again()
         session?.tick(false, NativeBridge.framesRun(), NativeBridge.framesDrawn(), android.os.SystemClock.elapsedRealtime())
         resumed = true
         touch?.setActive(touchActive())

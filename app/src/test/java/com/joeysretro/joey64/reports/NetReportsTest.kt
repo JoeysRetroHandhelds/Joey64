@@ -72,6 +72,11 @@ class NetReportsTest {
         assertTrue(x.length <= ReportJson.MAX_LOG)
     }
 
+    @Test fun excerptHidesWholeNamesOnly() {
+        val x = ReportSender.excerpt(listOf("I Joey64: Joey joined", "I room: Joey's turn, joey64x"), listOf("Joey"))
+        assertEquals("I Joey64: <player> joined\nI room: <player>'s turn, joey64x", x)
+    }
+
     @Test fun androidReasonsToEndings() {
         assertEquals("crash", ReportSender.endedOf(android.app.ApplicationExitInfo.REASON_CRASH_NATIVE))
         assertEquals("anr", ReportSender.endedOf(android.app.ApplicationExitInfo.REASON_ANR))

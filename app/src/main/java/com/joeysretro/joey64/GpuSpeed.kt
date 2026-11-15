@@ -17,11 +17,17 @@ package com.joeysretro.joey64
  * Measurements: the host's work a frame (acquire, emulation, present: not the speed cap's or audio's waits), taken
  * only over stretches of normal play ([measure]).
  */
-class GpuSpeed(private val store: GpuTrial.Store, install: String, systemGpu: String, private val levels: Int) {
+class GpuSpeed(private val store: GpuTrial.Store, install: String, systemGpu: String, private val levels: Int, res: Int = 1) {
     private val key = "speed|$install|$systemGpu"
     private val mPrefix = "spdm|$install|$systemGpu|"
+    /** Measures are kept per resolution ([res], 1 = native): a game at 2x and at 4x isn't one game (review 2026-11-15). */
+    private val mSuffix = if (res > 1) "@$res" else ""
 
-    /** A try of [level] on [md5] ([ANY]: any game, from the reports' list); [begun] before the game loads, [drew] once a picture showed. */
+    /**
+     * A try of [level] on [md5] ([ANY]: any game, from the reports' list); [begun] from the game's load until the session
+     * ends cleanly ([ended]), so a start that finds it still set knows the last one died, before or after a picture
+     * (review 2026-11-15: one that died after drawing was run again at every start); [drew] once a picture showed.
+     */
     data class Try(val md5: String, val level: Int, val fromList: Boolean, val begun: Boolean = false, val drew: Boolean = false)
 
     /** One game on one level: the frames' work (ms), how many, the play (ms) and the emulated frames in it. */
@@ -82,7 +88,7 @@ class GpuSpeed(private val store: GpuTrial.Store, install: String, systemGpu: St
         var s = read()
         s.now?.let { t ->
             if (t.level == good || t.level >= levels) { s = s.copy(now = null); write(s) }
-            else if (t.begun && !t.drew) {
+            else if (t.begun) {
                 write(State(null, s.tried + (t.level to FAILED), null))
                 return Start.Gone(t.level, GpuTrial.STOPPED)
             }
@@ -98,8 +104,14 @@ class GpuSpeed(private val store: GpuTrial.Store, install: String, systemGpu: St
         return Start.None
     }
 
-    /** Just before the game loads with the try's level: it counts as stopped until [drew]. */
-    fun begin() { val s = read(); s.now?.let { write(s.copy(now = it.copy(begun = true))) } }
+    /** Just before the game loads with the try's level: it counts as stopped until the session [ended]. */
+    fun begin() { val s = read(); s.now?.let { write(s.copy(now = it.copy(begun = true, drew = false))) } }
+
+    /** The session ended cleanly (the game screen stopped): the next start isn't a died one. */
+    fun ended() { val s = read(); s.now?.let { if (it.begun) write(s.copy(now = it.copy(begun = false))) } }
+
+    /** The game screen is back after [ended] (from the background) with a picture shown: running again. */
+    fun again() { val s = read(); s.now?.let { if (it.drew && !it.begun) write(s.copy(now = it.copy(begun = true))) } }
 
     /** The game didn't load (not the driver's doing): the start doesn't count. */
     fun cancel() { val s = read(); s.now?.let { write(s.copy(now = it.copy(begun = false))) } }
@@ -113,7 +125,9 @@ class GpuSpeed(private val store: GpuTrial.Store, install: String, systemGpu: St
         write(State(if (s.now?.level == level) null else s.now, s.tried + (level to FAILED), if (note) level else s.note))
     }
 
-    private fun measures(md5: String): Map<Int, Measure> = store.get(mPrefix + md5).orEmpty().split(',').mapNotNull { e ->
+    private fun measures(md5: String): Map<Int, Measure> = parse(store.get(mPrefix + md5 + mSuffix))
+
+    private fun parse(v: String?): Map<Int, Measure> = v.orEmpty().split(',').mapNotNull { e ->
         val p = e.split(':'); if (p.size != 5) return@mapNotNull null
         val l = p[0].toIntOrNull() ?: return@mapNotNull null
         l to Measure(p[1].toDoubleOrNull() ?: return@mapNotNull null, p[2].toLongOrNull() ?: 0, p[3].toLongOrNull() ?: 0, p[4].toLongOrNull() ?: 0)
@@ -126,7 +140,7 @@ class GpuSpeed(private val store: GpuTrial.Store, install: String, systemGpu: St
         if (m.frames <= 0 || m.playMs <= 0) return
         val all = measures(md5).toMutableMap()
         all[level] = (all[level] ?: Measure(0.0, 0, 0, 0)) + m
-        store.put(mPrefix + md5, all.entries.joinToString(",") { (l, v) -> "$l:${"%.1f".format(java.util.Locale.ROOT, v.workMs)}:${v.frames}:${v.playMs}:${v.runFrames}" })
+        store.put(mPrefix + md5 + mSuffix, all.entries.joinToString(",") { (l, v) -> "$l:${"%.1f".format(java.util.Locale.ROOT, v.workMs)}:${v.frames}:${v.playMs}:${v.runFrames}" })
     }
 
     sealed interface Verdict {
@@ -176,10 +190,11 @@ class GpuSpeed(private val store: GpuTrial.Store, install: String, systemGpu: St
         return Verdict.None
     }
 
-    /** Each level measured here, its mean work a frame over every game (ms), or null for a failed one; for Settings. */
+    /** Each level measured here at this resolution, its mean work a frame over every game (ms), or null for a failed one; for Settings. */
     fun summary(): Map<Int, Double?> {
         val sum = HashMap<Int, Measure>()
-        for (k in store.keys()) if (k.startsWith(mPrefix)) for ((l, v) in measures(k.removePrefix(mPrefix))) sum[l] = (sum[l] ?: Measure(0.0, 0, 0, 0)) + v
+        for (k in store.keys()) if (k.startsWith(mPrefix) && (if (mSuffix.isEmpty()) '@' !in k else k.endsWith(mSuffix)))
+            for ((l, v) in parse(store.get(k))) sum[l] = (sum[l] ?: Measure(0.0, 0, 0, 0)) + v
         val out = LinkedHashMap<Int, Double?>()
         for ((l, v) in sum) if (v.frames > 0) out[l] = v.mean
         for ((l, why) in read().tried) if (why == FAILED) out[l] = null

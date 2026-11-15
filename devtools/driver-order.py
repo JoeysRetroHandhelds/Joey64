@@ -2,7 +2,8 @@
 mockup 2026-11-15, screen 4: "Joey64 downloads a weekly list of the fastest drivers for each GPU, made from reports").
 
 Only parallel-RDP sessions of a minute or more with a work time and a driver id count (app sessions from 2026-11-15
-on). A driver is compared only on games also played on another driver of the same GPU: each game's work a frame is
+on). A driver is compared only on games also played on another driver of the same GPU at the same resolution (a game at
+2x and at 4x counts as two; review 2026-11-15: mixing them ranked a driver by where it was played): each game's work a frame is
 divided by that game's mean over its drivers, and a driver's score is the geometric mean of those over its games (lower
 is faster). A driver needs MIN_GAMES such games to be ranked. GPU names are keyed as GpuOrder.key in the app.
 
@@ -15,10 +16,10 @@ from collections import defaultdict
 
 MIN_GAMES = 2
 MIN_SECONDS = 60
-QUERY = ("SELECT r.gpu AS gpu, s.md5 AS md5, s.driver_id AS driver, SUM(s.work_ms * s.seconds) AS w, SUM(s.seconds) AS secs "
+QUERY = ("SELECT r.gpu AS gpu, s.md5 AS md5, COALESCE(s.scale, 1) AS scale, s.driver_id AS driver, SUM(s.work_ms * s.seconds) AS w, SUM(s.seconds) AS secs "
          "FROM sessions s JOIN reports r ON s.report = r.id "
          f"WHERE s.renderer = 'parallel' AND s.work_ms IS NOT NULL AND s.driver_id IS NOT NULL AND s.driver_id != 'custom' "
-         f"AND s.seconds >= {MIN_SECONDS} GROUP BY r.gpu, s.md5, s.driver_id")
+         f"AND s.seconds >= {MIN_SECONDS} GROUP BY r.gpu, s.md5, COALESCE(s.scale, 1), s.driver_id")
 
 
 def key(name):
@@ -35,12 +36,12 @@ def query():
 
 
 def rank(rows):
-    # gpu -> md5 -> driver -> (work weighted by seconds, seconds); the session's GPU name may be Turnip's or the system's
+    # gpu -> (md5, scale) -> driver -> (work weighted by seconds, seconds); the session's GPU name may be Turnip's or the system's
     games = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0.0, 0.0])))
     for r in rows:
         if not r.get("gpu") or not r.get("driver") or not r.get("secs"):
             continue
-        a = games[key(r["gpu"])][r["md5"]][r["driver"]]
+        a = games[key(r["gpu"])][(r["md5"], r.get("scale") or 1)][r["driver"]]
         a[0] += float(r["w"]); a[1] += float(r["secs"])
     out = {}
     for gpu, by_game in sorted(games.items()):

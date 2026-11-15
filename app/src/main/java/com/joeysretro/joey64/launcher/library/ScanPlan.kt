@@ -20,7 +20,11 @@ object ScanPlanner {
     /** A folder that listed [found] ROMs is read again when it lists none but had [hadGames] games last time. */
     fun relist(found: Int, hadGames: Int) = found == 0 && hadGames > 0
 
-    fun plan(found: List<FoundRom>, known: List<KnownFile>, scannedTrees: Set<String>): ScanPlan {
+    /** What every document URI inside the folder at [folderUri] starts with (a path id's "/" is encoded). */
+    fun childPrefix(folderUri: String) = "$folderUri%2F"
+
+    /** [keepUnder]: URI prefixes of folders that couldn't be listed ([childPrefix]); their known files aren't gone. */
+    fun plan(found: List<FoundRom>, known: List<KnownFile>, scannedTrees: Set<String>, keepUnder: Set<String> = emptySet()): ScanPlan {
         val byUri = known.associateBy { it.uri }
         val toRead = ArrayList<FoundRom>()
         val unchanged = ArrayList<FoundRom>()
@@ -29,7 +33,7 @@ object ScanPlanner {
             if (k != null && k.size == f.size && k.modified == f.modified) unchanged += f else toRead += f
         }
         val foundUris = found.mapTo(HashSet()) { it.uri }
-        val gone = known.filter { it.treeUri in scannedTrees && it.uri !in foundUris }.map { it.uri }
+        val gone = known.filter { k -> k.treeUri in scannedTrees && k.uri !in foundUris && keepUnder.none { k.uri.startsWith(it) } }.map { it.uri }
         return ScanPlan(toRead, unchanged, gone)
     }
 

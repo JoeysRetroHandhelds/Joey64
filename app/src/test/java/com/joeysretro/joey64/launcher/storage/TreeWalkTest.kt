@@ -48,4 +48,22 @@ class TreeWalkTest {
         assertFalse(ScanPlanner.relist(0, 0))
         assertFalse(ScanPlanner.relist(5, 6))
     }
+
+    @Test fun lenientNamesTheFolderItLeftOut() {
+        val failed = ArrayList<Pair<String, String>>()
+        val r = TreeWalk.walk("root", emptyList(), 4, true, failed = { p, id -> failed += p to id }) { if (it == "sub") null else tree[it] }
+        assertEquals(listOf("a.z64"), names(r))
+        assertEquals(listOf("root" to "sub"), failed)
+    }
+
+    @Test fun unlistedFolderKeepsOnlyItsOwnGames() {
+        val tree = "content://t/tree/primary%3AR"
+        val sub = "$tree/document/primary%3AR%2Fsub"
+        val known = listOf(
+            com.joeysretro.joey64.launcher.library.KnownFile("$sub%2Fb.z64", tree, 1, 1, 1),
+            com.joeysretro.joey64.launcher.library.KnownFile("$tree/document/primary%3AR%2Fgone.z64", tree, 1, 1, 2),
+            com.joeysretro.joey64.launcher.library.KnownFile("$tree/document/primary%3AR%2Fsubway.z64", tree, 1, 1, 3))
+        val plan = ScanPlanner.plan(emptyList(), known, setOf(tree), setOf(ScanPlanner.childPrefix(sub)))
+        assertEquals(listOf("$tree/document/primary%3AR%2Fgone.z64", "$tree/document/primary%3AR%2Fsubway.z64"), plan.gone)
+    }
 }

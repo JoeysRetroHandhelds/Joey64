@@ -53,11 +53,12 @@ class LibraryScanner(private val context: Context, private val db: LibraryDb) {
         val scanned = HashSet<String>()
         var skipped = 0
         val known = db.knownFiles()
+        val keepUnder = HashSet<String>()
         for (tree in treeUris) {
             coroutineContext.ensureActive()
             // Permission gone, the folder isn't there (card out) or a folder in it couldn't be listed: skipped, its games kept.
             fun list(): List<com.joeysretro.joey64.launcher.storage.RomFile>? = if (RomFolders.readableNow(context, tree)) {
-                try { RomFolders.scan(resolver, tree) } catch (e: Exception) { JLog.w(TAG, "can't list $tree" + "\n" + Log.getStackTraceString(e)); null }
+                try { val keep = HashSet<String>(); RomFolders.scan(resolver, tree, keep).also { keepUnder += keep } } catch (e: Exception) { JLog.w(TAG, "can't list $tree" + "\n" + Log.getStackTraceString(e)); null }
             } else null
             var files = list()
             // A folder that had games and now lists none is read again before they count as gone: the listing of a held,
@@ -73,7 +74,7 @@ class LibraryScanner(private val context: Context, private val db: LibraryDb) {
             scanned += tree.toString()
             files.mapTo(found) { FoundRom(it.uri.toString(), tree.toString(), it.name, it.size, it.modified) }
         }
-        val plan = ScanPlanner.plan(found, known, scanned)
+        val plan = ScanPlanner.plan(found, known, scanned, keepUnder)
         val t1 = SystemClock.elapsedRealtime()
 
         val now = System.currentTimeMillis()

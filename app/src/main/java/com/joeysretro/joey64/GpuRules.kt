@@ -377,6 +377,20 @@ class GpuTrial(private val store: Store, install: String, systemGpu: String, val
     /** A faster level was found ([GpuSpeed]): it's the good one from now on. */
     fun keep(level: Int) { val s = read(); write(State(level, 0, true, s.told)) }
 
+    /**
+     * After an update (no record for this install yet, a good one from an earlier install on this GPU): the trial
+     * starts at [level], the driver Auto ran before (a faster one the speed check kept, say), instead of the chain's
+     * first (review 2026-11-15: every update forgot a kept driver). It is still a trial: a failure moves on as usual,
+     * and the speed check can try the levels above it again for this install. Call before [decide].
+     */
+    fun carry(level: Int) {
+        if (level <= 0 || level >= top || store.get(key) != null) return
+        val gpu = key.substringAfterLast('|')
+        val earlierGood = store.keys().any { it.startsWith("trial|") && it != key && it.substringAfterLast('|') == gpu &&
+            store.get(it)?.split(',')?.getOrNull(2) == "good" }
+        if (earlierGood) write(State(level, 0, false))
+    }
+
     /** The end card (no driver worked) was answered: it isn't shown again for this install and GPU. */
     fun told() { val s = read(); write(s.copy(told = true)) }
 

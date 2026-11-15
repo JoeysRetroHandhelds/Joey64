@@ -160,16 +160,26 @@ object RomFolders {
 
     /**
      * Every ROM in a picked folder (its N64 folders found by [RomFolderRules.foldersToScan]). Throws when a folder in it
-     * couldn't be listed, so the scan skips the folder and keeps its games rather than taking them for gone.
+     * couldn't be listed, so the scan skips the folder and keeps its games rather than taking them for gone. With
+     * [keepUnder] (the library scan), a folder below the scanned ones that can't be listed is left out instead and its
+     * document URI's prefix added there, so only its own games are kept and the rest of the folder is still scanned
+     * (review 2026-11-15: one such folder stopped every rescan of the whole picked folder, silently). That needs path
+     * document ids (a child's id is its parent's + "/"); with any other kind it throws as before.
      */
-    fun scan(resolver: ContentResolver, treeUri: Uri): List<RomFile> {
+    fun scan(resolver: ContentResolver, treeUri: Uri, keepUnder: MutableSet<String>? = null): List<RomFile> {
         val tree = TreeSpace(resolver, treeUri)
         val pickedName = DocumentsContract.getTreeDocumentId(treeUri).substringAfterLast(':').substringAfterLast('/')
         val dirs = (tree.listOrNull(emptyList()) ?: throw java.io.IOException("the picked folder couldn't be listed"))
             .filter { it.isDir }.map { it.name }
         return RomFolderRules.foldersToScan(pickedName, dirs).flatMap { sub ->
             val start = if (sub.isEmpty()) emptyList() else listOf(sub)
-            (tree.walkOrNull(start) ?: throw java.io.IOException("a folder in ${start.ifEmpty { listOf(pickedName) }.last()} couldn't be listed")).mapNotNull { (path, doc) ->
+            val where = start.ifEmpty { listOf(pickedName) }.last()
+            val walked = if (keepUnder == null) tree.walkOrNull(start) else tree.walkLenient(start, { parent, id ->
+                if (parent.isEmpty() || !id.startsWith("$parent/")) throw java.io.IOException("a folder in $where couldn't be listed")
+                com.joeysretro.joey64.JLog.w("Joey64Folders", "a folder in $where couldn't be listed: its games are kept, the rest scanned")
+                keepUnder += com.joeysretro.joey64.launcher.library.ScanPlanner.childPrefix(tree.documentUri(id).toString())
+            })
+            (walked ?: throw java.io.IOException("a folder in $where couldn't be listed")).mapNotNull { (path, doc) ->
                 val (docId, entry) = doc
                 if (!RomFolderRules.isRomName(entry.name)) null
                 else RomFile(tree.documentUri(docId), treeUri, path, entry.size, entry.modified)

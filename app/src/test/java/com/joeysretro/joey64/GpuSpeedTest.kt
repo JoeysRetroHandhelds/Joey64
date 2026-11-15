@@ -75,6 +75,32 @@ class GpuSpeedTest {
         assertTrue(sp.start("g", 0, null) is GpuSpeed.Start.Run)
     }
 
+    @Test fun tryThatDiesAfterDrawingIsGone() {
+        val sp = GpuSpeed(MapStore(), "1", "gpu", 3)
+        sp.measure("g", 0, play(17.0, 200)); sp.judge("g", 0, 0, fps, emptySet())
+        sp.start("g", 0, null); sp.begin(); sp.drew(); sp.ended()      // a clean session: still the try
+        assertTrue(sp.start("g", 0, null) is GpuSpeed.Start.Run)
+        sp.begin(); sp.drew(); sp.ended(); sp.again()                   // back from the background, then died
+        assertEquals(GpuSpeed.Start.Gone(1, GpuTrial.STOPPED), sp.start("g", 0, null))
+        assertEquals(GpuSpeed.FAILED, sp.tried()[1])
+    }
+
+    @Test fun measuresPerResolution() {
+        val st = MapStore()
+        GpuSpeed(st, "1", "gpu", 3, 4).measure("g", 0, play(10.0, 100))
+        assertNull(GpuSpeed(st, "1", "gpu", 3, 2).measure("g", 0))
+        assertNull(GpuSpeed(st, "1", "gpu", 3).summary()[0])
+        assertEquals(10.0, GpuSpeed(st, "1", "gpu", 3, 4).summary()[0]!!, 0.01)
+    }
+
+    @Test fun updateStartsTrialOnTheKeptDriver() {
+        val st = MapStore()
+        GpuTrial(st, "1", "gpu", 4).apply { decide(); keep(2) }
+        GpuTrial(st, "2", "gpu", 4).apply { carry(2) }.decide().let { assertEquals(2, it.level); assertTrue(!it.good) }
+        // A first install (nothing good before) starts at the chain's first
+        GpuTrial(MapStore(), "1", "gpu", 4).apply { carry(2) }.decide().let { assertEquals(0, it.level) }
+    }
+
     @Test fun failedChecksSayGoneOnce() {
         val sp = GpuSpeed(MapStore(), "1", "gpu", 3)
         sp.measure("g", 0, play(17.0, 200)); sp.judge("g", 0, 0, fps, emptySet())

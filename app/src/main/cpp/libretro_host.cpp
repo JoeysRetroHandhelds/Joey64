@@ -1744,7 +1744,7 @@ void runLoop() {
                 ffShort = (holds < want * 0.9 || reached < want * 0.9) ? ffShort + 1 : 0;
                 if (ffShort >= 2 && ffStepDown()) {
                     ffShort = -2; // the renderer rebuilds: give the new level 1 s more before judging it
-                    workEma = 0; pace = 0;
+                    workEma = 0; pace = want; // not 0: this frame's sleep divides by it (review 2026-11-15)
                 }
             }
             pace = std::min(pace, want);
