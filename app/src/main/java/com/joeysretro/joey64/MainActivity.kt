@@ -175,6 +175,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             if (android.system.Os.getenv(k) == null) android.system.Os.setenv(k, v, true)
         // Driver and renderer by GPU (setupGpu), or Settings › Video's choice. Override with: am start ... --es renderer parallel|gliden64
         val renderer = setupGpu()
+        // The trial's driver can't work here: the game screen is starting again with the next one.
+        if (trialRestarting) return
         parallel = renderer == "parallel"
         NativeBridge.setRenderer(renderer == "parallel")
         onScreen = onScreenStore.read()
@@ -592,27 +594,31 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val systemFamily = GpuRules.family(system?.vendor ?: 0, system?.name.orEmpty(), kgsl)
         val upscale = wantedUpscale()
         val auto = GpuRules.autoDriver(systemFamily, upscale)
-        val videoDriver = when (video[com.joeysretro.joey64.video.VideoKey.Driver]) {
-            "system" -> "system"
-            "bundled" -> if (auto.value == GpuRules.Driver.FAUX123) "faux123" else "turnip"
-            else -> null
+        // Every driver Auto tries on this GPU, best first (GpuRules.chain; Joey 2026-11-15)
+        val chain = GpuRules.chain(systemFamily, Build.VERSION.SDK_INT, upscale)
+        val videoDriver = when (val v = video[com.joeysretro.joey64.video.VideoKey.Driver]) {
+            "auto", null, "" -> null
+            "bundled" -> auto.value.id.takeIf { auto.value != GpuRules.Driver.SYSTEM } ?: "turnip"
+            else -> v
         }
         val dev = devDriver()
         // The start-up trial (GpuTrial) runs only on Auto's own choice: nothing in Settings, no dev driver or switch.
         val autoOnly = dev == null && devString("driver") == null && videoDriver == null && devString("renderer") == null &&
             video[com.joeysretro.joey64.video.VideoKey.Renderer] != "gliden64" && video[com.joeysretro.joey64.video.VideoKey.Renderer] != "parallel"
+        trialGpuName = system?.name ?: "none"
         val trialPick = if (autoOnly) GpuTrial(trialStore(), packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString(),
-            system?.name ?: "none").also { trial = it }.decide() else null
+            trialGpuName, chain.value.size).also { trial = it }.decide() else null
         val level = trialPick?.level ?: 0
-        val lib = dev ?: when (devString("driver") ?: videoDriver) {
-            "system" -> null
-            "turnip" -> bundledDriver(TURNIP)
-            "faux123" -> bundledDriver(TURNIP_FAUX123)
-            else -> if (level >= 1) null else when (auto.value) {
-                GpuRules.Driver.FAUX123 -> bundledDriver(TURNIP_FAUX123) ?: bundledDriver(TURNIP)
-                GpuRules.Driver.TURNIP -> bundledDriver(TURNIP)
-                GpuRules.Driver.SYSTEM -> null
-            }
+        trialChain = chain.value
+        trialInfo = trialPick
+        // The driver this start runs: a dev driver, a dev switch or Settings' pick, else the trial's level of the chain
+        // (past the chain's end: the system driver with GLideN64).
+        val stepDriver: GpuRules.Driver = GpuRules.Driver.byId(devString("driver") ?: videoDriver)
+            ?: chain.value.getOrNull(level) ?: GpuRules.Driver.SYSTEM
+        val lib = dev ?: stepDriver.asset?.let { bundledDriver(it) }
+        // A bundled driver this build doesn't have: the trial moves on (no game start spent on it)
+        if (dev == null && trialPick != null && !trialPick.good && level < chain.value.size && stepDriver.asset != null && lib == null) {
+            trialFailNow("not in this build"); return "gliden64"
         }
         var custom: VkGpu? = null
         if (lib != null) {
@@ -620,6 +626,19 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             NativeBridge.setVulkanDriver("${lib.parent}/", lib.name, "${applicationInfo.nativeLibraryDir}/", "${tmp.absolutePath}/")
             custom = parseGpu(NativeBridge.probeVulkan(true))
             if (custom == null) JLog.w(TAG, "Driver ${lib.name} has no usable GPU, using the system driver")
+        }
+        // The trial's checks before any game start (approved gputry mockup: "checked off quietly"): a driver that
+        // doesn't load, or a GPU without what parallel-RDP needs on it, moves to the next level at once.
+        if (trialPick != null && !trialPick.good && level < chain.value.size) {
+            val g = if (stepDriver == GpuRules.Driver.SYSTEM) system else custom
+            val why = when {
+                stepDriver != GpuRules.Driver.SYSTEM && custom == null -> "doesn't load on this GPU"
+                g == null -> "no Vulkan"
+                !g.vulkan11 -> "no Vulkan 1.1"
+                g.storage16 != 1 -> "no 8- or 16-bit storage"
+                else -> null
+            }
+            if (why != null) { trialFailNow(why); return "gliden64" }
         }
         val gpu = custom ?: system
         gpuName = gpu?.name ?: ""
@@ -629,10 +648,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         statsDriver = statsDriverName(lib?.takeIf { custom != null }, dev != null, gpu?.driver.orEmpty())
         val cpuinfo = try { File("/proc/cpuinfo").readText() } catch (e: Exception) { null }
         val rendererPick = GpuRules.autoRenderer(gpu != null && gpu.vulkan11, gpu != null && gpu.storage16 == 1, custom != null, gpuFamily,
-            GpuRules.littleCoresOnly(cpuinfo), upscale)
-        // The trial's level 1 is the system driver (its renderer by the rule above); level 2, or level 1 when Auto was
-        // already the system driver, is GLideN64 as well.
-        val trialGl = trialPick != null && (level >= 2 || (level == 1 && auto.value == GpuRules.Driver.SYSTEM))
+            GpuRules.littleCoresOnly(cpuinfo), upscale, tryStock = trialPick != null && level < chain.value.size)
+        // Past the chain's last driver the trial runs GLideN64 on the system driver.
+        val trialGl = trialPick != null && level >= chain.value.size
         val parallelForGpu = rendererPick.value == "parallel" && !trialGl
         // A game Auto runs on GLideN64 (GpuRules.gameRenderer: SM64 Last Impact); the GPU's own pick still goes to
         // Settings' "Auto · ..." below.
@@ -642,12 +660,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         JLog.i(TAG, "GPU: ${gpu ?: "no Vulkan"}, driver ${if (custom != null) lib!!.relativeTo(gpuDriverDir).path else "system"}, " +
             "default renderer ${if (parallel) "parallel" else "gliden64"}")
         // Which rule picked what (README item 38 e: a tester's log says it).
-        JLog.i(TAG, "GPU rules: family $systemFamily; Auto driver: ${auto.rule}; Auto renderer: ${rendererPick.rule}; " +
+        JLog.i(TAG, "GPU rules: family $systemFamily; Auto drivers: ${chain.rule}; Auto renderer: ${rendererPick.rule}; " +
             "trial: ${trialPick?.what ?: "off (driver or renderer not left on Auto)"}${if (trialGl) ", so GLideN64" else ""}" +
             (gamePick?.let { "; this game: ${it.rule}" } ?: ""))
         // The same for reports (Joey 2026-11-09): which rules picked the driver and renderer, the trial's level, and
         // whether Auto picked at all (Settings did when autoOnly is false; the rules then say what Auto would pick).
-        gpuWhy = GpuWhy(auto.rule, gamePick?.rule ?: rendererPick.rule, trialPick?.level, if (autoOnly) "auto" else "user")
+        // trialLevel stays 0-2 for the server (0 Auto's first driver, 1 a later one, 2 GLideN64); the drivers tried and
+        // what each did go in the driver rule.
+        gpuWhy = GpuWhy(trialRule(auto.rule, stepDriver, trialPick), gamePick?.rule ?: rendererPick.rule,
+            trialPick?.level?.let { if (trialGl) 2 else if (it == 0) 0 else 1 }, if (autoOnly) "auto" else "user")
         // What Auto picks here, for Settings › Video's "Auto · ..." (the launcher can't probe Vulkan itself):
         // the renderer by GPU, and the driver that ran when nothing but Auto chose it (a dev driver in
         // files/drivers counts: it is what Auto uses then).
@@ -656,8 +677,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (devString("driver") == null && videoDriver == null) prefs.putString("driver", when {
             custom == null -> "system"
             dev != null -> "custom"
-            lib?.parentFile?.name == "faux123" -> "faux123"
-            else -> "turnip"
+            else -> stepDriver.id
         })
         prefs.apply()
         devString("renderer")?.let { return it }
@@ -684,6 +704,117 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var trialAt = 0L
     private var trialCancelled = false
     private fun cancelTrial() { if (!trialCancelled) { trialCancelled = true; trial?.cancel() } }
+    /** The drivers Auto tries on this GPU (GpuRules.chain) and this start's place in the trial, from [setupGpu]. */
+    private var trialChain: List<GpuRules.Driver> = emptyList()
+    private var trialInfo: GpuTrial.Pick? = null
+    /** The system GPU's name, the trial's key with the install. */
+    private var trialGpuName = "none"
+    /** A trial restart is under way: onCreate stops and onDestroy does nothing (the process is ended for the next start). */
+    private var trialRestarting = false
+
+    /**
+     * Before the game loads: this start's driver can't work ([reason]: it doesn't load, or lacks what parallel-RDP needs),
+     * so the trial moves to the next one and the game screen starts again with it, no game start spent (approved gputry
+     * mockup: "checked off quietly").
+     */
+    private fun trialFailNow(reason: String) {
+        val t = trial ?: return
+        val name = trialChain.getOrNull(trialInfo?.level ?: 0)?.shown ?: "?"
+        if (!t.fail(reason)) return
+        JLog.w(TAG, "GPU trial: $name $reason, starting again with the next driver")
+        trialRestarting = true
+        finish()
+        RestartActivity.restart(this, trialNextStart())
+    }
+
+    /** The same start again (the same game, state and extras), for the trial's next driver. */
+    private fun trialNextStart(): Intent = Intent(intent).apply {
+        component = intent.component
+        removeExtra(EXTRA_PLAY_NOTE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (data != null) addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    /**
+     * The driver rule for reports (at most 120 characters, the server's limit): this start's driver, the ones that failed
+     * before it with what each did, then Auto's rule.
+     */
+    private fun trialRule(rule: String, d: GpuRules.Driver, pick: GpuTrial.Pick?): String {
+        if (pick == null) return rule.take(120)
+        val failed = pick.history.joinToString(",") { (l, r) -> "${trialChain.getOrNull(l)?.id ?: "l$l"}:${trialShort(r)}" }
+        val head = if (pick.good) "${d.id} good" else "trial ${d.id}"
+        return (if (failed.isEmpty()) "$head; $rule" else "$head; failed $failed; $rule").take(120)
+    }
+
+    private fun trialShort(reason: String) = when (reason) {
+        GpuTrial.NO_PICTURE -> "black"
+        GpuTrial.STOPPED -> "died"
+        "doesn't load on this GPU" -> "noload"
+        "no Vulkan" -> "novk"
+        "no Vulkan 1.1" -> "vk10"
+        "no 8- or 16-bit storage" -> "nostorage"
+        "not in this build" -> "missing"
+        else -> reason.take(12)
+    }
+
+    /** The trial's card as the game opens: a driver tried before this one failed (screens 1-2), or none worked (3b-3c). */
+    private fun trialCardAtStart() {
+        val p = trialInfo ?: return
+        if (trial == null || p.good) return
+        val names = trialChain.map { it.shown }
+        val o = overlay ?: return
+        if (p.level >= names.size) {
+            if (p.told || p.history.isEmpty()) return
+            JLog.i(TAG, "GPU trial: no driver drew, GLideN64; the end card is up")
+            menuOpen = true; sessionMark(); NativeBridge.pause(true)
+            o.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.GpuNone(
+                com.joeysretro.joey64.launcher.ingame.GpuTrialCard.steps(names, p.history, p.level),
+                com.joeysretro.joey64.reports.ReportPrefs.on(this))
+            return
+        }
+        com.joeysretro.joey64.launcher.ingame.GpuTrialCard.tryCard(names, p.history, p.level)?.let { o.screen = it }
+    }
+
+    /** The trial's driver showed a picture: it's the one from now on; the card goes and, after failures, the pop-up says so (3a). */
+    private fun trialDrew() {
+        val t = trial ?: return
+        t.drew(); trial = null
+        JLog.i(TAG, "GPU trial: a picture was drawn, good")
+        val p = trialInfo ?: return
+        if (overlay?.screen is com.joeysretro.joey64.launcher.ingame.PauseScreen.GpuTry) overlay?.screen = null
+        if (p.history.isNotEmpty() && p.level < trialChain.size) {
+            val p2 = InGamePopup("gpuok", InGamePopup.Kind.GpuOk, "parallel-RDP is running", "With ${trialChain[p.level].shown}",
+                "Joey64 will use it on this device from now on", stayMs = 5_000)
+            overlay?.show(p2) ?: earlyPops.add(p2)
+        }
+    }
+
+    /** No picture in time (the watch): the next driver, said on the card, then the game screen starts again with it. */
+    private fun trialNoPicture() {
+        val t = trial ?: return
+        val p = trialInfo ?: return
+        if (!t.fail(GpuTrial.NO_PICTURE)) return
+        trial = null
+        val after = t.decide()
+        val names = trialChain.map { it.shown }
+        JLog.w(TAG, "GPU trial: ${names.getOrNull(p.level)} drew no picture, restarting with level ${after.level}")
+        val card = com.joeysretro.joey64.launcher.ingame.GpuTrialCard.tryCard(names, after.history, after.level)
+        if (card != null && !menuOpen) overlay?.screen = card
+        // Long enough to read the card's line before the screen goes.
+        fpsHandler.postDelayed({ restartForTrial() }, TRIAL_CARD_MS)
+    }
+
+    /** The game screen again in a fresh process with the trial's next level; nothing is saved (the picture never showed). */
+    private fun restartForTrial() {
+        if (quitting || isFinishing) return
+        quitting = true
+        sessionEnd = "next"
+        keepRecovery = true
+        stateHandler.removeCallbacks(recoveryTick)
+        if (owner === this) { NativeBridge.stop(); owner = null }
+        finish()
+        RestartActivity.restart(this, trialNextStart())
+    }
 
     /** /sys/class/kgsl/kgsl-3d0/gpu_model ("Adreno740v2"), when this device lets the app read it. */
     private fun kgslModel(): String? = try { File("/sys/class/kgsl/kgsl-3d0/gpu_model").readText().trim().takeIf { it.isNotEmpty() } } catch (_: Exception) { null }
@@ -706,12 +837,36 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         }
     }
 
-    /** Polls for the first drawn frame of a trial start, then marks the trial good. */
+    /**
+     * Watches a trial start for a picture: a drawn frame that isn't black (a driver that can't run parallel-RDP's shaders
+     * draws frames, all black, so a drawn frame alone doesn't count; 2026-11-15). The frame is read back off the main
+     * thread. No frame by [TRIAL_NO_FRAME_MS] of play, or only black ones by [TRIAL_BLACK_MS], is "no picture": the next
+     * driver. Time with the menu or another popup up doesn't count; in a netplay room it never fails (the room may wait).
+     */
+    private var trialRunMs = 0L
+    @Volatile private var trialChecking = false
+    private val trialCheck by lazy { java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "joey64-gputrial") } }
     private val trialWatch = object : Runnable {
         override fun run() {
-            val t = trial ?: return
-            if (NativeBridge.framesDrawn() > 0) { t.drew(); JLog.i(TAG, "GPU trial: a frame was drawn, good"); return }
-            if (!isFinishing) fpsHandler.postDelayed(this, 250)
+            if (trial == null || isFinishing || quitting) return
+            val scr = overlay?.screen
+            if (!menuOpen && !hotkeyPaused && resumed && (scr == null || scr is com.joeysretro.joey64.launcher.ingame.PauseScreen.GpuTry)) trialRunMs += TRIAL_POLL_MS
+            val drawn = NativeBridge.framesDrawn() > 0
+            // Out of time, once the last frame check is back (a new one starts every poll, so it's tested first)
+            val p = trialInfo
+            val net = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null
+            if (p != null && !p.good && p.level < trialChain.size && !net && !trialChecking &&
+                ((!drawn && trialRunMs >= TRIAL_NO_FRAME_MS) || trialRunMs >= TRIAL_BLACK_MS)) { trialNoPicture(); return }
+            if (drawn && !trialChecking) {
+                trialChecking = true
+                trialCheck.execute {
+                    // Debug: --es env N64_TRIAL_BLACK=0:1 makes those levels' pictures count as black, to see the cards.
+                    val fake = BuildConfig.DEBUG && android.system.Os.getenv("N64_TRIAL_BLACK")?.split(':')?.contains("${trialInfo?.level}") == true
+                    val lit = !fake && GpuRules.lit(NativeBridge.captureFrame(500))
+                    runOnUiThread { trialChecking = false; if (lit && !isFinishing) trialDrew() }
+                }
+            }
+            fpsHandler.postDelayed(this, TRIAL_POLL_MS)
         }
     }
 
@@ -1509,7 +1664,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         trial?.begin(); trialAt = android.os.SystemClock.uptimeMillis()
         if (NativeBridge.loadGame(rom, saveName)) {
             NativeBridge.start(); started = true; owner = this; gameLoaded = true
-            if (trial != null) fpsHandler.postDelayed(trialWatch, 250)
+            if (trial != null) fpsHandler.postDelayed(trialWatch, TRIAL_POLL_MS)
             startStates(saveName)
             startSession(rom, saveName)
             fpsHandler.postDelayed(shutdownWatch, SHUTDOWN_POLL_MS)
@@ -1604,6 +1759,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             for (p in earlyPops) it.show(p)
             earlyPops.clear()
         }
+        trialCardAtStart()
         // "Play will always ... Change it in Settings › Saves." (approved E4 screens 5-6), once, as the game opens.
         launcherString(EXTRA_PLAY_NOTE)?.let { pop("playnote", InGamePopup.Kind.PlayNote, "Continue on Play", it, "Change it in Settings › Saves.") }
         noSticksNote()
@@ -1700,7 +1856,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private val sessionStats = DoubleArray(16)
 
     private fun startSession(rom: String, saveName: String) {
-        if (!com.joeysretro.joey64.reports.ReportPrefs.on(this)) return
+        if (!com.joeysretro.joey64.reports.ReportPrefs.recording(this)) return
         if (listOf("env", "opts", "renderer", "driver").any { intent?.hasExtra(it) == true }) { JLog.i(TAG, "reports: a dev start, not recorded"); return }
         val md5 = gameMd5 ?: return
         // Settings that differ from the defaults: Video's for this game (all of them count for speed), Audio's.
@@ -1975,6 +2131,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         override fun quit() {
             overlay?.screen = null
             quitToLibrary()
+        }
+        // The trial card's B: the start doesn't count against the driver (it wasn't given its time).
+        override fun gpuQuit() { cancelTrial(); trial = null; quit() }
+        override fun gpuStart(send: Boolean) {
+            GpuTrial(trialStore(), packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString(), trialGpuName, trialChain.size).told()
+            if (send) {
+                com.joeysretro.joey64.reports.ReportPrefs.setOnce(this@MainActivity, true)
+                val rom = startRom; val save = startSave
+                if (session == null && rom != null && save != null) startSession(rom, save)
+                JLog.i(TAG, "GPU trial: this play is recorded and sent once (Send reports off)")
+            }
+            closeMenu()
         }
         override fun disconnectChoice(choice: com.joeysretro.joey64.launcher.ingame.DisconnectChoice) = disconnected(choice)
         override fun closeNoSpace() { closeMenu() }
@@ -3353,6 +3521,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     override fun onDestroy() {
+        if (trialRestarting) { super.onDestroy(); return }
         held?.hide(); held = null
         if (isFinishing) {
             fpsHandler.removeCallbacks(sessionTick)
@@ -3530,6 +3699,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         private var gameLoaded = false
         private const val SHUTDOWN_POLL_MS = 500L
         private const val TRIAL_QUICK_QUIT_MS = 5_000L
+        /** The driver trial's watch (approved gputry mockup 2026-11-15): how often, and how long a start gets. */
+        private const val TRIAL_POLL_MS = 500L
+        private const val TRIAL_NO_FRAME_MS = 10_000L
+        private const val TRIAL_BLACK_MS = 20_000L
+        /** How long the card says which driver comes next before the game screen restarts. */
+        private const val TRIAL_CARD_MS = 1_500L
         private const val NET_POLL_MS = 250L
         private const val NET_BLOCKED_MS = 3_000L
         /** How often the game screen checks whether the game's own save was written (Not enough space to save). */

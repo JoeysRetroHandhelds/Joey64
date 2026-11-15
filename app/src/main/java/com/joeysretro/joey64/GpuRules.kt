@@ -38,10 +38,67 @@ object GpuRules {
         return Family(Vendor.OTHER, 0, vkName)
     }
 
-    enum class Driver(val id: String) { FAUX123("faux123"), TURNIP("turnip"), SYSTEM("system") }
+    /**
+     * The drivers Joey64 bundles (assets/drivers/[asset], listed in devtools/drivers/bundled.json) and the system's.
+     * [id] is what Settings › Video › GPU driver stores and the `device` pref "driver" says; [shown] is the trial card's
+     * and the picker's name; [minSdk] is the driver's own (its meta.json), below which it is never tried. All are Mesa
+     * builds (MIT) or malisx2 (MIT): Qualcomm's own drivers can't be bundled (Joey 2026-11-15: "Let's try everything",
+     * from his Snapdragon and Mali driver pages).
+     */
+    enum class Driver(val id: String, val asset: String?, val shown: String, val minSdk: Int = 0, val mali: Boolean = false) {
+        TURNIP("turnip", "libvulkan_freedreno.so", "Turnip Gen8"),
+        FAUX123("faux123", "faux123/libvulkan_freedreno.so", "Turnip faux123"),
+        R2("r2", "r2/libvulkan_freedreno.so", "Turnip R2"),
+        APEX("apex", "apex/vulkan.freedreno.so", "Balemuni Apex", minSdk = 33),
+        PURPLE("purple", "purple/vulkan.purple.so", "Mr Purple T30", minSdk = 30),
+        DUO("duo", "duo/libvulkan_freedreno.so", "Turnip Duo"),
+        TURNIPZ("turnipz", "turnipz/libvulkan_freedreno.so", "TurnipZ", minSdk = 30),
+        K11("k11", "k11/vulkan.ad07xx.so", "K11MCH1 Turnip"),
+        ARMSX2("armsx2", "armsx2/libvulkan_freedreno.so", "ARMSX2 Turnip"),
+        MALISX2("malisx2", "malisx2/libvulkan_malisx2.so", "malisx2", mali = true),
+        PANVK("panvk", "panvk/libvulkan_panfrost.so", "PanVK", minSdk = 35, mali = true),
+        SYSTEM("system", null, "The phone's own driver");
+
+        companion object {
+            fun byId(id: String?): Driver? = entries.firstOrNull { it.id == id }
+        }
+    }
 
     /** A choice and the rule that made it, for the log (item 38 e: a tester's report shows which rule picked). */
     data class Pick<T>(val value: T, val rule: String)
+
+    /**
+     * The drivers Auto tries on this GPU, best first (Joey 2026-11-15: "try as much as possible to avoid a new user with
+     * untested device having to fall back to glide"). The start-up trial ([GpuTrial]) gives each one try with
+     * parallel-RDP; after the last, GLideN64 on the system driver. The first is [autoDriver]'s pick, so the GPUs we run
+     * keep what they had. Drivers whose [Driver.minSdk] is above [sdk] are left out.
+     */
+    fun chain(f: Family, sdk: Int, upscale: Int = 1): Pick<List<Driver>> {
+        val first = autoDriver(f, upscale)
+        val rest: List<Driver> = when {
+            // Adreno 8xx: the stock driver runs parallel-RDP (Odin 3: 82/82 at every resolution), then Turnip. Order by the
+            // 2026-11-15 smoke bench (o3p-dz, Odin 3 Portal, 8 games uncapped): Gen8, faux123, R2 and ARMSX2 even; Apex and
+            // Mr Purple about half speed, so last
+            f.vendor == Vendor.ADRENO && f.model in 800..899 -> listOf(Driver.TURNIP, Driver.FAUX123, Driver.R2, Driver.ARMSX2, Driver.K11, Driver.APEX, Driver.PURPLE)
+            // The Duo's 722: faux123 (Mario Party 2's text boxes), then by the smoke bench (duo-dz): the Duo build, ARMSX2,
+            // Gen8 and K11 even with faux123, R2 ~10% slower, Apex and Mr Purple about half
+            f.vendor == Vendor.ADRENO && f.model == 722 -> listOf(Driver.DUO, Driver.ARMSX2, Driver.TURNIP, Driver.K11, Driver.R2, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
+            // Adreno 6xx: Mesa gives a6xx no 8-bit storage, so only Mr Purple's build (8-bit storage as a Vulkan 1.2
+            // feature, the RP Mini V2 / Flip 2 testers 2026-11-08) can run parallel-RDP; the rest are checked on the
+            // probe, which costs no game start
+            f.vendor == Vendor.ADRENO && f.model in 600..699 -> listOf(Driver.PURPLE, Driver.TURNIPZ, Driver.K11, Driver.FAUX123, Driver.R2, Driver.SYSTEM)
+            // Other Adreno 7xx, the A32/A33 (G3 Gen 3, G3x Gen 2) and any Adreno with no model known
+            // (smoke bench o2p-dz, Odin 2 Portal's 740: R2, faux123 and ARMSX2 even with Gen8, ARMSX2 up to 10% faster;
+            // K11 R8 doesn't load there; Apex and Mr Purple about half speed)
+            f.vendor == Vendor.ADRENO && (f.model in 700..799 || f.model == 0) ->
+                listOf(Driver.R2, Driver.ARMSX2, Driver.FAUX123, Driver.K11, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
+            f.vendor == Vendor.ADRENO -> listOf(Driver.PURPLE, Driver.K11, Driver.SYSTEM)
+            f.vendor == Vendor.MALI -> listOf(Driver.MALISX2, Driver.PANVK)
+            else -> emptyList()
+        }
+        val list = (listOf(first.value) + rest).distinct().filter { sdk >= it.minSdk }
+        return Pick(list, first.rule + if (list.size > 1) ", then " + list.drop(1).joinToString(", ") { it.shown } else "")
+    }
 
     /** Auto's driver for the system GPU's family; [upscale] is the parallel-RDP Resolution the game starts at. */
     fun autoDriver(f: Family, upscale: Int = 1): Pick<Driver> = when {
@@ -59,7 +116,11 @@ object GpuRules {
         // 1x the two drivers are even (odin3-drv1xcap60: input lag 21.6 vs 22.0 ms, no frame over 33 ms on either), and the
         // stock driver passed compat at 1x (odin3-sys1x-compat, 82/82, 0 black) and on the 2x set (odin3-sys2x-set).
         f.vendor == Vendor.ADRENO && f.model in 800..899 -> Pick(Driver.SYSTEM, "Adreno 8xx: system driver")
-        f.vendor == Vendor.ADRENO && f.model in 600..899 -> Pick(Driver.TURNIP, "Adreno 6xx-8xx: bundled Turnip")
+        // Adreno 6xx: only Mr Purple's Turnip has the 8-bit storage parallel-RDP needs (Mesa: a7xx only)
+        f.vendor == Vendor.ADRENO && f.model in 600..699 -> Pick(Driver.PURPLE, "Adreno 6xx: Mr Purple T30 (8-bit storage)")
+        f.vendor == Vendor.ADRENO && f.model in 700..899 -> Pick(Driver.TURNIP, "Adreno 6xx-8xx: bundled Turnip")
+        // An Adreno with no model known (a marketing name not in the table: A32, A33...): Turnip Gen8 first
+        f.vendor == Vendor.ADRENO && f.model == 0 -> Pick(Driver.TURNIP, "Adreno, model not known: bundled Turnip")
         f.vendor == Vendor.ADRENO -> Pick(Driver.SYSTEM, "Adreno outside 6xx-8xx: system driver")
         // Mali-G52 runs parallel-RDP at full speed on the system driver; malisx2 measured ~14% slower there.
         f.vendor == Vendor.MALI -> Pick(Driver.SYSTEM, "Mali: system driver")
@@ -72,7 +133,7 @@ object GpuRules {
      * known to run it: a custom one, or stock Mali. Else GLideN64.
      */
     fun autoRenderer(vulkan11: Boolean, storage16: Boolean, customDriver: Boolean, f: Family,
-                     littleCoresOnly: Boolean = false, upscale: Int = 1): Pick<String> = when {
+                     littleCoresOnly: Boolean = false, upscale: Int = 1, tryStock: Boolean = false): Pick<String> = when {
         !vulkan11 -> Pick("gliden64", "no Vulkan 1.1: GLideN64")
         !storage16 -> Pick("gliden64", "no 16-bit or 8-bit storage buffers: GLideN64")
         customDriver -> Pick("parallel", "custom driver: parallel-RDP")
@@ -84,6 +145,9 @@ object GpuRules {
         // The Flip (A75 big cores) keeps parallel-RDP.
         f.vendor == Vendor.MALI && littleCoresOnly -> Pick("gliden64", "stock Mali, only little CPU cores (A53/A55): GLideN64")
         f.vendor == Vendor.MALI -> Pick("parallel", "stock Mali: parallel-RDP")
+        // The trial's system-driver step (Joey 2026-11-15): parallel-RDP is tried on any stock driver with the features;
+        // the trial steps down to GLideN64 when it shows no picture
+        tryStock -> Pick("parallel", "trial: parallel-RDP on the stock driver")
         else -> Pick("gliden64", "stock driver not known to run parallel-RDP: GLideN64")
     }
 
@@ -100,6 +164,33 @@ object GpuRules {
 
     /** Auto's per-game renderer, or null when the game has none. */
     fun gameRenderer(md5: String?): Pick<String>? = md5?.lowercase()?.let { GLIDEN_GAMES[it] }?.let { Pick("gliden64", it) }
+
+    /**
+     * The driver trial's picture test (2026-11-15): [frame] as NativeBridge.captureFrame gives it (width and height as
+     * little-endian u32, then RGBA rows) has a picture, not just black. Up to 64 x 64 points on a grid; lit when at least
+     * 0.3% of them (one at the least) have a channel over 24, so a small logo on black counts.
+     */
+    fun lit(frame: ByteArray?): Boolean {
+        if (frame == null || frame.size < 8) return false
+        fun u32(o: Int) = (frame[o].toInt() and 0xff) or ((frame[o + 1].toInt() and 0xff) shl 8) or
+            ((frame[o + 2].toInt() and 0xff) shl 16) or ((frame[o + 3].toInt() and 0xff) shl 24)
+        val w = u32(0); val h = u32(4)
+        if (w <= 0 || h <= 0 || frame.size < 8 + w.toLong() * h * 4) return false
+        val sx = maxOf(1, w / 64); val sy = maxOf(1, h / 64)
+        var points = 0; var bright = 0
+        var y = sy / 2
+        while (y < h) {
+            var x = sx / 2
+            while (x < w) {
+                val o = 8 + (y * w + x) * 4
+                points++
+                if ((frame[o].toInt() and 0xff) > 24 || (frame[o + 1].toInt() and 0xff) > 24 || (frame[o + 2].toInt() and 0xff) > 24) bright++
+                x += sx
+            }
+            y += sy
+        }
+        return bright >= maxOf(1, points * 3 / 1000)
+    }
 
     /** Arm's little cores by /proc/cpuinfo "CPU part": Cortex-A32, A35, A53, A55. */
     private val LITTLE_PARTS = setOf(0xd01, 0xd04, 0xd03, 0xd05)
@@ -172,13 +263,18 @@ object GpuRules {
 }
 
 /**
- * The start-up trial (README item 38 b): Auto's driver + renderer on a GPU are a trial until a game has drawn a frame
- * with them. A start counts as failed when it dies or quits before a drawn frame; after two failed starts in a row the
- * next start steps down one level: 0 Auto's pick, 1 the system driver (its renderer by the usual rule), 2 GLideN64 on
- * the system driver. Kept per install (an update tries Auto again) and per system GPU. Only Auto's choice is tried:
- * a driver or renderer picked in Settings or by a dev switch is the user's.
+ * The start-up trial (README item 38 b; one try per driver since 2026-11-15, Joey: "try as much as possible to avoid a
+ * new user with untested device having to fall back to glide", and say on screen what happens: approved gputry mockup).
+ * Auto's drivers for a GPU ([GpuRules.chain]) are a trial until a game has shown a picture with one. Level n is the
+ * chain's n-th driver with parallel-RDP; level [top] (the chain's length) is GLideN64 on the system driver. A level
+ * fails when its driver can't load or lacks what parallel-RDP needs ([fail], before the game loads), when no picture
+ * shows in time ([fail], from the game screen's watch), or when the start dies before a picture ([decide] finds the
+ * start counted and not drawn: "the emulator stopped"). Each failure moves to the next level at once, and the game
+ * screen restarts with it. Kept per install (an update tries Auto again) and per system GPU, with what each level did,
+ * for the card and the reports. Only Auto's choice is tried: a driver or renderer picked in Settings or by a dev
+ * switch is the user's.
  */
-class GpuTrial(private val store: Store, install: String, systemGpu: String) {
+class GpuTrial(private val store: Store, install: String, systemGpu: String, val top: Int = 2) {
     /** SharedPreferences in the app; a map in the tests. Writes must be on disk before put returns (a crash follows). */
     interface Store {
         fun get(key: String): String?
@@ -187,33 +283,51 @@ class GpuTrial(private val store: Store, install: String, systemGpu: String) {
     }
 
     private val key = "trial|$install|$systemGpu"
+    private val histKey = "hist|$install|$systemGpu"
 
-    private data class State(val level: Int, val fails: Int, val good: Boolean)
+    /** [told]: the end card (no driver worked) was answered, so it isn't shown again. */
+    private data class State(val level: Int, val fails: Int, val good: Boolean, val told: Boolean = false)
 
     private fun read(): State {
         val p = store.get(key)?.split(',')
-        return State(p?.getOrNull(0)?.toIntOrNull() ?: 0, p?.getOrNull(1)?.toIntOrNull() ?: 0, p?.getOrNull(2) == "good")
+        return State(p?.getOrNull(0)?.toIntOrNull() ?: 0, p?.getOrNull(1)?.toIntOrNull() ?: 0, p?.getOrNull(2) == "good",
+            p?.getOrNull(3) == "told")
     }
 
-    private fun write(s: State) = store.put(key, "${s.level},${s.fails},${if (s.good) "good" else "trial"}")
+    private fun write(s: State) = store.put(key, "${s.level},${s.fails},${if (s.good) "good" else "trial"}${if (s.told) ",told" else ""}")
 
-    /** The level this start runs at, after stepping down if the last two starts failed; and what happened, for the log. */
+    /** What each failed level did, oldest first: level to reason ("no picture", "the emulator stopped"...). */
+    fun history(): List<Pair<Int, String>> = store.get(histKey).orEmpty().split(';').mapNotNull { e ->
+        val i = e.indexOf(':'); if (i <= 0) null else e.substring(0, i).toIntOrNull()?.let { it to e.substring(i + 1) }
+    }
+
+    private fun addHistory(level: Int, reason: String) {
+        val clean = reason.replace(Regex("[;:\\n]"), " ").take(60)
+        store.put(histKey, (history() + (level to clean)).joinToString(";") { "${it.first}:${it.second}" })
+    }
+
+    /** The level this start runs at, after stepping down if the last start died before a picture; and what happened, for the log. */
     fun decide(): Pick {
         // Records of earlier installs or system drivers never apply again (the key changed): drop them.
-        for (k in store.keys()) if (k.startsWith("trial|") && k != key) store.put(k, null)
+        for (k in store.keys()) if ((k.startsWith("trial|") && k != key) || (k.startsWith("hist|") && k != histKey)) store.put(k, null)
         var s = read()
         var stepped = false
-        if (!s.good && s.fails >= FAILS && s.level < TOP) { s = State(s.level + 1, 0, false); write(s); stepped = true }
+        if (!s.good && s.fails >= FAILS && s.level < top) {
+            addHistory(s.level, STOPPED)
+            s = State(s.level + 1, 0, false); write(s); stepped = true
+        }
         val what = when {
             s.good -> "known good at level ${s.level}"
-            stepped -> "stepped down to level ${s.level} after $FAILS starts without a drawn frame"
-            s.level == TOP && s.fails >= FAILS -> "level ${s.level} (the lowest) has failed ${s.fails} times"
+            stepped -> "stepped down to level ${s.level} after a start that died before a picture"
+            s.level >= top && s.fails >= FAILS -> "level ${s.level} (the lowest) has failed ${s.fails} times"
             else -> "trial at level ${s.level}, ${s.fails} failed start(s) so far"
         }
-        return Pick(s.level, what)
+        return Pick(s.level, what, s.good, history(), s.told)
     }
 
-    data class Pick(val level: Int, val what: String)
+    /** [level]: this start's; [good]: a picture has shown at it; [history]: the failed levels before it; [told]: the end card was answered. */
+    data class Pick(val level: Int, val what: String, val good: Boolean = false, val history: List<Pair<Int, String>> = emptyList(),
+                    val told: Boolean = false)
 
     /** Just before the game loads: counts the start as failed until [drew]. */
     fun begin() { val s = read(); if (!s.good) write(s.copy(fails = s.fails + 1)) }
@@ -221,11 +335,28 @@ class GpuTrial(private val store: Store, install: String, systemGpu: String) {
     /** The game didn't load (no ROM, the core refused it): not the GPU's doing, so the start doesn't count. */
     fun cancel() { val s = read(); if (!s.good && s.fails > 0) write(s.copy(fails = s.fails - 1)) }
 
-    /** A frame was drawn: this level is good on this GPU from now on. */
-    fun drew() { val s = read(); if (!s.good) write(State(s.level, 0, true)) }
+    /** A picture showed: this level is good on this GPU from now on. */
+    fun drew() { val s = read(); if (!s.good) write(State(s.level, 0, true, s.told)) }
+
+    /**
+     * This level can't work ([reason], for the card and the reports): the next start runs the next level. Returns
+     * false at the lowest level (nothing below it). Not for a level already good.
+     */
+    fun fail(reason: String): Boolean {
+        val s = read()
+        if (s.good || s.level >= top) return false
+        addHistory(s.level, reason)
+        write(State(s.level + 1, 0, false))
+        return true
+    }
+
+    /** The end card (no driver worked) was answered: it isn't shown again for this install and GPU. */
+    fun told() { val s = read(); write(s.copy(told = true)) }
 
     companion object {
-        const val FAILS = 2
-        const val TOP = 2
+        /** Starts that die before a picture at one level before the next is tried (one since 2026-11-15). */
+        const val FAILS = 1
+        const val STOPPED = "the emulator stopped"
+        const val NO_PICTURE = "no picture"
     }
 }

@@ -27,14 +27,115 @@
       "skip": {
         "v1.2.6": "2026-11-06, Joey: skip. Only adds the Adreno 710/720; release notes say every chip v1.2.5 knew (the Duo's 722 included) is byte for byte the same"
       }
-    }
-  ],
-  "watch_only": [
+    },
     {
-      "name": "Turnip Duo (sherft2607), tried on the Duo: same 4x geometry drops",
+      "name": "Turnip v27.0.0-R2 (StevenMXZ)",
+      "file": "r2/libvulkan_freedreno.so",
+      "used_on": "Adreno 7xx step-down, Adreno 722 / 6xx later steps",
+      "repo": "StevenMXZ/Adreno-Tools-Drivers",
+      "match": "Turnip_v27.0.0-R2.zip",
+      "release": "Turnip v27.0.0-R2 (in release v39)",
+      "shown": "Turnip v27.0.0-R2",
+      "tag": "v39",
+      "md5": "395eec6ac2f9e34089a0238f74e18f56",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "Balemuni Apex V2 Universal",
+      "file": "apex/vulkan.freedreno.so",
+      "used_on": "Adreno 7xx/8xx step-down (Android 13+)",
+      "repo": "Balemuni/Balemunis-Aurora",
+      "match": "Apex",
+      "release": "Balemuni Apex v2 UNIVERSAL",
+      "shown": "Balemuni Apex V2",
+      "tag": "V2",
+      "md5": "5aa4600203a08134121e87fd4608cb0d",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "Mr Purple Turnip T30",
+      "file": "purple/vulkan.purple.so",
+      "used_on": "Adreno 6xx Auto (the only build with 8-bit storage on the 650), 7xx step-down (Android 11+)",
+      "repo": "MrPurple666/purple-turnip",
+      "match": "T30",
+      "release": "turnip_mrpurple_T30-toasted",
+      "shown": "Mr Purple T30",
+      "tag": "vturnip_mrpurple_T30-toasted.adpkg",
+      "md5": "51fbc67108aa5462a5948b39321715fb",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "Turnip Duo (sherft2607)",
+      "file": "duo/libvulkan_freedreno.so",
+      "used_on": "Adreno 722 step-down",
       "repo": "sherft2607/turnip-adreno722-duo",
       "match": "",
-      "seen": "5.1"
+      "release": "Turnip-Duo-v5.1",
+      "shown": "Turnip Duo v5.1",
+      "tag": "5.1",
+      "md5": "338b03de5efb3bd7faa396b47b763efa",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "TurnipZ (AlexSanz0902)",
+      "file": "turnipz/libvulkan_freedreno.so",
+      "used_on": "Adreno 6xx step-down (SD865 builds; Android 11+)",
+      "repo": "AlexSanz0902/turnip-sd865-z",
+      "match": "",
+      "release": "TurnipZ 0.3.0",
+      "shown": "TurnipZ 0.3.0",
+      "tag": "v0.3.0",
+      "md5": "49f9b16af3880dab54e2e0fdac72e8cf",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "Turnip K11MCH1",
+      "file": "k11/vulkan.ad07xx.so",
+      "used_on": "Adreno 6xx/7xx and other Adreno step-down",
+      "repo": "K11MCH1/AdrenoToolsDrivers",
+      "match": "Turnip_v26",
+      "release": "Turnip v26.0.0 R8",
+      "shown": "K11MCH1 Turnip R8",
+      "tag": "v26.0.0-rc08",
+      "md5": "6ffcecaf676a560a100d9bc5c5bb9b27",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "ARMSX2 Turnip (bmdhacks)",
+      "file": "armsx2/libvulkan_freedreno.so",
+      "used_on": "Adreno 7xx step-down",
+      "repo": "bmdhacks/armsx2-turnip",
+      "match": "",
+      "release": "turnip-axfl3-002",
+      "shown": "ARMSX2 Turnip axfl3-002",
+      "tag": "axfl3-002",
+      "md5": "4ee0a634b02b5fd5941bb11b36aae6a5",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "malisx2 (bmdhacks)",
+      "file": "malisx2/libvulkan_malisx2.so",
+      "used_on": "Mali step-down after the system driver",
+      "repo": "bmdhacks/malisx2",
+      "match": "",
+      "release": "malisx2 v0.5.0",
+      "shown": "malisx2 0.5.0",
+      "tag": "v0.5.0",
+      "md5": "03db820cf43b6f7de7c99a09bf63c03e",
+      "bundled": "2026-11-15"
+    },
+    {
+      "name": "PanVK kbase (zenithblue-oss)",
+      "file": "panvk/libvulkan_panfrost.so",
+      "used_on": "Mali step-down (Android 15+)",
+      "repo": "zenithblue-oss/panvk-kbase-android",
+      "match": "",
+      "release": "panvk-kbase v26.3.1",
+      "shown": "PanVK kbase v26.3.1",
+      "tag": "panvk-kbase-v26.3.1",
+      "md5": "8ca4d0f3d146dc0f23b81700495c8f4a",
+      "bundled": "2026-11-15"
     }
-  ]
+  ],
+  "watch_only": []
 }

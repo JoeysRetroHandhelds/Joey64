@@ -85,6 +85,45 @@ sealed interface PauseScreen {
     data class NetOutOfStep(val host: Boolean) : PauseScreen
     /** Netplay, the host: [player] left (player-left popup, approved 2026-11-05). The game is paused for everyone while it's up. */
     data class NetLeft(val player: Int, val name: String? = null) : PauseScreen
+    /**
+     * Auto's driver trial (approved gputry mockup 2026-11-15, screens 1-2): [failed] didn't start parallel-RDP and the game
+     * screen restarts with [next]. Over the (black) game, which keeps running; no rows, B quits to the library.
+     */
+    data class GpuTry(val failed: String, val next: String, val either: Boolean, val steps: List<GpuStep>, val progress: Float) : PauseScreen
+    /** No driver worked (screens 3b-3c): starts with GLideN64, the game paused until answered. [reportsOn]: Send reports is on. */
+    data class GpuNone(val steps: List<GpuStep>, val reportsOn: Boolean) : PauseScreen
+}
+
+/** One line of the driver trial's list: ✕ failed with its reason, ▶ starting now, · later, ✓ what runs. */
+data class GpuStep(val mark: Mark, val text: String) { enum class Mark { Failed, Now, Later, Good } }
+
+/** The driver trial cards' words and lists (approved gputry mockup 2026-11-15), from the chain's names and the trial's history. */
+object GpuTrialCard {
+    const val TRY_TITLE = "Getting parallel-RDP going on this device"
+    const val NONE_TITLE = "parallel-RDP can't run on this device yet"
+    const val GLIDE = "GLideN64"
+
+    /** [names]: the chain's drivers; [history]: level to reason; [level]: this start's ([names].size: GLideN64). */
+    fun steps(names: List<String>, history: List<Pair<Int, String>>, level: Int): List<GpuStep> {
+        val none = level >= names.size
+        val rows = names.mapIndexed { i, n ->
+            val why = history.lastOrNull { it.first == i }?.second
+            when {
+                why != null -> GpuStep(GpuStep.Mark.Failed, "$n: $why")
+                i == level -> GpuStep(GpuStep.Mark.Now, "$n: starting")
+                else -> GpuStep(GpuStep.Mark.Later, n)
+            }
+        }
+        return rows + if (none) GpuStep(GpuStep.Mark.Good, GLIDE) else GpuStep(GpuStep.Mark.Later, "$GLIDE, if none of them can")
+    }
+
+    /** The card for a start at [level] after failures; null on a first try, when nothing failed yet, or at GLideN64. */
+    fun tryCard(names: List<String>, history: List<Pair<Int, String>>, level: Int): PauseScreen.GpuTry? {
+        val last = history.lastOrNull() ?: return null
+        if (level >= names.size) return null
+        return PauseScreen.GpuTry(names.getOrElse(last.first) { "The driver" }, names[level], history.size >= 2,
+            steps(names, history, level), (level + 0.5f) / (names.size + 1))
+    }
 }
 
 /** What the Controller disconnected popup's rows do. */
@@ -133,6 +172,10 @@ interface PauseActions {
     fun netCarryOn() {}
     /** Netplay: Leave the room, or the host's End for everyone. */
     fun netLeave() {}
+    /** The driver trial card's B: back to the library (the start doesn't count against the driver). */
+    fun gpuQuit() {}
+    /** The end card's rows: Start with GLideN64, or ([send]) send what happened first (Send reports off). */
+    fun gpuStart(send: Boolean) {}
     /** Cheats' "Press GameShark button": back to the game with the button held for a second. */
     fun pressGameShark()
     fun reset()
@@ -180,6 +223,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
     }
     if (screen is PauseScreen.Disconnected) { DisconnectedPopup(screen, actions); return }
     if (screen is PauseScreen.NetPaused || screen is PauseScreen.NetOutOfStep || screen is PauseScreen.NetLeft) { NetplayPopup(screen, actions); return }
+    if (screen is PauseScreen.GpuTry || screen is PauseScreen.GpuNone) { GpuTrialPopup(screen, actions); return }
     if (screen is PauseScreen.NoSpace) {
         JoeyDialog(onDismiss = { actions.closeNoSpace() }, hints = listOf(Hint("A", "OK"), Hint("B", "Back to game")), width = 470.dp) {
             Column {
@@ -253,7 +297,8 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
                 com.joeysretro.joey64.launcher.components.JoeyRow("Later", detail = "Keep playing as it is") { actions.restartLater() }
             }
             is PauseScreen.Controls, is PauseScreen.Cheats, is PauseScreen.Achievements, is PauseScreen.GameSettings, PauseScreen.SignIn,
-            is PauseScreen.Disconnected, is PauseScreen.NoSpace, is PauseScreen.NetPaused, is PauseScreen.NetOutOfStep, is PauseScreen.NetLeft -> {}
+            is PauseScreen.Disconnected, is PauseScreen.NoSpace, is PauseScreen.NetPaused, is PauseScreen.NetOutOfStep, is PauseScreen.NetLeft,
+            is PauseScreen.GpuTry, is PauseScreen.GpuNone -> {}
         }
     }
 }
@@ -376,6 +421,70 @@ private fun DisconnectedPopup(screen: PauseScreen.Disconnected, actions: PauseAc
 @Composable
 private fun NetBlockedRow(label: String) =
     com.joeysretro.joey64.launcher.components.JoeyRow(label, enabled = false, detail = com.joeysretro.joey64.netplay.NetplayWords.BLOCKED) {}
+
+/**
+ * Auto's driver trial, said on screen (approved gputry mockup 2026-11-15, scratchpad build_gputry.py, "Approve as drawn"):
+ *  - **Getting parallel-RDP going on this device** (screens 1-2): which driver didn't start and which one the game screen
+ *    restarts with, the list with each driver's result, and a bar. Nothing to press; B quits to the library.
+ *  - **parallel-RDP can't run on this device yet** (3b-3c): every driver failed, so GLideN64; Start with GLideN64, and with
+ *    Send reports off also Send what happened, then start (this one report only).
+ */
+@Composable
+private fun GpuTrialPopup(screen: PauseScreen, actions: PauseActions) {
+    val c = JoeyTheme.colors
+    val bold = SpanStyle(fontWeight = FontWeight.SemiBold, color = c.text)
+    when (screen) {
+        is PauseScreen.GpuTry -> JoeyDialog(onDismiss = { actions.gpuQuit() }, hints = listOf(Hint("B", "Quit to library")), width = 470.dp) {
+            Column {
+                PopupTitle(GpuTrialCard.TRY_TITLE)
+                com.joeysretro.joey64.launcher.components.PromptText(buildAnnotatedString {
+                    if (screen.either) { withStyle(bold) { append(screen.failed) }; append(" didn't start either. Restarting with ") }
+                    else { append("parallel-RDP didn't start with "); withStyle(bold) { append(screen.failed) }; append(". Restarting with ") }
+                    withStyle(bold) { append(screen.next) }
+                    append("…")
+                })
+                GpuSteps(screen.steps)
+                Box(Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 10.dp).fillMaxWidth().height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)).background(c.separator)) {
+                    Box(Modifier.fillMaxWidth(screen.progress.coerceIn(0f, 1f)).height(4.dp).background(c.accent))
+                }
+                // Something has to hold focus so B reaches the dialog; nothing to press (as NetPaused).
+                Box(Modifier.size(1.dp).initialFocus().clearAndSetSemantics { }.pressable(rememberFocusState().first, onClick = {}))
+            }
+        }
+        is PauseScreen.GpuNone -> JoeyDialog(onDismiss = {}, hints = listOf(Hint("A", if (screen.reportsOn) "Start" else "Select")), width = 470.dp) {
+            Column {
+                PopupTitle(GpuTrialCard.NONE_TITLE)
+                com.joeysretro.joey64.launcher.components.PromptText(buildAnnotatedString {
+                    append("None of the drivers got a picture from it. Starting with ")
+                    withStyle(bold) { append(GpuTrialCard.GLIDE) }
+                    append(", which runs most games well.")
+                    if (screen.reportsOn) append("\nA report of what happened goes with your next report, so we can look at it.")
+                })
+                GpuSteps(screen.steps)
+                JoeyOption("Start with GLideN64", Modifier.initialFocus()) { actions.gpuStart(false) }
+                if (!screen.reportsOn) JoeyOption("Send what happened, then start") { actions.gpuStart(true) }
+            }
+        }
+        else -> {}
+    }
+}
+
+@Composable
+private fun GpuSteps(steps: List<GpuStep>) {
+    val c = JoeyTheme.colors
+    Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 10.dp)) {
+        for (s in steps) {
+            val (mark, colour) = when (s.mark) {
+                GpuStep.Mark.Failed -> "✕" to c.error
+                GpuStep.Mark.Now -> "▶" to c.accent
+                GpuStep.Mark.Later -> "·" to c.textFaint
+                GpuStep.Mark.Good -> "✓" to c.textSecondary
+            }
+            Text("$mark  ${s.text}", color = colour, style = JoeyTheme.type.small)
+        }
+    }
+}
 
 /**
  * The in-game netplay popups (approved mockup 2026-11-10, scratchpad build_netplay3.py, "Approve as drawn"):

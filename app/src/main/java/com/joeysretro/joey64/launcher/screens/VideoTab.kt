@@ -271,7 +271,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
             // On the tab, each with its choices in the panel (Joey 2026-11-13; they were a popup of their own).
             fun auto(k: VideoKey, pick: String?) = if (v[k] == "auto" && pick != null) "Auto · $pick" else VideoChoices.label(k, v[k])
             val renderer = when (lastPick(context, "auto_renderer")) { "parallel" -> "parallel-RDP"; "gliden64" -> "GLideN64"; else -> null }
-            val driver = when (lastPick(context, "driver")) { "turnip" -> "Turnip Gen8"; "faux123" -> "Turnip faux123"; "system" -> "System"; "custom" -> "Your own"; else -> null }
+            val driver = when (val d = lastPick(context, "driver")) { "system" -> "System"; "custom" -> "Your own"; else -> com.joeysretro.joey64.GpuRules.Driver.byId(d)?.shown }
             for ((id, k, label) in listOf(Triple("rend", VideoKey.Renderer, "Renderer"), Triple("drv", VideoKey.Driver, "GPU driver"), Triple("pace", VideoKey.Pacing, "Frame pacing"))) {
                 JoeyRow(label, Modifier.initialFocus(startRow == id), value = auto(k, if (k == VideoKey.Renderer) renderer else if (k == VideoKey.Driver) driver else null),
                     sideways = true, dot = dot(k), experimental = VideoChoices.of(k).any { it.value == v[k] && it.experimental },

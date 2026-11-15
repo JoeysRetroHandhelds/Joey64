@@ -1,6 +1,8 @@
 package com.joeysretro.joey64
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -124,20 +126,22 @@ class GpuRulesTest {
         assertEquals(setOf("trial|2|Mali-G52 MC2"), st.keys())
     }
 
-    @Test fun trialStepsDownAfterTwoFailedStarts() {
+    @Test fun trialStepsDownAfterAStartThatDied() {
         val st = MapStore()
-        fun t() = GpuTrial(st, "1", "Adreno (TM) 999")
+        fun t() = GpuTrial(st, "1", "Adreno (TM) 999", 3)
         assertEquals(0, t().decide().level); t().begin()            // dies
-        assertEquals(0, t().decide().level); t().begin()            // dies again
         assertEquals(1, t().decide().level); t().begin(); t().cancel() // the game didn't load: doesn't count
         assertEquals(1, t().decide().level); t().begin()
-        assertEquals(1, t().decide().level); t().begin()
-        assertEquals(2, t().decide().level); t().begin(); t().drew()
+        val p = t().decide()
+        assertEquals(2, p.level)
+        assertEquals(listOf(0 to GpuTrial.STOPPED, 1 to GpuTrial.STOPPED), p.history)
+        t().begin(); t().drew()
         assertEquals(2, t().decide().level)
+        assertTrue(t().decide().good)
         repeat(3) { t().begin() }                                   // good stays good
         assertEquals(2, t().decide().level)
-        // a new install tries Auto again
-        assertEquals(0, GpuTrial(st, "2", "Adreno (TM) 999").decide().level)
+        // a new install tries Auto again, its history gone
+        assertEquals(GpuTrial.Pick(0, "trial at level 0, 0 failed start(s) so far"), GpuTrial(st, "2", "Adreno (TM) 999", 3).decide())
     }
 
     @Test fun trialGoodOnFirstFrame() {
@@ -148,10 +152,87 @@ class GpuRulesTest {
         assertEquals(0, GpuTrial(st, "1", "Mali-G52 MC2").decide().level)
     }
 
+    @Test fun trialFailMovesOnWithItsReason() {
+        val st = MapStore()
+        fun t() = GpuTrial(st, "1", "Adreno (TM) 650", 2)
+        t().decide()
+        assertTrue(t().fail("no 8- or 16-bit storage"))             // before the game: no start spent
+        assertEquals(1, t().decide().level)
+        t().begin()
+        assertTrue(t().fail(GpuTrial.NO_PICTURE))                   // the watch: black
+        val p = t().decide()
+        assertEquals(2, p.level)                                    // GLideN64
+        assertEquals(listOf(0 to "no 8- or 16-bit storage", 1 to GpuTrial.NO_PICTURE), p.history)
+        assertFalse(t().fail(GpuTrial.NO_PICTURE))                  // nothing below GLideN64
+        assertFalse(p.told); t().told(); assertTrue(t().decide().told)
+    }
+
     @Test fun trialStopsAtTheLowestLevel() {
         val st = MapStore()
-        fun t() = GpuTrial(st, "1", "x")
+        fun t() = GpuTrial(st, "1", "x", 4)
         repeat(10) { t().decide(); t().begin() }
-        assertEquals(GpuTrial.TOP, t().decide().level)
+        assertEquals(4, t().decide().level)
+        assertEquals(4, t().decide().history.size)
+    }
+
+    @Test fun chains() {
+        val names = { f: GpuRules.Family, sdk: Int -> GpuRules.chain(f, sdk).value }
+        // the GPUs we run keep their first driver
+        assertEquals(GpuRules.Driver.TURNIP, names(GpuRules.family(adreno, "Adreno (TM) 740", null), 35).first())
+        assertEquals(GpuRules.Driver.FAUX123, names(GpuRules.family(adreno, "Adreno (TM) 722", null), 34).first())
+        assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(adreno, "Adreno (TM) 830", null), 35).first())
+        assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(0x13B5, "Mali-G52 MC2", null), 30).first())
+        // the 650: Mr Purple first, then the rest, the phone's own last; no repeats
+        val a650 = names(GpuRules.family(adreno, "Adreno (TM) 650", null), 33)
+        assertEquals(GpuRules.Driver.PURPLE, a650.first())
+        assertEquals(GpuRules.Driver.SYSTEM, a650.last())
+        assertEquals(a650.size, a650.distinct().size)
+        // a driver above the Android version is left out
+        assertFalse(GpuRules.Driver.APEX in names(GpuRules.family(adreno, "Adreno (TM) 740", null), 32))
+        assertTrue(GpuRules.Driver.APEX in names(GpuRules.family(adreno, "Adreno (TM) 740", null), 33))
+        assertFalse(GpuRules.Driver.PANVK in names(GpuRules.family(0x13B5, "Mali-G615", null), 34))
+        assertEquals(GpuRules.Driver.PURPLE, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 650", null)).value)
+        // PowerVR: the phone's own driver is tried with parallel-RDP during a trial
+        val other = GpuRules.family(0x1010, "PowerVR B-Series BXM-8-256", null)
+        assertEquals(listOf(GpuRules.Driver.SYSTEM), names(other, 35))
+        assertEquals("parallel", GpuRules.autoRenderer(true, true, false, other, tryStock = true).value)
+        assertEquals("gliden64", GpuRules.autoRenderer(true, true, false, other).value)
+        // every bundled driver has its own folder or file, every id is unique
+        val ids = GpuRules.Driver.entries.map { it.id }
+        assertEquals(ids.size, ids.distinct().size)
+        val assets = GpuRules.Driver.entries.mapNotNull { it.asset }
+        assertEquals(assets.size, assets.distinct().size)
+    }
+
+    private fun frame(w: Int, h: Int, lit: Int): ByteArray {
+        val b = ByteArray(8 + w * h * 4)
+        b[0] = w.toByte(); b[1] = (w shr 8).toByte(); b[4] = h.toByte(); b[5] = (h shr 8).toByte()
+        // [lit] bright pixels in a block in the middle
+        var n = 0
+        for (y in h / 2 until h) for (x in w / 2 until w) if (n < lit) { b[8 + (y * w + x) * 4 + 1] = 200.toByte(); n++ }
+        return b
+    }
+
+    @Test fun pictureTest() {
+        assertFalse(GpuRules.lit(null))
+        assertFalse(GpuRules.lit(ByteArray(4)))
+        assertFalse(GpuRules.lit(frame(320, 240, 0)))               // black
+        assertTrue(GpuRules.lit(frame(320, 240, 320 * 120)))        // half the screen
+        assertTrue(GpuRules.lit(frame(320, 240, 320 * 10)))         // a logo's worth
+        val short = frame(320, 240, 100).copyOf(100)                // cut off: not a picture
+        assertFalse(GpuRules.lit(short))
+    }
+
+    @Test fun trialCards() {
+        val names = listOf("Turnip Gen8", "Balemuni Apex", "Mr Purple T30")
+        assertNull(com.joeysretro.joey64.launcher.ingame.GpuTrialCard.tryCard(names, emptyList(), 0))     // a first try: no card
+        val c = com.joeysretro.joey64.launcher.ingame.GpuTrialCard.tryCard(names, listOf(0 to "no picture"), 1)!!
+        assertEquals("Turnip Gen8", c.failed); assertEquals("Balemuni Apex", c.next); assertFalse(c.either)
+        assertEquals(listOf("Turnip Gen8: no picture", "Balemuni Apex: starting", "Mr Purple T30", "GLideN64, if none of them can"), c.steps.map { it.text })
+        val c2 = com.joeysretro.joey64.launcher.ingame.GpuTrialCard.tryCard(names, listOf(0 to "no picture", 1 to "the emulator stopped"), 2)!!
+        assertTrue(c2.either); assertEquals("Balemuni Apex", c2.failed)
+        assertNull(com.joeysretro.joey64.launcher.ingame.GpuTrialCard.tryCard(names, listOf(0 to "a", 1 to "b", 2 to "c"), 3)) // GLideN64: the end card
+        val end = com.joeysretro.joey64.launcher.ingame.GpuTrialCard.steps(names, listOf(0 to "a", 1 to "b", 2 to "c"), 3)
+        assertEquals(com.joeysretro.joey64.launcher.ingame.GpuStep(com.joeysretro.joey64.launcher.ingame.GpuStep.Mark.Good, "GLideN64"), end.last())
     }
 }

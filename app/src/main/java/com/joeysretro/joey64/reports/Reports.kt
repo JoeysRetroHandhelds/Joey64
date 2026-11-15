@@ -36,6 +36,16 @@ object ReportPrefs {
 
     fun on(ctx: Context) = p(ctx).getBoolean("on", testing)
 
+    /**
+     * One report with Send reports off (the driver trial's end card, "Send what happened, then start"; approved gputry
+     * mockup 2026-11-15, screen 3c): the game screen records that play and the library sends it once, sessions only.
+     */
+    fun once(ctx: Context) = p(ctx).getBoolean("once", false)
+    fun setOnce(ctx: Context, once: Boolean) { p(ctx).edit().putBoolean("once", once).apply(); if (once) install(ctx) }
+
+    /** The game screen records its session: Send reports on, or a one-off asked for. */
+    fun recording(ctx: Context) = on(ctx) || once(ctx)
+
     /** The library's question was answered (or Send reports set in Settings): it is never asked again. */
     fun asked(ctx: Context) = p(ctx).getBoolean("asked", testing)
     fun setAsked(ctx: Context) = p(ctx).edit().putBoolean("asked", true).apply()

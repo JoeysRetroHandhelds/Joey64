@@ -117,8 +117,20 @@ object VideoChoices {
         VideoChoice("parallel", "parallel-RDP", "Draws like the real N64. Needs Vulkan"),
         VideoChoice("gliden64", "GLideN64", "The fallback for GPUs that can't run parallel-RDP"))
     val driver = listOf(
-        VideoChoice("auto", "Auto", "Joey64's Turnip on Adreno GPUs it's tested on, else the system's"),
+        VideoChoice("auto", "Auto", "Picks by GPU; on a GPU it hasn't run, tries the next driver until one shows a picture"),
         VideoChoice("bundled", "Joey64's Turnip", "Adreno GPUs only"),
+        // Every bundled driver by name (2026-11-15, the driver trial's list: GpuRules.Driver), for testers to pick one.
+        VideoChoice("turnip", "Turnip Gen8", "Adreno 6xx-8xx"),
+        VideoChoice("faux123", "Turnip faux123", "Adreno 6xx-8xx, made for the 722"),
+        VideoChoice("r2", "Turnip R2", "Adreno 6xx-8xx"),
+        VideoChoice("apex", "Balemuni Apex", "Adreno 7xx-8xx, Android 13 and up"),
+        VideoChoice("purple", "Mr Purple T30", "Adreno 6xx-7xx, Android 11 and up"),
+        VideoChoice("duo", "Turnip Duo", "Adreno 722"),
+        VideoChoice("turnipz", "TurnipZ", "Adreno 650, Android 11 and up"),
+        VideoChoice("k11", "K11MCH1 Turnip", "Adreno 6xx-7xx"),
+        VideoChoice("armsx2", "ARMSX2 Turnip", "Adreno 6xx-7xx"),
+        VideoChoice("malisx2", "malisx2", "Mali GPUs"),
+        VideoChoice("panvk", "PanVK", "Mali GPUs, Android 15 and up"),
         VideoChoice("system", "The system driver", "The one the device came with"))
     val pacing = listOf(
         VideoChoice("lowest", "Lowest lag", "Each frame shows as soon as it's ready"),

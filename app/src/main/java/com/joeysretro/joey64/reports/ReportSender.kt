@@ -39,13 +39,18 @@ object ReportSender {
 
     /** [force]: send now even if a report went today (Send reports › Send now, and debug builds). */
     suspend fun maybeSend(ctx: Context, force: Boolean = false): Outcome? = withContext(Dispatchers.IO) {
-        if (!ReportPrefs.on(ctx)) return@withContext null
-        if (!force && ReportPrefs.lastSentDay(ctx) == today()) return@withContext null
+        // Send reports off with a one-off asked for (ReportPrefs.once): that play's sessions go at once, nothing else,
+        // and what's kept is cleared after, as Off does.
+        val once = !ReportPrefs.on(ctx) && ReportPrefs.once(ctx)
+        if (!ReportPrefs.on(ctx) && !once) return@withContext null
+        if (!force && !once && ReportPrefs.lastSentDay(ctx) == today()) return@withContext null
         if (!sending.compareAndSet(false, true)) return@withContext null
-        try { send(ctx) } catch (e: Exception) { JLog.w(TAG, "reports: $e"); Outcome.Failed } finally { sending.set(false) }
+        try {
+            send(ctx, once).also { if (once && it == Outcome.Sent) { ReportPrefs.setOnce(ctx, false); ReportFiles.clear(ctx) } }
+        } catch (e: Exception) { JLog.w(TAG, "reports: $e"); Outcome.Failed } finally { sending.set(false) }
     }
 
-    private fun send(ctx: Context): Outcome {
+    private fun send(ctx: Context, once: Boolean = false): Outcome {
         var anyEvents = false
         var failed = false
         val exits = exits(ctx)
@@ -85,8 +90,8 @@ object ReportSender {
         var maxExit = 0L
         for ((i, step) in plan.withIndex()) {
             val (gpuDriver, group) = step
-            val crashesHere = if (i == 0) crashes else emptyList()
-            val coversHere = if (i == 0) coverEvents else emptyList()
+            val crashesHere = if (i == 0 && !once) crashes else emptyList()
+            val coversHere = if (i == 0 && !once) coverEvents else emptyList()
             val sessionEvents = group.mapNotNull { (f, o) -> ReportJson.session(o, headers[o.optString("md5")])?.let { f to it } }
                 .take(ReportJson.MAX_EVENTS - crashesHere.size - coversHere.size)
             // Crashes, then sessions oldest first, then covers: what doesn't fit waits for the next report, from the end.
