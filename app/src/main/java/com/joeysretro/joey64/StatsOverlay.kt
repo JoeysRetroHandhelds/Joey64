@@ -63,6 +63,7 @@ class StatsOverlay(private val activity: Activity, private val wm: WindowManager
         settings = o
         view.textSp = o.size.sp
         view.sideScale = 1f
+        fresh = true
         view.lineGraph = o.graph == StatsGraph.Line
         val show = o.stats != StatsMode.Off || bench
         if (!show) { if (added) { wm.removeView(view); added = false }; return }
@@ -120,6 +121,7 @@ class StatsOverlay(private val activity: Activity, private val wm: WindowManager
 
     private var lastVps = 0.0; private var lastFps = 0.0; private var lastSpeed = 0.0; private var lastTarget = 0.0
     private var measured = false
+    private var fresh = true
     private var cpuBusy: Int? = null
 
     /** The rows for the settings in use, from the last speeds measured and fresh readings of the rest. */
@@ -146,7 +148,15 @@ class StatsOverlay(private val activity: Activity, private val wm: WindowManager
             // Auto: down the side when the bar holds the panel and its gap to the edge (the window sits 4 dp
             // in), the text made smaller to fit if need be, down to Small's; a little more room asked to go
             // there than to stay, so a number growing a digit doesn't flip the layout.
-            StatsLayout.Auto -> view.fitSide(sideRows, sideBar() - (if (view.side) 6 else 12) * dp)
+            // The first choice after the settings (game start or the hotkey) asks the staying room, so a game start
+            // picks what the hotkey picks: from Simple (already down the side) Full stayed down the side, while at a game
+            // start it went to the corner, a panel the hotkey never showed (Thor, Racer: item 103).
+            StatsLayout.Auto -> {
+                val bar = sideBar()
+                val fit = view.fitSide(sideRows, bar - (if (view.side || fresh) 6 else 12) * dp)
+                if (bar > 0) fresh = false
+                fit
+            }
         }
         view.set(if (side) sideRows else StatsText.rows(s, lines), bars, count, target, side)
     }
