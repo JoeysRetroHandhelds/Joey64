@@ -39,7 +39,9 @@
       ],
       "issues": [
         {"status": "open", "what": "async with texture load snapshots (N64_RDP_TEX_SNAPSHOT=1): plays on the Duo, still black on the Flip, so it stays synchronous", "devices": "Flip", "evidence": "duo-ts-async-on / flip-ts-async-on, README item 33"},
-        {"status": "open", "what": "bench state stops on the Controller Pak notice, so its bench numbers are a static menu (150-1190 fps swings); needs a state in a race", "evidence": "README bench states item"}
+        {"status": "open", "what": "bench state stops on the Controller Pak notice, so its bench numbers are a static menu (150-1190 fps swings); needs a state in a race", "evidence": "README bench states item"},
+        {"status": "open", "devices": "Odin 3 Portal (Turnip, no host-imported RDRAM)", "what": "from Joey's RetroArch state, smart sync (page level or precise) crashes about 1 run in 3: at the first Start or 31 s after the load the CPU runs into 0x800004b8/0x8000078c, which hold FFFC (the depth clear) where code should be; smart sync off (N64_RDP_SMART=0) 11 of 11 clean. Not ordered uploads (old 2/3, new 1/3) and not pages drawn before their SyncFull (N64_RDP_SMART_EARLY never waited)", "evidence": "2026-11-15 overnight, scratchpad cr/ (cr.sh), crash dump bd3"},
+        {"status": "open", "devices": "Thor (Adreno 740, Turnip)", "what": "slow at 4x with page-level smart sync: 555 CPU waits per 600 SyncFulls, each for the whole 4x frame (13 ms frames, GPU 70% busy): a CPU variable at 0x1657a0 shares a page with the framebuffer at 0x165900", "evidence": "Joey's Thor log 2026-11-14 16:56; Odin 3 Portal N64_RDP_SMART_DEBUG (dbg1-3: 284 of 600 waits on page 0x165000)"}
       ],
       "fixed": [
         {"what": "RSP looped on the boot screen with precise smart sync", "fix": "copies (DMA, RSP, C code) always wait, core 2938164"},
@@ -528,6 +530,15 @@
       ],
       "fixed": [
         {"what": "black screen on parallel-RDP (parallel-RSP)", "fix": "cxd4 RSP for this game (2026-11-14)", "evidence": "Snapdragon 8 Gen 3 tester reports 2026-11-14 (Gauntlet Legends: 10 frames in 22-34 s, plays on GLideN64); Odin 2 Portal p2-gl / p2-boss: black on parallel-RSP, 60 fps on cxd4"}
+      ]
+    },
+    {
+      "id": "NEP", "title": "Star Wars Episode I: Racer",
+      "issues": [
+        {"status": "open", "devices": "Thor (Adreno 740, Turnip)", "what": "slow at 4x: 2560x1920 is more than the GPU does at full speed (about 50 fps, GPU 98%); 2x is full speed. Upscaling stays the player's choice", "evidence": "Joey's Thor logs 2026-11-14 (0.2.1.1)"}
+      ],
+      "fixed": [
+        {"what": "flicker at 4x: half-drawn frames (walls and floor without the pod, track or HUD), Turnip and the stock driver alike", "fix": "core d1b86ee: RDRAM uploads in stream order by default (N64_RDP_ORDERED_UPLOAD); smart sync and async no longer wait for the GPU at a SyncFull, so parallel-RDP's direct copies landed under the frame still being drawn", "devices": "all at 4x", "evidence": "Joey's Thor recording 2026-11-14; Odin 3 Portal from Joey's Thor state: about 60 missing-HUD frames in 30 s, 1 with the fix (the 1x/2x baseline), 6.1 ms a frame either way; other games within 2% (ordab)"}
       ]
     },
     {

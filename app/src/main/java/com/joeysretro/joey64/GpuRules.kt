@@ -147,6 +147,11 @@ object GpuRules {
         // USA) or halts (New Tetris), and sync costs ~1-2 ms a frame. On Mali sync can cost a third of the frame
         // rate, so async plus kSyncRdpGames.
         if (adreno) add(Setting("mupen64plus-parallel-rdp-synchronous", "True", true, "Adreno: parallel-RDP synchronous"))
+        // Native-first (core, smart sync only; Joey 2026-11-14 "Yes, default it"): upscaled passes go after the 1x ones
+        // while the game waits on the GPU, so a CPU wait waits for the 1x work. Odin 2 Portal 4x: Paper Mario 7.08 ->
+        // 3.37 ms, Perfect Dark 9.96 -> 3.86, Banjo 7.56 -> 3.90, OoT 4.32 -> 2.83, GoldenEye unchanged (no waits).
+        // Adreno only: Mali runs smart sync for Snap alone and wasn't measured.
+        if (adreno) add(Setting("N64_RDP_NATIVE_FIRST", "1", false, "Adreno: native-first upscaled passes"))
         // No pipeline pre-build on Adreno (Joey 2026-11-07): with the driver cache cold (after a driver update or a cleared
         // cache) building the saved list first stalled ~0.6 s at start in every game on the Portal (portal-pbfirst),
         // on-demand compiling 63-170 ms; warm launches wait 0 ms either way. Mali keeps it.

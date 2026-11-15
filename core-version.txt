@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
 branch: main
-commit: f9cc6b9f3b8a52c96d12b5044d55305eb7bf51b5 2026-11-14 10:25:09 -0600 new_dynarec arm64: LDL/LDR from a constant address shift the doubleword as one 64-bit registe
+commit: d1b86ee5c0354910123ad7cea9c4c96d287b1aa4 2026-11-14 22:32:14 -0600 Ordered RDRAM uploads by default: smart sync and async no longer show half-drawn frames (Star
 uncommitted: none
-built: 2026-11-14 10:12
-md5: cdbac777ba3ee0408adf27e36022a6e7
+built: 2026-11-14 22:32
+md5: 4b26ce209f6e23fd911c9b130cb55d34
