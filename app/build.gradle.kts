@@ -95,8 +95,8 @@ android {
         applicationId = "com.joeysretro.joey64"
         minSdk = 29
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.2.1.1"
+        versionCode = 6
+        versionName = "0.2.2"
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild { cmake { cppFlags += "-std=c++17" } }
         buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")

@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: main
-commit: cafdd1e Smart sync tracks the colour rows and depth ranges parallel-RDP copies back (RE2 blank end), 2026-11-15 08:32 -0600
-uncommitted: none (the binary taken from the compat-tested app-prdp2.apk: 82/82 on the Odin 3 Portal, Duo, Odin 2 Portal and Odin 3)
-built: 2026-11-15
-md5: 48b63020ceca7497013f449afdb9f1cd
+branch: main (built in the clean worktree joey64-core-port, detached at 431aec4)
+commit: 431aec4f57319e43ccae30e7f8e8e9e6cb9c5086 2026-11-15 17:28:07 -0600 parallel-RDP: four bug fixes libretro found in its C rewrite (notes issue 2)
+uncommitted: none
+built: 2026-11-15 17:28
+md5: 52364b7d3b45dfce508533835bae960b
