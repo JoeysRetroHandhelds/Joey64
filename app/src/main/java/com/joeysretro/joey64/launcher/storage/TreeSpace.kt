@@ -229,18 +229,28 @@ class TreeSpace(
         return resolver.openFileDescriptor(documentUri(id), safMode)
     }
 
-    /** Every file below [dir] (folders walked to [maxDepth]), with its document id, for the ROM scan. */
+    /**
+     * Every file below [dir] (folders walked to [maxDepth]), with its document id, for the ROM scan. A folder that couldn't
+     * be listed is left out; [walkOrNull] says so instead.
+     */
     fun walk(dir: List<String> = emptyList(), maxDepth: Int = 4): List<Pair<List<String>, Pair<String, SpaceEntry>>> {
-        val out = ArrayList<Pair<List<String>, Pair<String, SpaceEntry>>>()
-        fun go(id: String, at: List<String>, depth: Int) {
-            for (c in children(id)) {
-                if (c.entry.isDir) { if (depth < maxDepth) go(c.docId, at + c.entry.name, depth + 1) }
-                else out += (at + c.entry.name) to (c.docId to c.entry)
-            }
-        }
-        dirId(dir, create = false)?.let { go(it, dir, 1) }
-        return out
+        val root = dirId(dir, create = false) ?: return emptyList()
+        return TreeWalk.walk(root, dir, maxDepth, lenient = true) { id -> childrenOrNull(id)?.map { it.docId to it.entry } } ?: emptyList()
     }
+
+    /**
+     * [walk], or null when [dir] or any folder below it couldn't be listed. The ROM scan uses it: a failed listing read as
+     * empty made a readable folder's games all look gone (Odin 3 Portal 2026-11-14: files=0, the library said No N64 games
+     * found, picking the same folder again brought all 6 back).
+     */
+    fun walkOrNull(dir: List<String> = emptyList(), maxDepth: Int = 4): List<Pair<List<String>, Pair<String, SpaceEntry>>>? {
+        val root = (if (dir.isEmpty()) rootDocId else dirId(dir, create = false)) ?: return null
+        return TreeWalk.walk(root, dir, maxDepth, lenient = false) { id -> childrenOrNull(id)?.map { it.docId to it.entry } }
+    }
+
+    /** The folders and files in [dir], or null when it couldn't be listed (unlike [list], which reads that as empty). */
+    fun listOrNull(dir: List<String>): List<SpaceEntry>? =
+        dirId(dir, create = false)?.let { id -> childrenOrNull(id)?.map { it.entry } }
 
     private companion object {
         const val TAG = "joey64storage"

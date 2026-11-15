@@ -158,14 +158,18 @@ object RomFolders {
     fun readableNow(context: Context, treeUri: Uri): Boolean =
         stillReadable(context, treeUri) && TreeSpace(context.contentResolver, treeUri).readable()
 
-    /** Every ROM in a picked folder (its N64 folders found by [RomFolderRules.foldersToScan]). */
+    /**
+     * Every ROM in a picked folder (its N64 folders found by [RomFolderRules.foldersToScan]). Throws when a folder in it
+     * couldn't be listed, so the scan skips the folder and keeps its games rather than taking them for gone.
+     */
     fun scan(resolver: ContentResolver, treeUri: Uri): List<RomFile> {
         val tree = TreeSpace(resolver, treeUri)
         val pickedName = DocumentsContract.getTreeDocumentId(treeUri).substringAfterLast(':').substringAfterLast('/')
-        val dirs = tree.list(emptyList()).filter { it.isDir }.map { it.name }
+        val dirs = (tree.listOrNull(emptyList()) ?: throw java.io.IOException("the picked folder couldn't be listed"))
+            .filter { it.isDir }.map { it.name }
         return RomFolderRules.foldersToScan(pickedName, dirs).flatMap { sub ->
             val start = if (sub.isEmpty()) emptyList() else listOf(sub)
-            tree.walk(start).mapNotNull { (path, doc) ->
+            (tree.walkOrNull(start) ?: throw java.io.IOException("a folder in ${start.ifEmpty { listOf(pickedName) }.last()} couldn't be listed")).mapNotNull { (path, doc) ->
                 val (docId, entry) = doc
                 if (!RomFolderRules.isRomName(entry.name)) null
                 else RomFile(tree.documentUri(docId), treeUri, path, entry.size, entry.modified)

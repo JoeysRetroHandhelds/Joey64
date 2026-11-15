@@ -52,17 +52,28 @@ class LibraryScanner(private val context: Context, private val db: LibraryDb) {
         val found = ArrayList<FoundRom>()
         val scanned = HashSet<String>()
         var skipped = 0
+        val known = db.knownFiles()
         for (tree in treeUris) {
             coroutineContext.ensureActive()
-            // Permission gone, or the folder isn't there (card out): skipped, its games kept.
-            val files = if (RomFolders.readableNow(context, tree)) {
+            // Permission gone, the folder isn't there (card out) or a folder in it couldn't be listed: skipped, its games kept.
+            fun list(): List<com.joeysretro.joey64.launcher.storage.RomFile>? = if (RomFolders.readableNow(context, tree)) {
                 try { RomFolders.scan(resolver, tree) } catch (e: Exception) { JLog.w(TAG, "can't list $tree" + "\n" + Log.getStackTraceString(e)); null }
             } else null
+            var files = list()
+            // A folder that had games and now lists none is read again before they count as gone: the listing of a held,
+            // readable folder once came back empty while the picker showed its 6 games (Odin 3 Portal 2026-11-14).
+            val hadGames = known.count { it.treeUri == tree.toString() && it.gameId != null }
+            for (wait in RELIST_WAITS_MS) {
+                if (files == null || !ScanPlanner.relist(files.size, hadGames)) break
+                JLog.w(TAG, "$tree listed no ROMs but had $hadGames games: reading it again in $wait ms")
+                kotlinx.coroutines.delay(wait)
+                files = list()
+            }
             if (files == null) { skipped++; continue }
             scanned += tree.toString()
             files.mapTo(found) { FoundRom(it.uri.toString(), tree.toString(), it.name, it.size, it.modified) }
         }
-        val plan = ScanPlanner.plan(found, db.knownFiles(), scanned)
+        val plan = ScanPlanner.plan(found, known, scanned)
         val t1 = SystemClock.elapsedRealtime()
 
         val now = System.currentTimeMillis()
@@ -127,5 +138,7 @@ class LibraryScanner(private val context: Context, private val db: LibraryDb) {
         const val TAG = "Joey64Library"
         /** Files read at once on a first read. Thor, 82 zips: 1 = 32.0 s, 2 = 18.5, 4 = 11.2, 6 = 8.8, 8 = 8.6. */
         const val READ_THREADS = 6
+        /** A folder that had games and lists none is read again after these waits (see scan). */
+        val RELIST_WAITS_MS = longArrayOf(1000, 3000)
     }
 }

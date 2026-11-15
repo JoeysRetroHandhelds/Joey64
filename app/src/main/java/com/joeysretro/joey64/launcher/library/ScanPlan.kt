@@ -17,6 +17,9 @@ data class KnownFile(val uri: String, val treeUri: String, val size: Long, val m
 data class ScanPlan(val toRead: List<FoundRom>, val unchanged: List<FoundRom>, val gone: List<String>)
 
 object ScanPlanner {
+    /** A folder that listed [found] ROMs is read again when it lists none but had [hadGames] games last time. */
+    fun relist(found: Int, hadGames: Int) = found == 0 && hadGames > 0
+
     fun plan(found: List<FoundRom>, known: List<KnownFile>, scannedTrees: Set<String>): ScanPlan {
         val byUri = known.associateBy { it.uri }
         val toRead = ArrayList<FoundRom>()
