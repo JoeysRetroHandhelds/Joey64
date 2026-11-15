@@ -298,6 +298,10 @@ fun GamesGrid(list: List<LibraryGame>, model: LibraryModel, onSearch: () -> Unit
     LaunchedEffect(optionsAgain) { optionsAgain?.let { (id, row) -> popup = id to GamePopup.Options; backRow = row; model.optionsAgainSeen() } }
     // Versions picked another copy for the tile: focus lands on it again when the popup closes.
     var switched by remember { mutableStateOf(false) }
+    // A game's popup closed: focus goes back to its tile. The options reopened after B on a game's page sit over a grid
+    // made again under them, whose own restore took the first tile (Odin 3 Portal 2026-11-14: back from Super Mario 64's
+    // Saves page, closing its options lit AeroGauge).
+    var closedOn by remember { mutableStateOf<Long?>(null) }
     // The library's tiles are keyed by their game (its copies' first id), not by the copy they play, so a pick in
     // Versions keeps the tile, and its focus, in place under the popup (keyed by copy, the old tile went and focus fell
     // to the filter chip; Odin 3 2026-11-11). A key already taken (the list and the folds a moment apart) takes the id.
@@ -332,7 +336,7 @@ fun GamesGrid(list: List<LibraryGame>, model: LibraryModel, onSearch: () -> Unit
         else GamePopups(g, which, model,
             onPopup = { next ->
                 popup = next?.let { id to it }
-                if (next == null) backRow = null
+                if (next == null) { backRow = null; closedOn = id }
                 if (next == null && switched) { switched = false; if (keepPlace) landing?.arm() }
             },
             backRow = backRow,
@@ -421,6 +425,12 @@ fun GamesGrid(list: List<LibraryGame>, model: LibraryModel, onSearch: () -> Unit
             val index = listNow.indexOfFirst { it.id == g.id }
             if (index < 0 || gridState.layoutInfo.visibleItemsInfo.any { it.index == index }) return@LaunchedEffect
             goTo(index, up = true)
+        }
+        LaunchedEffect(closedOn) {
+            val c = closedOn ?: return@LaunchedEffect
+            closedOn = null
+            val index = listNow.indexOfFirst { it.id == c }
+            if (index >= 0 && currentFocused?.id != c) goTo(index, up = true)
         }
         // The game to land on is off screen (the list changed while away: Recently played puts the game just played
         // first): its row is scrolled in, and focus lands on it as it's composed.
