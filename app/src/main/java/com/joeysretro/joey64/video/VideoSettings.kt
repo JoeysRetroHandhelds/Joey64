@@ -11,7 +11,7 @@ import java.io.File
  * key with a string value, so All games and a game's own settings are the same kind of map: a
  * game stores only the keys changed for it (the yellow dot), and Y removes one ("Use All games").
  */
-enum class VideoKey(val key: String, val default: String) {
+enum class VideoKey(val key: String, private val base: String) {
     Resolution("resolution", "1"),
     Aspect("aspect", "auto"),
     /** Crop edges (approved mockup 2026-11-09): lines of the N64's 240 off every edge, "0" off (display_opts.h cropOf). */
@@ -69,7 +69,16 @@ enum class VideoKey(val key: String, val default: String) {
     /** 60 fps code, stored as [Widescreen]. */
     Fps("fps60", "off");
 
+    /**
+     * The value a row has when nobody set it. Frame pacing is Steady on a screen running at 120 Hz (Joey 2026-11-15:
+     * RG477M, Paper Mario at 30 fps: Lowest lag showed 9-14% of frames for 3 refreshes instead of 4, Steady none,
+     * at the same poll-to-display, 19-33 ms); 60 Hz screens keep Lowest lag (Steady costs 8-16 ms there).
+     */
+    val default: String get() = if (this == Pacing && highRefresh) "steady" else base
+
     companion object {
+        /** The screen runs at 100 Hz or more (set by [ScreenRefresh.update] when an activity starts). */
+        @Volatile var highRefresh = false
         fun of(key: String) = entries.firstOrNull { it.key == key }
         /** The rows the N64 video filters' Look preset sets. */
         val LOOK_KEYS = listOf(ViAa, ViBilinear, DitherFilter, Divot, GammaDither)

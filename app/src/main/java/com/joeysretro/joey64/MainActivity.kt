@@ -115,6 +115,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.joeysretro.joey64.video.ScreenRefresh.update(this)
         super.onCreate(savedInstanceState)
         LogFiles.start(this, intent)
         if (gameLoaded && hasRom(intent)) { switching = true; afterLauncherSaved { if (!isDestroyed) switchGame() }; return }
