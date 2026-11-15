@@ -77,9 +77,10 @@ object GpuRules {
         val first = autoDriver(f, upscale)
         val rest: List<Driver> = when {
             // Adreno 8xx: the stock driver runs parallel-RDP (Odin 3: 82/82 at every resolution), then Turnip. Order by the
-            // 2026-11-15 smoke bench (o3p-dz, Odin 3 Portal, 8 games uncapped): Gen8, faux123, R2 and ARMSX2 even; Apex and
+            // 2026-11-15 smoke bench (o3p-dz, Odin 3 Portal, 8 games uncapped): Gen8, faux123 and ARMSX2 even; R2 left out (it
+            // draws faint noise there, drvwhich o3p-which); Apex and
             // Mr Purple about half speed, so last
-            f.vendor == Vendor.ADRENO && f.model in 800..899 -> listOf(Driver.TURNIP, Driver.FAUX123, Driver.R2, Driver.ARMSX2, Driver.K11, Driver.APEX, Driver.PURPLE)
+            f.vendor == Vendor.ADRENO && f.model in 800..899 -> listOf(Driver.TURNIP, Driver.FAUX123, Driver.ARMSX2, Driver.K11, Driver.APEX, Driver.PURPLE)
             // The Duo's 722: faux123 (Mario Party 2's text boxes), then by the smoke bench (duo-dz): the Duo build, ARMSX2,
             // Gen8 and K11 even with faux123, R2 ~10% slower, Apex and Mr Purple about half
             f.vendor == Vendor.ADRENO && f.model == 722 -> listOf(Driver.DUO, Driver.ARMSX2, Driver.TURNIP, Driver.K11, Driver.R2, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
@@ -167,8 +168,10 @@ object GpuRules {
 
     /**
      * The driver trial's picture test (2026-11-15): [frame] as NativeBridge.captureFrame gives it (width and height as
-     * little-endian u32, then RGBA rows) has a picture, not just black. Up to 64 x 64 points on a grid; lit when at least
-     * 0.3% of them (one at the least) have a channel over 24, so a small logo on black counts.
+     * little-endian u32, then RGBA rows) has a picture, not just black or noise. The frame is cut into 32 x 24 cells, each
+     * the average of 8 x 8 points in it; lit when at least 2 cells average a channel over 24, so a small logo on black
+     * counts but scattered dots don't (Turnip R2 on the Odin 3 Portal's 830 draws faint noise all over, which single
+     * points took for a picture).
      */
     fun lit(frame: ByteArray?): Boolean {
         if (frame == null || frame.size < 8) return false
@@ -176,20 +179,21 @@ object GpuRules {
             ((frame[o + 2].toInt() and 0xff) shl 16) or ((frame[o + 3].toInt() and 0xff) shl 24)
         val w = u32(0); val h = u32(4)
         if (w <= 0 || h <= 0 || frame.size < 8 + w.toLong() * h * 4) return false
-        val sx = maxOf(1, w / 64); val sy = maxOf(1, h / 64)
-        var points = 0; var bright = 0
-        var y = sy / 2
-        while (y < h) {
-            var x = sx / 2
-            while (x < w) {
+        val cw = 32; val ch = 24
+        var litCells = 0
+        for (cy in 0 until ch) for (cx in 0 until cw) {
+            val x0 = cx * w / cw; val x1 = maxOf(x0 + 1, (cx + 1) * w / cw)
+            val y0 = cy * h / ch; val y1 = maxOf(y0 + 1, (cy + 1) * h / ch)
+            var r = 0; var g = 0; var b = 0; var n = 0
+            for (sy in 0 until 8) for (sx in 0 until 8) {
+                val x = minOf(w - 1, x0 + (x1 - x0) * (2 * sx + 1) / 16)
+                val y = minOf(h - 1, y0 + (y1 - y0) * (2 * sy + 1) / 16)
                 val o = 8 + (y * w + x) * 4
-                points++
-                if ((frame[o].toInt() and 0xff) > 24 || (frame[o + 1].toInt() and 0xff) > 24 || (frame[o + 2].toInt() and 0xff) > 24) bright++
-                x += sx
+                r += frame[o].toInt() and 0xff; g += frame[o + 1].toInt() and 0xff; b += frame[o + 2].toInt() and 0xff; n++
             }
-            y += sy
+            if (maxOf(r, g, b) > 24 * n) litCells++
         }
-        return bright >= maxOf(1, points * 3 / 1000)
+        return litCells >= 2
     }
 
     /** Arm's little cores by /proc/cpuinfo "CPU part": Cortex-A32, A35, A53, A55. */

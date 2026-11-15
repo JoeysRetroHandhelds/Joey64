@@ -221,6 +221,14 @@ class GpuRulesTest {
         assertTrue(GpuRules.lit(frame(320, 240, 320 * 10)))         // a logo's worth
         val short = frame(320, 240, 100).copyOf(100)                // cut off: not a picture
         assertFalse(GpuRules.lit(short))
+        // faint scattered dots all over (Turnip R2 on the 830): black
+        val noise = frame(320, 240, 0); val rnd = java.util.Random(1)
+        for (y in 0 until 240) for (x in 0 until 320) if (rnd.nextInt(5) == 0) noise[8 + (y * 320 + x) * 4 + 1] = 60.toByte()
+        assertFalse(GpuRules.lit(noise))
+        // a small bright logo, 32 x 24, in the middle of black: a picture
+        val logo = frame(320, 240, 0)
+        for (y in 108 until 132) for (x in 144 until 176) logo[8 + (y * 320 + x) * 4] = 220.toByte()
+        assertTrue(GpuRules.lit(logo))
     }
 
     @Test fun trialCards() {
