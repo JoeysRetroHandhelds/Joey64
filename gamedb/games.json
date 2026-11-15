@@ -538,6 +538,17 @@
       "fixed": [
         {"what": "black screen on parallel-RDP (parallel-RSP)", "fix": "cxd4 RSP for this game (2026-11-14)", "evidence": "Snapdragon 8 Gen 3 tester reports 2026-11-14 (Gauntlet Legends: 10 frames in 22-34 s, plays on GLideN64); Odin 2 Portal p2-gl / p2-boss: black on parallel-RSP, 60 fps on cxd4"}
       ]
+    },
+    {
+      "id": "NMQ", "title": "Paper Mario",
+      "issues": [
+        {"status": "open", "devices": "all", "what": "Crazee Dayzee lullaby (Flower Fields battle): an orange streak of the background flowers cuts across the Dayzee's lower half. Same on parallel-RDP, GLideN64 and the cached interpreter, so likely the game's own drawing; not compared with a real console", "evidence": "Odin 2 Portal 2026-11-14, Joey's battle state (slot 10), scratchpad pmb/p1, g1, i1 (BUTTONS A presses)"},
+        {"status": "open", "devices": "Adreno 740 (Thor, Odin 2 Portal)", "what": "Reports' underruns: about 80-210 in the first 5 s of every start (the load), and 20-30 at a first-time effect (first pause menu: two 53 ms frames). Not reproduced: steady underruns in play (report 17, a tester's Portal at 2x, 10225 in 182 s at 59.5 emu fps) and the Thor's slow 4x (report 20, p95 32 ms)", "evidence": "Portal 2026-11-14 pmw/pmm/pmboot runs: walking, battle and from boot at 2x and 4x (widescreen, CRT light): 0 underruns after the first window, run 2.3-7.5 ms"}
+      ],
+      "notes": [
+        "Odin 2 Portal 2026-11-14: 4x + CRT light + widescreen code, walking and battling at 60 emu fps, run 2.4-7.5 ms a frame",
+        "No 60 fps code in any cheat list; widescreen 8102D574 2407, 8102D576 018A"
+      ]
     }
   ]
 }

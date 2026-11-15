@@ -3354,6 +3354,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         getSystemService(android.hardware.input.InputManager::class.java)?.unregisterInputDeviceListener(padListener)
         uiScope.cancel()
         debugStick?.let { unregisterReceiver(it) }
+        debugButtons?.let { unregisterReceiver(it) }
         debugDump?.let { unregisterReceiver(it) }
         debugLogs?.let { unregisterReceiver(it) }
         debugProblem?.let { unregisterReceiver(it) }
@@ -3389,6 +3390,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      * --ei stick 1 targets the right stick (C buttons).
      */
     private var debugStick: BroadcastReceiver? = null
+    /**
+     * Debug builds: presses player 1's N64 buttons from adb (2026-11-14: adb's key presses come from a device that's no
+     * player's, so scripted checks couldn't play; the Paper Mario glitch). Through the touch controls' path, so the
+     * game sees them as player 1's:
+     *   adb shell am broadcast -a com.joeysretro.joey64.BUTTONS --es press A,DRight --ei ms 300
+     * Names: A B Z Start L R DUp DDown DLeft DRight CUp CDown CLeft CRight. Held for ms (default 150), then let go;
+     * a new press replaces the one held. With the STICK broadcast, enough to walk and fight.
+     */
+    private var debugButtons: BroadcastReceiver? = null
     private var debugDump: BroadcastReceiver? = null
     private var debugLogs: BroadcastReceiver? = null
     private var debugProblem: BroadcastReceiver? = null
@@ -3402,6 +3412,21 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 val stick = i.getIntExtra("stick", 0)
                 NativeBridge.setAnalog(0, stick, i.getIntExtra("x", 0), i.getIntExtra("y", 0))
                 handler.postDelayed({ NativeBridge.setAnalog(0, stick, 0, 0) }, i.getIntExtra("ms", 150).toLong())
+            }
+        }
+        var buttonsOff: Runnable? = null
+        debugButtons = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, i: Intent) {
+                val names = (i.getStringExtra("press") ?: "").split(',', ' ').map { it.trim() }.filter { it.isNotEmpty() }
+                var bits = 0
+                for (n in names) {
+                    val b = com.joeysretro.joey64.controls.N64Button.entries.firstOrNull { it.name.equals(n, ignoreCase = true) }
+                    if (b == null) { JLog.e(TAG, "debug BUTTONS: no N64 button $n"); return }
+                    bits = bits or (1 shl b.retroBit)
+                }
+                buttonsOff?.let { handler.removeCallbacks(it) }
+                players[0].touchBits = bits; push(0)
+                buttonsOff = Runnable { players[0].touchBits = 0; push(0) }.also { handler.postDelayed(it, i.getIntExtra("ms", 150).toLong()) }
             }
         }
         // Approved problem screens (2026-11-08), checks without pulling a controller or filling the disk:
@@ -3464,7 +3489,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 lines.forEachIndexed { n, line -> handler.postDelayed({ Thread { com.joeysretro.joey64.achievements.RaBridge.onEvent(line) }.start() }, n * i.getLongExtra("gap", 1000L)) }
             }
         }
-        for ((receiver, action) in listOf(debugStick to "com.joeysretro.joey64.STICK", debugDump to "com.joeysretro.joey64.DUMP",
+        for ((receiver, action) in listOf(debugStick to "com.joeysretro.joey64.STICK", debugButtons to "com.joeysretro.joey64.BUTTONS", debugDump to "com.joeysretro.joey64.DUMP",
                 debugLogs to "com.joeysretro.joey64.LOGS", debugRaEvent to "com.joeysretro.joey64.RA_EVENT",
                 debugProblem to "com.joeysretro.joey64.PROBLEM")) {
             val filter = IntentFilter(action)
