@@ -178,6 +178,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
 
     // One list with the panel beside it (approved 2026-11-11, setlist_mock.png): Picture, then Look, then Advanced.
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
+    val failedDrivers = remember { failedDrivers(context) }
     val changed = target != null && rowKeys[focused].orEmpty().any { it in own }
     val (title, text) = when (focused) {
         "ws" -> "Widescreen" to extraText(ExtraKind.Widescreen, hardcore, target != null && extras?.widescreen?.isEmpty() == true)
@@ -185,12 +186,14 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         else -> describe(focused, v)
     }
     val help = if (changed) "Changed for this game. ${allGamesNote(focused, VideoSettings.resolve(all, null), gameCode)}" else text
+        .let { h -> if (focused != "drv") h else driverFailNote(v[VideoKey.Driver], failedDrivers)?.let { "$h $it" } ?: h }
     val choiceKey = mapOf("res" to VideoKey.Resolution, "asp" to VideoKey.Aspect, "int" to VideoKey.Integer, "ori" to VideoKey.Orientation,
         "cut" to VideoKey.Cutout, "bfi" to VideoKey.Bfi, "rend" to VideoKey.Renderer, "drv" to VideoKey.Driver, "pace" to VideoKey.Pacing)[focused]
     val info = when {
         choiceKey != null -> VideoChoices.of(choiceKey).let { chs ->
             com.joeysretro.joey64.launcher.components.PanelInfo(title, help,
-                chs.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it.value == v[choiceKey], it.experimental) }) { i ->
+                chs.map { val bad = if (choiceKey == VideoKey.Driver) com.joeysretro.joey64.GpuRules.failedLabel(failedDrivers[it.value]) else null
+                    com.joeysretro.joey64.launcher.components.PanelChoice(it.label, bad ?: it.detail, it.value == v[choiceKey], it.experimental, detailWarn = bad != null) }) { i ->
                 set(choiceKey, chs[i].value) }
         }
         focused == "ws" || focused == "fps" -> {
@@ -351,7 +354,7 @@ private fun describe(row: String, v: VideoSettings): Pair<String, String> = when
     "ov" -> "Overlay" to "An image drawn over the game and its shader, such as a screen-glass or grid PNG."
     "bfi" -> "Black frame insertion" to "Experimental. On 120 Hz screens, a black frame between pictures: less motion blur, a darker picture and a little more lag. Does nothing on 60 Hz screens."
     "rend" -> "Renderer" to "parallel-RDP draws like the real N64. GLideN64 is the fallback for GPUs that can't run it. Auto picks by GPU and game. Applies when the game next starts."
-    "drv" -> "GPU driver" to "Joey64's Turnip fixes parallel-RDP on Adreno GPUs. A driver that can't run falls back to the system's. Applies when the game next starts."
+    "drv" -> "GPU driver" to "Joey64's Turnip fixes parallel-RDP on Adreno GPUs. A driver picked here that doesn't load or can't run parallel-RDP gives way to Auto's pick, with a pop-up. Applies when the game next starts."
     "pace" -> "Frame pacing" to "Lowest lag shows each frame as soon as it's ready. Steady shows each one for the same time on 120 Hz screens, for a little more lag. Steady, less lag is experimental. Applies when the game next starts."
     else -> "N64 video filters" to "The N64's own picture filters, for parallel-RDP."
 }
@@ -441,12 +444,14 @@ private fun ExtraPopup(title: String, subtitle: String?, options: List<ExtraOpti
 @Composable
 private fun ChoicePopup(k: VideoKey, current: String, sub: String? = null, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     val choices = VideoChoices.of(k)
+    val failed = if (k == VideoKey.Driver) failedDrivers(LocalContext.current) else emptyMap()
     JoeyDialog(onDismiss = onDismiss, hints = listOf(Hint("A", "Select"), Hint("B", "Close")), width = 470.dp) {
         Column {
             PopupTitle(title(k), sub)
             for (ch in choices) {
                 val on = ch.value == current
-                JoeyRow(ch.label, Modifier.initialFocus(on), detail = ch.detail, experimental = ch.experimental,
+                val bad = com.joeysretro.joey64.GpuRules.failedLabel(failed[ch.value])
+                JoeyRow(ch.label, Modifier.initialFocus(on), detail = bad ?: ch.detail, detailWarn = bad != null, experimental = ch.experimental,
                     trailing = if (on) { _ -> PickerTick() } else null) { onPick(ch.value) }
             }
         }
@@ -598,6 +603,20 @@ private fun SharpenPopup(v: VideoSettings, onDismiss: () -> Unit, onSet: (VideoK
 
 /** What Auto picked at the last game start (MainActivity writes it). */
 private fun lastPick(context: Context, what: String): String? = context.getSharedPreferences("device", Context.MODE_PRIVATE).getString(what, null)
+
+/** Drivers picked here that didn't work on this device with this install (the game screen notes them; approved drvnote mockup 2026-11-15). */
+private fun failedDrivers(context: Context): Map<String, String> = try {
+    com.joeysretro.joey64.GpuRules.failedPicks(lastPick(context, "driver_failed"),
+        context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString())
+} catch (e: Exception) { emptyMap() }
+
+/** The GPU driver row's help line when the picked driver didn't work here last time. */
+private fun driverFailNote(picked: String, failed: Map<String, String>): String? {
+    val why = failed[picked] ?: return null
+    val name = com.joeysretro.joey64.GpuRules.Driver.byId(picked)?.shown ?: return null
+    return if (why == com.joeysretro.joey64.GpuRules.PRDP) "$name can't run parallel-RDP on this GPU, so Joey64 used Auto's pick."
+        else "$name didn't load on this GPU the last time it was picked, so Joey64 used Auto's pick."
+}
 
 /** The rows inside N64 video filters: a dot on its row when the game has any of them (code audit 2026-11-07 note). */
 private val FILTER_KEYS = VideoKey.LOOK_KEYS + listOf(VideoKey.Deinterlace, VideoKey.Supersample, VideoKey.NativeTexLod, VideoKey.NativeTexRect)

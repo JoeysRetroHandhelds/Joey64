@@ -602,6 +602,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             else -> v
         }
         val dev = devDriver()
+        // A driver picked in Settings that didn't work here before (approved drvnote mockup 2026-11-15): this start runs
+        // Auto's pick instead (the one Auto last ran here, else Auto's first), and a pop-up says so. Settings keeps the pick.
+        val install = packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
+        val devicePrefs = getSharedPreferences("device", MODE_PRIVATE)
+        val glideOnly = devString("renderer") == "gliden64" || video[com.joeysretro.joey64.video.VideoKey.Renderer] == "gliden64"
+        val pickChecked = videoDriver != null && dev == null && devString("driver") == null && !glideOnly
+        val pickFailed = if (pickChecked) GpuRules.failedPicks(devicePrefs.getString("driver_failed", null), install)[videoDriver] else null
+        val autoInstead = if (pickFailed == null) null else
+            GpuRules.Driver.byId(devicePrefs.getString("driver", null))?.takeIf { it.id != videoDriver } ?: auto.value
         // The start-up trial (GpuTrial) runs only on Auto's own choice: nothing in Settings, no dev driver or switch.
         val autoOnly = dev == null && devString("driver") == null && videoDriver == null && devString("renderer") == null &&
             video[com.joeysretro.joey64.video.VideoKey.Renderer] != "gliden64" && video[com.joeysretro.joey64.video.VideoKey.Renderer] != "parallel"
@@ -613,7 +622,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         trialInfo = trialPick
         // The driver this start runs: a dev driver, a dev switch or Settings' pick, else the trial's level of the chain
         // (past the chain's end: the system driver with GLideN64).
-        val stepDriver: GpuRules.Driver = GpuRules.Driver.byId(devString("driver") ?: videoDriver)
+        val stepDriver: GpuRules.Driver = autoInstead ?: GpuRules.Driver.byId(devString("driver") ?: videoDriver)
             ?: chain.value.getOrNull(level) ?: GpuRules.Driver.SYSTEM
         val lib = dev ?: stepDriver.asset?.let { bundledDriver(it) }
         // A bundled driver this build doesn't have: the trial moves on (no game start spent on it)
@@ -626,6 +635,32 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             NativeBridge.setVulkanDriver("${lib.parent}/", lib.name, "${applicationInfo.nativeLibraryDir}/", "${tmp.absolutePath}/")
             custom = parseGpu(NativeBridge.probeVulkan(true))
             if (custom == null) JLog.w(TAG, "Driver ${lib.name} has no usable GPU, using the system driver")
+        }
+        // Settings' pick, tried for the first time on this install: it didn't load, or can't run parallel-RDP. Noted, and
+        // the game screen starts again in a fresh process (a driver once loaded stays loaded) with Auto's pick.
+        if (pickChecked && pickFailed == null && stepDriver != GpuRules.Driver.SYSTEM) {
+            val why = when {
+                custom == null -> GpuRules.LOAD
+                !custom.vulkan11 || custom.storage16 != 1 -> GpuRules.PRDP
+                else -> null
+            }
+            if (why != null) {
+                devicePrefs.edit().putString("driver_failed",
+                    GpuRules.withFailedPick(devicePrefs.getString("driver_failed", null), install, stepDriver.id, why)).commit()
+                JLog.w(TAG, "GPU driver ${stepDriver.shown} picked in Settings: ${GpuRules.failedLabel(why)}; starting again with Auto's pick")
+                trialRestarting = true
+                finish()
+                RestartActivity.restart(this, trialNextStart())
+                return "gliden64"
+            }
+        }
+        if (autoInstead != null) {
+            val picked = GpuRules.Driver.byId(videoDriver)?.shown ?: videoDriver.orEmpty()
+            JLog.w(TAG, "GPU driver $picked picked in Settings: ${GpuRules.failedLabel(pickFailed)} before; using Auto's pick ${autoInstead.shown}")
+            val p = InGamePopup("gpupick", InGamePopup.Kind.GpuNote,
+                if (pickFailed == GpuRules.PRDP) "$picked can't run parallel-RDP here" else "$picked didn't load on this GPU",
+                "Using ${autoInstead.shown}, Auto's pick", "Pick another in Settings › Video › GPU driver", stayMs = 6_000, warn = true)
+            overlay?.show(p) ?: earlyPops.add(p)
         }
         // The trial's checks before any game start (approved gputry mockup: "checked off quietly"): a driver that
         // doesn't load, or a GPU without what parallel-RDP needs on it, moves to the next level at once.
@@ -667,7 +702,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // whether Auto picked at all (Settings did when autoOnly is false; the rules then say what Auto would pick).
         // trialLevel stays 0-2 for the server (0 Auto's first driver, 1 a later one, 2 GLideN64); the drivers tried and
         // what each did go in the driver rule.
-        gpuWhy = GpuWhy(trialRule(auto.rule, stepDriver, trialPick), gamePick?.rule ?: rendererPick.rule,
+        val pickNote = if (autoInstead != null) "picked $videoDriver ${pickFailed}, so ${autoInstead.id}; " else ""
+        gpuWhy = GpuWhy((pickNote + trialRule(auto.rule, stepDriver, trialPick)).take(120), gamePick?.rule ?: rendererPick.rule,
             trialPick?.level?.let { if (trialGl) 2 else if (it == 0) 0 else 1 }, if (autoOnly) "auto" else "user")
         // What Auto picks here, for Settings › Video's "Auto · ..." (the launcher can't probe Vulkan itself):
         // the renderer by GPU, and the driver that ran when nothing but Auto chose it (a dev driver in

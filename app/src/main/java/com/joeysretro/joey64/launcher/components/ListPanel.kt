@@ -39,7 +39,9 @@ import kotlinx.coroutines.launch
 
 /** One choice in the panel: as a choice popup's row (its grey line, the tick on the one in use). */
 class PanelChoice(val label: String, val detail: String? = null, val on: Boolean = false, val experimental: Boolean = false,
-                  val enabled: Boolean = true)
+                  val enabled: Boolean = true,
+                  /** The detail line in gold (a driver that didn't load, approved drvnote mockup 2026-11-15). */
+                  val detailWarn: Boolean = false)
 
 /**
  * What the panel shows for the focused row (approved list + panel, Joey 2026-11-11, scratchpad setlist_mock.png): its
@@ -213,7 +215,7 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
                         if (i == 0) up = FocusRequester.Cancel
                         if (i == shown.lastIndex) down = FocusRequester.Cancel
                     },
-                detail = ch.detail, enabled = ch.enabled, experimental = ch.experimental,
+                detail = ch.detail, detailWarn = ch.detailWarn, enabled = ch.enabled, experimental = ch.experimental,
                 trailing = if (ch.on) { _ -> com.joeysretro.joey64.launcher.screens.PickerTick() } else null) {
                 info.onPick?.invoke(i)
                 state.leave()

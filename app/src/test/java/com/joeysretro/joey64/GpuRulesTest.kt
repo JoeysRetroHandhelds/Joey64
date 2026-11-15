@@ -213,6 +213,18 @@ class GpuRulesTest {
         return b
     }
 
+    @Test fun failedPicks() {
+        assertTrue(GpuRules.failedPicks(null, "1").isEmpty())
+        val p = GpuRules.withFailedPick(null, "1", "k11", GpuRules.LOAD)
+        assertEquals(mapOf("k11" to "load"), GpuRules.failedPicks(p, "1"))
+        val p2 = GpuRules.withFailedPick(p, "1", "apex", GpuRules.PRDP)
+        assertEquals(mapOf("k11" to "load", "apex" to "prdp"), GpuRules.failedPicks(p2, "1"))
+        assertTrue(GpuRules.failedPicks(p2, "2").isEmpty())                          // an update tries them again
+        assertEquals(mapOf("r2" to "load"), GpuRules.failedPicks(GpuRules.withFailedPick(p2, "2", "r2", GpuRules.LOAD), "2"))
+        assertEquals("Didn't load", GpuRules.failedLabel(GpuRules.LOAD))
+        assertNull(GpuRules.failedLabel(null))
+    }
+
     @Test fun pictureTest() {
         assertFalse(GpuRules.lit(null))
         assertFalse(GpuRules.lit(ByteArray(4)))

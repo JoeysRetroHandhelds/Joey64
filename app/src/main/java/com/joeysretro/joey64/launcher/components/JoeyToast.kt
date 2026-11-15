@@ -58,6 +58,7 @@ import java.io.File
  *  - [extra]: one more grey line with the offline mark ("Offline · sends when you're back online").
  *  - [chip]: the small chip of fast-forward, rewind and slow motion (approved ffchip mockup A, 2026-11-14): the icon
  *    and [name] on one line ("4x", "3 s"), [bar] as a thin line under them, [warn] draws the name in orange.
+ *    On a full card [warn] draws the label in orange (a driver that didn't work, approved drvnote mockup 2026-11-15).
  */
 @Composable
 fun JoeyToast(
@@ -121,7 +122,7 @@ fun JoeyToast(
             Icon(painterResource(icon), contentDescription = null, tint = iconTint ?: c.good, modifier = Modifier.size(if (compact) 17.dp else 22.dp))
         }
         Column(Modifier.padding(start = if (compact) 9.dp else 10.dp)) {
-            if (label.isNotEmpty()) Text(accented(label, c.gold), style = JoeyTheme.type.label, color = c.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (label.isNotEmpty()) Text(accented(label, c.gold), style = JoeyTheme.type.label, color = if (warn) c.tagMissable else c.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(name, style = if (framed) JoeyTheme.type.button.copy(fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic) else JoeyTheme.type.button,
                 color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!compact && line.isNotEmpty()) Text(line, style = JoeyTheme.type.small, color = c.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)

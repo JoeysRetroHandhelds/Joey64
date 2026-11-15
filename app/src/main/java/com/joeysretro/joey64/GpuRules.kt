@@ -64,6 +64,26 @@ object GpuRules {
         }
     }
 
+    /**
+     * Drivers picked in Settings › Video › GPU driver that didn't work on this device (approved drvnote mockup
+     * 2026-11-15): the `device` pref "driver_failed", "<install>|<id>:<why>,<id>:<why>", [LOAD] it didn't load, [PRDP]
+     * it loaded without what parallel-RDP needs. Only this install's count, so an update tries them again.
+     */
+    const val LOAD = "load"
+    const val PRDP = "prdp"
+
+    fun failedPicks(pref: String?, install: String): Map<String, String> {
+        val (inst, rest) = pref?.split('|', limit = 2)?.takeIf { it.size == 2 } ?: return emptyMap()
+        if (inst != install) return emptyMap()
+        return rest.split(',').mapNotNull { e -> e.split(':').takeIf { it.size == 2 && it[0].isNotEmpty() }?.let { it[0] to it[1] } }.toMap()
+    }
+
+    fun withFailedPick(pref: String?, install: String, id: String, why: String): String =
+        (failedPicks(pref, install) + (id to why)).entries.joinToString(",", prefix = "$install|") { "${it.key}:${it.value}" }
+
+    /** The pop-up's and the picker's words for [why]. */
+    fun failedLabel(why: String?): String? = when (why) { LOAD -> "Didn't load"; PRDP -> "Can't run parallel-RDP"; else -> null }
+
     /** A choice and the rule that made it, for the log (item 38 e: a tester's report shows which rule picked). */
     data class Pick<T>(val value: T, val rule: String)
 
