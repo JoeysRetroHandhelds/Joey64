@@ -22,6 +22,7 @@ bool AudioOut::open(int srcRate) {
     // A second open (another game in this process) closes the stream it had first.
     if (stream_) { AAudioStream_requestStop(stream_); AAudioStream_close(stream_); stream_ = nullptr; }
     stalled_ = false;
+    fed_.store(false, std::memory_order_relaxed);
     srcRate_ = srcRate;
     paused_ = false;
     lost_ = false;
@@ -219,6 +220,7 @@ bool AudioOut::push(float s) {
     stalled_ = false;
     ring_[w] = s;
     w_.store(next, std::memory_order_release);
+    fed_.store(true, std::memory_order_relaxed);
     return true;
 }
 
@@ -265,6 +267,7 @@ void AudioOut::writeFast(const int16_t* frames, size_t frameCount, double speed,
             ring_[w] = (prev_[0] + (cur[0] - prev_[0]) * (float)pos_) * k;
             ring_[(w + 1) % cap_] = (prev_[1] + (cur[1] - prev_[1]) * (float)pos_) * k;
             w_.store(next, std::memory_order_release);
+            fed_.store(true, std::memory_order_relaxed);
             pos_ += step;
         }
         pos_ -= 1.0;
@@ -287,7 +290,7 @@ aaudio_data_callback_result_t AudioOut::cb(AAudioStream*, void* user, void* data
     for (size_t i = 0; i < samples; ++i) {
         size_t r = self->r_.load(std::memory_order_relaxed);
         if (r == self->w_.load(std::memory_order_acquire)) { // underrun → silence
-            self->underruns_.fetch_add(1, std::memory_order_relaxed);
+            if (self->fed_.load(std::memory_order_relaxed)) self->underruns_.fetch_add(1, std::memory_order_relaxed);
             memset(out + i, 0, (samples - i) * sizeof(float));
             break;
         }

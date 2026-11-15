@@ -74,6 +74,9 @@ private:
     int dstRate_ = 48000;
     size_t target_ = 0;      // samples the ring is kept near (audio latency)
     std::atomic<int> underruns_{0};
+    // The game has put sound in the ring since open(). Before that the stream plays silence that isn't an
+    // underrun (Paper Mario on the Portal 2026-11-14: 80-210 counted in every start's first 5 s).
+    std::atomic<bool> fed_{false};
     std::atomic<long long> srcFrames_{0}, outFrames_{0}; // takeRates
     double fillSum_ = 0; int fillCount_ = 0;
     double baseStep_ = 1.0;  // nominal source frames per output frame
