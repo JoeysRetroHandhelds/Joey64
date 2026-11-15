@@ -38,7 +38,7 @@ object Releases {
             val a = assets.optJSONObject(i) ?: continue
             val v = ASSET.matchEntire(a.optString("name"))?.groupValues?.get(1) ?: continue
             val url = a.optString("browser_download_url").ifEmpty { continue }
-            return Release(v, release.optString("body").trim(), url, a.optLong("size"),
+            return Release(v, ReleaseNotes.plain(release.optString("body")), url, a.optLong("size"),
                 DIGEST.matchEntire(a.optString("digest"))?.groupValues?.get(1)?.lowercase())
         }
         return null

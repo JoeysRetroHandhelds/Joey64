@@ -102,7 +102,8 @@ object AppUpdates {
     }
 
     /** What's new in [version], kept from its release when it was downloaded. */
-    fun notes(context: Context, version: String): String? = prefs(context).getString(KEY_NOTES + version, null)
+    fun notes(context: Context, version: String): String? =
+        prefs(context).getString(KEY_NOTES + version, null)?.let(ReleaseNotes::plain)   // kept before 2026-11-15 as Markdown
 
     private fun feed(context: Context): String {
         if (BuildConfig.DEBUG) {
