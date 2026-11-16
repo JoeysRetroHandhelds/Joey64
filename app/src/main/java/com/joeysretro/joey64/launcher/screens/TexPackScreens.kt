@@ -58,23 +58,33 @@ data class TexState(
     val games: Map<String, List<String>>,
     /** The game in the chip's pack name (null: All games, or not read yet). */
     val packName: String?,
+    /** PNG packs' conversions as last read (by pack id), so the panel reads no files while it draws. */
+    val conv: Map<String, TexConv> = emptyMap(),
+    /** The folders were looked through for this state (not only the last scan's index read). */
+    val scanned: Boolean = false,
 ) {
     fun gameFor(p: TexPack): String? = games[p.packName.uppercase()]?.firstOrNull()
     fun forGame() = TexPacks.forGame(index, packName)
     companion object { val EMPTY = TexState(emptyList(), emptyList(), emptyMap(), null) }
 }
 
-/** Reads the folders and packs (scanning when there's no index yet), the library's names, and [target]'s own. Off the main thread. */
+/** A PNG pack's conversion: the .hts's size once whole, and whether the PNG copy is done. */
+data class TexConv(val htsSize: Long?, val copied: Boolean)
+
+/** Reads the folders and packs (scanning when [rescan] or there's no index yet), the library's names, and [target]'s own. Off the main thread. */
 fun readTexState(context: Context, target: String?, rescan: Boolean): TexState {
     val store = TexPackStore(context)
-    val index = (if (rescan) null else store.index()) ?: store.scan().first
+    val cached = if (rescan) null else store.index()
+    val index = cached ?: store.scan().first
     val db = com.joeysretro.joey64.launcher.data.LibraryDb.get(context)
-    val games = try {
-        db.libraryGames().filter { !it.packName.isNullOrEmpty() }.groupBy({ it.packName!!.uppercase() }, { it.title })
-    } catch (e: Exception) { emptyMap() }
+    val library = try { db.libraryGames().filter { !it.packName.isNullOrEmpty() } } catch (e: Exception) { emptyList() }
+    val games = library.groupBy({ it.packName!!.uppercase() }, { it.title })
     val name = target?.let { t -> try { db.gameWithFile(t, com.joeysretro.joey64.states.GameStates::saveNameOf)?.packName } catch (e: Exception) { null } }
-    TexConvert.startFor(context, index, games.keys)
-    return TexState(store.folders(), index, games, name)
+    TexConvert.startFor(context, index, library.associate { it.packName!!.uppercase() to it.packName!! })
+    val conv = index.filter { it.png }.associate { p ->
+        p.id to TexConv(store.converted(p)?.takeIf { TexPacks.htsWhole(it) }?.length(), store.isCopied(p))
+    }
+    return TexState(store.folders(), index, games, name, conv, scanned = cached == null)
 }
 
 /**
@@ -85,34 +95,39 @@ fun readTexState(context: Context, target: String?, rescan: Boolean): TexState {
 object TexConvert {
     val progress = mutableStateMapOf<String, Float>()
     val failed = mutableStateMapOf<String, String>()
+    /** Copies done since the state was read (TexState.conv is from before). */
+    val copied = mutableStateMapOf<String, Boolean>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queued = HashSet<String>()
 
-    fun startFor(context: Context, index: List<TexPack>, names: Set<String>) {
+    /** [names]: the library's header names, upper-case to as they are (the copy is named exactly as the game's). */
+    fun startFor(context: Context, index: List<TexPack>, names: Map<String, String>) {
         val store = TexPackStore(context.applicationContext)
         for (p in index) {
-            if (!p.png || p.packName.uppercase() !in names || store.isConverted(p) || store.isCopied(p)) continue
+            val romName = names[p.packName.uppercase()] ?: continue
+            if (!p.png || store.isConverted(p) || store.isCopied(p)) continue
             synchronized(queued) { if (!queued.add(p.id)) continue }
             scope.launch {
+                failed.remove(p.id)
                 progress[p.id] = 0f
-                val why = store.convert(p) { f -> progress[p.id] = f }
+                val why = try { store.convert(p, romName) { f -> progress[p.id] = f } } catch (e: Exception) { "$e" }
                 progress.remove(p.id)
-                if (why != null) failed[p.id] = why
+                if (why != null) failed[p.id] = why else copied[p.id] = true
                 synchronized(queued) { queued.remove(p.id) }
             }
         }
     }
 }
 
-/** A pack's state line for the panel: PNG packs' conversion, .hts packs nothing. */
-private fun convLine(store: TexPackStore, p: TexPack): String? {
+/** A pack's state line for the panel: PNG packs' conversion, .hts packs nothing. From [s] and TexConvert only (no files read). */
+private fun convLine(s: TexState, p: TexPack): String? {
     if (!p.png) return null
     TexConvert.progress[p.id]?.let { return "Copying it to convert: ${(it * 100).toInt()}%" }
     TexConvert.failed[p.id]?.let { return "Can't convert it: $it" }
-    val hts = store.converted(p)
+    val conv = s.conv[p.id]
     return when {
-        store.isConverted(p) -> "Converted once into Joey64's storage · ${TexPacks.sizeLabel(hts.length())}"
-        store.isCopied(p) -> "Converted into Joey64's storage the next time the game starts"
+        conv?.htsSize != null -> "Converted once into Joey64's storage · ${TexPacks.sizeLabel(conv.htsSize)}"
+        conv?.copied == true || TexConvert.copied[p.id] == true -> "Converted into Joey64's storage the next time the game starts"
         else -> "A folder of PNGs: Joey64 converts it once into its own storage"
     }
 }
@@ -149,7 +164,6 @@ fun texRowValue(s: TexState, value: String, game: Boolean): String = when {
 
 /** The one-game panel (screen 3): the pictures, Auto · its pack (and each pack when there's more than one), None, then the pack's details. */
 fun texGamePanel(context: Context, s: TexState, value: String, target: String, onSet: (String) -> Unit): PanelInfo {
-    val store = TexPackStore(context)
     val mine = s.forGame()
     val auto = TexPacks.pick(s.index, s.packName, "on")
     val inUse = TexPacks.pick(s.index, s.packName, value)
@@ -163,24 +177,25 @@ fun texGamePanel(context: Context, s: TexState, value: String, target: String, o
         listOfNotNull("File" to "${p.file} · ${TexPacks.sizeLabel(p.size)}",
             "Made for" to (if (s.packName != null) "${p.packName} · this game's name" else p.packName),
             "Folder" to (s.folders.firstOrNull { it.uri == p.folder }?.name ?: "A folder no longer picked"),
-            convLine(store, p)?.let { "Converting" to it })
+            convLine(s, p)?.let { "Converting" to it })
     } ?: emptyList()
-    val top: (@Composable () -> Unit)? = if (inUse == null) null else { { TexPictures(context, target, s.packName ?: inUse.packName, inUse.shown) } }
+    val top: (@Composable () -> Unit)? = if (inUse == null) null else { { TexPictures(context, target, inUse) } }
     return PanelInfo("Texture pack", if (mine.isEmpty()) "No pack for this game in your pack folders. Add a folder in All games." else
         "HD textures made for this game. Applies when the game next starts.", opts.map { it.second }, lines, onPick = { i -> onSet(opts[i].first) }, top = top)
 }
 
 /** Screen 3's two pictures: the game's newest screenshot and the frame kept with its pack, or the line before there are any. */
 @Composable
-private fun TexPictures(context: Context, target: String, packName: String, shown: String) {
+private fun TexPictures(context: Context, target: String, p: TexPack) {
     val c = JoeyTheme.colors
-    val pics by produceState<Pair<ImageBitmap?, ImageBitmap?>?>(null, target, packName) {
+    val shown = p.shown
+    val pics by produceState<Pair<ImageBitmap?, ImageBitmap?>?>(null, target, p.id) {
         value = withContext(Dispatchers.IO) {
             val own = try {
                 val g = com.joeysretro.joey64.saves.GameScreenshots(context, target)
                 g.list().firstOrNull()?.let { g.picture(it.name, 320)?.first?.asImageBitmap() }
             } catch (e: Exception) { null }
-            val pack = TexPackStore(context).shot(packName, "pack").takeIf { it.isFile }?.let { f ->
+            val pack = TexPackStore(context).shot(p, "pack").takeIf { it.isFile }?.let { f ->
                 BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = 2 })?.asImageBitmap() }
             own to pack
         }

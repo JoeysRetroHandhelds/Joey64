@@ -113,6 +113,29 @@ object TexPacks {
         }
     } catch (e: Exception) { false }
 
+    /** GLideNHQ's cache format version (TxFilterExport.h UNDEFINED_1) and the options it writes while still adding. */
+    private const val FORMAT_VERSION = 0x08000000
+    private const val FAKE_CONFIG = -1
+
+    /**
+     * Whether the core will load the .hts at [f] as it is: the checks of GLideN64's TxFileStorage::load (version, options,
+     * the index's place past the header and inside the file, at least one entry there), for a load with no PNG folder
+     * next to it (options of any GLideN64 build are taken). A file that fails them is never handed over, as GLideN64
+     * "clears" a cache it can't load by writing a new empty one over it. Throws when [f] can't be opened at all.
+     */
+    fun htsLoadable(f: File): Boolean = RandomAccessFile(f, "r").use { r ->
+        val len = r.length()
+        if (len < 20) return@use false
+        val head = ByteArray(16); r.readFully(head)
+        val b = java.nio.ByteBuffer.wrap(head).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val version = b.getInt(0)
+        val (config, pos, first) = if (version == FORMAT_VERSION) Triple(b.getInt(4), b.getLong(8), 16L) else Triple(version, b.getLong(4), 12L)
+        if (config == FAKE_CONFIG || pos <= first || pos > len - 4) return@use false
+        r.seek(pos)
+        val n = ByteArray(4); r.readFully(n)
+        java.nio.ByteBuffer.wrap(n).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(0) > 0
+    }
+
     /** "593 MB", "3.6 GB". */
     fun sizeLabel(bytes: Long): String = when {
         bytes >= 1L shl 30 -> String.format(Locale.ROOT, "%.1f GB", bytes / (1L shl 30).toDouble())
@@ -151,7 +174,15 @@ class TexPackStore(private val context: Context) {
     /** Takes [uri] off the list and its packs out of the index (the grant is released by the caller, RomFolders.releaseIfUnused). */
     fun removeFolder(uri: String) {
         writeFolders(folders().filter { it.uri != uri })
-        index()?.let { writeIndex(it.filter { p -> p.folder != uri }) }
+        val index = index() ?: return
+        writeIndex(index.filter { p -> p.folder != uri })
+        // What Joey64 made from its packs goes with it: PNG packs' conversions (can be GBs) and the pictures.
+        for (p in index) if (p.folder == uri) forget(p)
+    }
+
+    private fun forget(p: TexPack) {
+        if (p.png) convDir(p).deleteRecursively()
+        for (which in listOf("pack", "own")) shot(p, which).delete()
     }
 
     /** The packs found last time, or null before the first scan. */
@@ -177,6 +208,9 @@ class TexPackStore(private val context: Context) {
                 { p -> space.uriOf(p)?.toString() }))
         }
         writeIndex(out)
+        // Packs gone from their folders (deleted or moved on the SD card) leave their conversions and pictures behind.
+        val ids = out.map { it.id }.toSet()
+        for (p in old) if (p.id !in ids) forget(p)
         JLog.i(TAG, "texture packs: ${out.size} in ${folders().size} folders" + if (unreadable.isEmpty()) "" else ", ${unreadable.size} can't be read")
         return out to unreadable
     }
@@ -185,18 +219,21 @@ class TexPackStore(private val context: Context) {
 
     /** A PNG pack's conversion folder (by its document id, so two packs for one game don't share it). */
     fun convDir(p: TexPack): File = File(dir, "conv/" + Integer.toHexString(p.id.hashCode()) + "-" + com.joeysretro.joey64.controls.ControlsStore.safe(p.packName))
-    fun converted(p: TexPack): File = File(convDir(p), p.packName + TexPacks.SUFFIX)
-    fun isConverted(p: TexPack) = TexPacks.htsWhole(converted(p))
+    /** The .hts the core made from [p]'s PNGs (named after the ROM it was made at), or null before. */
+    fun converted(p: TexPack): File? = convDir(p).listFiles { f -> f.isFile && f.name.endsWith(TexPacks.SUFFIX) }?.firstOrNull()
+    fun isConverted(p: TexPack) = converted(p)?.let { TexPacks.htsWhole(it) } == true
     /** The PNG copy is in place (the core builds the .hts from it at the game's next start). */
     fun isCopied(p: TexPack) = File(convDir(p), "copied").isFile
 
     /**
-     * Copies [p]'s PNGs into its conversion folder, [progress] 0..1 as it goes. Null when done, else why not (no space,
-     * the folder can't be read). The core turns them into the .hts at the game's next start.
+     * Copies [p]'s PNGs into its conversion folder as `<romName>/...` ([romName] the game's header name exactly: the core
+     * looks for that folder on a file system where case counts), [progress] 0..1 as it goes. Null when done, else why
+     * not (no space, the folder can't be read, files that couldn't be copied). The core turns them into the .hts at the
+     * game's next start, in the same storage, so room for both is asked for.
      */
-    fun convert(p: TexPack, progress: (Float) -> Unit): String? {
+    fun convert(p: TexPack, romName: String, progress: (Float) -> Unit): String? {
         val out = convDir(p)
-        val need = p.size + (64L shl 20)
+        val need = 2 * p.size + (64L shl 20)
         val free = dir.apply { mkdirs() }.usableSpace
         if (free < need) return "needs ${TexPacks.sizeLabel(need)}, ${TexPacks.sizeLabel(free)} free"
         val tree = Uri.parse(p.folder)
@@ -204,22 +241,40 @@ class TexPackStore(private val context: Context) {
             DocumentsContract.getDocumentId(Uri.parse(p.id)))
         val files = space.walkOrNull(maxDepth = 6) ?: return "the folder can't be read"
         val pngs = files.filter { (_, e) -> !e.second.isDir && e.second.name.endsWith(".png", ignoreCase = true) }
+        if (pngs.isEmpty()) return "no PNGs found in it"
         val total = pngs.sumOf { it.second.second.size }.coerceAtLeast(1)
         var done = 0L
-        File(out, "copied").delete()
-        for ((path, e) in pngs) {
-            val to = File(out, (listOf(p.packName) + path).joinToString("/"))
+        var failed = 0
+        out.deleteRecursively()
+        for ((n, f) in pngs.withIndex()) {
+            val (path, e) = f
+            if (n % 256 == 255 && folders().none { it.uri == p.folder }) { out.deleteRecursively(); return "its folder was removed" }
+            val to = File(out, (listOf(romName) + path).joinToString("/"))
             to.parentFile?.mkdirs()
             val ok = try {
                 context.contentResolver.openInputStream(space.documentUri(e.first))?.use { i -> to.outputStream().use { o -> i.copyTo(o, 1 shl 16) } } != null
             } catch (x: Exception) { false }
-            if (!ok) { JLog.w(TAG, "texture packs: can't copy ${e.second.name}"); continue }
+            if (!ok) { failed++; JLog.w(TAG, "texture packs: can't copy ${e.second.name}"); continue }
             done += e.second.size
             progress(done.toFloat() / total)
+        }
+        if (failed > 0) {
+            // A part copy would become a part pack for good (the PNGs go once the .hts is made): none, and it's tried again.
+            out.deleteRecursively()
+            JLog.w(TAG, "texture packs: $failed of ${pngs.size} PNGs of ${p.shown} couldn't be copied")
+            return "$failed of ${pngs.size} files couldn't be copied"
         }
         File(out, "copied").writeText(p.id)
         JLog.i(TAG, "texture packs: ${pngs.size} PNGs of ${p.shown} copied for converting, ${TexPacks.sizeLabel(done)}")
         return null
+    }
+
+    /** Names [p]'s PNG copy and .hts after [romName] exactly (a game whose header name differs in case from the pack's). */
+    private fun nameFor(p: TexPack, romName: String) {
+        convDir(p).listFiles()?.forEach { f ->
+            val want = if (f.isDirectory) romName else if (f.name.endsWith(TexPacks.SUFFIX)) romName + TexPacks.SUFFIX else return@forEach
+            if (f.name != want && !f.renameTo(File(f.parentFile, want))) JLog.w(TAG, "texture packs: can't rename ${f.name} to $want")
+        }
     }
 
     /** Removes the PNG copies of conversions whose .hts is whole (each game start calls it). */
@@ -234,56 +289,65 @@ class TexPackStore(private val context: Context) {
 
     // ---- The game screen ---------------------------------------------------------------------------------------
 
-    /** What [prepare] set up: the folder for N64_RDP_TEXPACK, and the pack. */
-    data class Ready(val dir: File, val pack: TexPack)
+    /** What [prepare] made of a pack: ready for the core, or why not. */
+    sealed interface Prep
+    /** The folder for N64_RDP_TEXPACK, and the pack. */
+    data class Ready(val dir: File, val pack: TexPack) : Prep
+    data class NotReady(val why: Why) : Prep
+    enum class Why {
+        /** The folder's grant is gone, the SD card is out, or Android won't let the core open the file. */
+        Unreachable,
+        /** The .hts isn't one the core can load (another format, or one GLideN64 never finished writing). */
+        NotAPack,
+        /** A PNG pack whose copy isn't done (or failed: TexConvert.failed says why). */
+        NotCopied,
+    }
 
     /**
-     * Gets [p] ready for the core: a .hts is opened through its folder's grant and linked as `run/<name>_HIRESTEXTURES.hts`
-     * (the descriptor stays open for the process); a PNG pack runs from its conversion folder. Null when it can't be read
-     * (the caller says so: the folder's grant is gone or the SD card is out).
+     * Gets [p] ready for the core, named after [romName] (the game's header name exactly: the core looks for
+     * `<romName>_HIRESTEXTURES.hts` or `<romName>/` where case counts, while packs are matched without it). A .hts is
+     * opened through its folder's grant and linked as `run/<romName>_HIRESTEXTURES.hts` (the descriptor stays open for
+     * the process), then read back through the link as the core will read it, and checked to load whole (else GLideN64
+     * would write an empty cache over it); a PNG pack runs from its conversion folder.
      */
-    fun prepare(p: TexPack): Ready? {
-        heldFd?.let { try { it.close() } catch (e: Exception) {} }
-        heldFd = null
+    fun prepare(p: TexPack, romName: String): Prep {
+        release()
         if (p.png) {
-            val d = convDir(p)
-            return if (isConverted(p) || isCopied(p)) Ready(d, p) else null
+            nameFor(p, romName)
+            return if (isConverted(p) || isCopied(p)) Ready(convDir(p), p) else NotReady(Why.NotCopied)
         }
         val run = File(dir, "run")
         run.deleteRecursively(); run.mkdirs()
         val pfd = try { context.contentResolver.openFileDescriptor(Uri.parse(p.id), "r") } catch (e: Exception) { JLog.w(TAG, "texture packs: can't open ${p.file}: $e"); null }
-            ?: return null
+            ?: return NotReady(Why.Unreachable)
         heldFd = pfd
-        return try {
-            android.system.Os.symlink("/proc/self/fd/${pfd.fd}", File(run, p.packName + TexPacks.SUFFIX).path)
-            Ready(run, p)
-        } catch (e: Exception) { JLog.w(TAG, "texture packs: can't link ${p.file}: $e"); null }
+        val link = File(run, romName + TexPacks.SUFFIX)
+        val why = try {
+            android.system.Os.symlink("/proc/self/fd/${pfd.fd}", link.path)
+            if (TexPacks.htsLoadable(link)) null else { JLog.w(TAG, "texture packs: ${p.file} isn't a pack the core loads whole"); Why.NotAPack }
+        } catch (e: Exception) { JLog.w(TAG, "texture packs: can't read ${p.file} through its link: $e"); Why.Unreachable }
+        if (why == null) return Ready(run, p)
+        release()
+        run.deleteRecursively()
+        return NotReady(why)
     }
 
-    /** The picture with the pack ("pack") or the game's own ("own") for [packName]; taken in play (Joey 2026-11-15). */
-    fun shot(packName: String, which: String) = File(shots, com.joeysretro.joey64.controls.ControlsStore.safe(packName) + "-" + which + ".png")
+    private fun release() {
+        heldFd?.let { try { it.close() } catch (e: Exception) {} }
+        heldFd = null
+    }
+
+    /** [p]'s picture with it ("pack") or the game's own ("own"); taken in play (Joey 2026-11-15). By pack, so two packs for one game keep their own. */
+    fun shot(p: TexPack, which: String) = File(shots, Integer.toHexString(p.id.hashCode()) + "-" +
+        com.joeysretro.joey64.controls.ControlsStore.safe(p.packName) + "-" + which + ".png")
 
     private fun writeFolders(list: List<Folder>) = writeJson(foldersFile, JSONObject().put("folders",
         JSONArray(list.map { JSONObject().put("uri", it.uri).put("name", it.name) })))
     private fun writeIndex(list: List<TexPack>) = writeJson(indexFile, JSONObject().put("packs", JSONArray(list.map { it.toJson() })))
 
-    private fun displayName(uri: Uri): String? = try {
-        val doc = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
-        context.contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0) else null
-        }
-    } catch (e: Exception) { null }
-
-    private fun readJson(f: File): JSONObject? = try { if (f.isFile) JSONObject(f.readText()) else null } catch (e: Exception) { null }
-
-    private fun writeJson(f: File, o: JSONObject) {
-        try {
-            f.parentFile?.mkdirs()
-            val part = File(f.parentFile, f.name + ".part")
-            part.writeText(o.toString())
-            if (!part.renameTo(f)) { f.delete(); part.renameTo(f) }
-        } catch (e: Exception) { JLog.e(TAG, "can't write ${f.name}: $e") }
-    }
+    private fun displayName(uri: Uri): String? = StoreFiles.treeName(context, uri)
+    private fun readJson(f: File): JSONObject? = StoreFiles.readJson(f)
+    private fun writeJson(f: File, o: JSONObject) = StoreFiles.writeJson(f, o, TAG)
 
     companion object {
         private const val TAG = "Joey64TexPacks"

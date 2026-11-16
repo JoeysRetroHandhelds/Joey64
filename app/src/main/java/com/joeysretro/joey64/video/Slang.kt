@@ -291,23 +291,9 @@ class SlangStore(private val context: Context) {
         if (value in m) writeJson(failedFile, JSONObject((m - value) as Map<*, *>))
     }
 
-    private fun displayName(uri: Uri): String? = try {
-        val doc = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
-        context.contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0) else null
-        }
-    } catch (e: Exception) { null }
-
-    private fun readJson(f: File): JSONObject? = try { if (f.isFile) JSONObject(f.readText()) else null } catch (e: Exception) { null }
-
-    private fun writeJson(f: File, o: JSONObject) {
-        try {
-            f.parentFile?.mkdirs()
-            val part = File(f.parentFile, f.name + ".part")
-            part.writeText(o.toString())
-            if (!part.renameTo(f)) { f.delete(); part.renameTo(f) }
-        } catch (e: Exception) { JLog.e(TAG, "can't write ${f.name}: $e") }
-    }
+    private fun displayName(uri: Uri): String? = StoreFiles.treeName(context, uri)
+    private fun readJson(f: File): JSONObject? = StoreFiles.readJson(f)
+    private fun writeJson(f: File, o: JSONObject) = StoreFiles.writeJson(f, o, TAG)
 
     private companion object { const val TAG = "Joey64Video" }
 }

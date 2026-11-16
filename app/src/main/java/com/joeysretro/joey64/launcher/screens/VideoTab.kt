@@ -163,9 +163,12 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     }
 
     // Texture packs (approved mockup 2026-11-15; TexPackScreens.kt): folders and packs read off the main thread, again after a folder changes.
+    // The last scan shows at once; the folders are then looked through again, so packs put in a folder later are found.
     var texVersion by remember { mutableIntStateOf(0) }
     val tex by androidx.compose.runtime.produceState(TexState.EMPTY, target, texVersion) {
-        value = withContext(Dispatchers.IO) { readTexState(context, target, rescan = texVersion > 0) }
+        val first = withContext(Dispatchers.IO) { readTexState(context, target, rescan = texVersion > 0) }
+        value = first
+        if (!first.scanned && first.folders.isNotEmpty()) value = withContext(Dispatchers.IO) { readTexState(context, target, rescan = true) }
     }
     var texFolder by remember { mutableStateOf<com.joeysretro.joey64.video.TexPackStore.Folder?>(null) }
     var texPopup by remember { mutableStateOf(false) }

@@ -65,6 +65,22 @@ class TexPacksTest {
         assertFalse(TexPacks.htsWhole(File("no such file")))
     }
 
+    @Test fun htsLoadableAsTheCoreLoadsIt() {
+        fun file(version: Int, config: Int, pos: Long, entries: Int, oldFormat: Boolean = false): File = File.createTempFile("pack", ".hts").apply {
+            deleteOnExit()
+            val b = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
+            if (oldFormat) b.putInt(config).putLong(pos) else b.putInt(version).putInt(config).putLong(pos)
+            b.position(pos.toInt().coerceIn(0, 60)); b.putInt(entries)
+            writeBytes(b.array())
+        }
+        assertTrue(TexPacks.htsLoadable(file(0x08000000, 0x123, 40, 3)))
+        assertTrue(TexPacks.htsLoadable(file(0, 0x123, 40, 3, oldFormat = true))) // GLideN64's older header (no version)
+        assertFalse(TexPacks.htsLoadable(file(0x08000000, -1, 16, 3)))  // still being written
+        assertFalse(TexPacks.htsLoadable(file(0x08000000, 0x123, 40, 0))) // no entries
+        assertFalse(TexPacks.htsLoadable(file(0x08000000, 0x123, 4000, 3))) // index past the end
+        assertFalse(TexPacks.htsLoadable(file(0x08000000, 0x123, 8, 3)))  // index inside the header
+    }
+
     @Test fun packNameAsGlideN64FilesIt() {
         fun name(s: String) = RomReader.packNameOf(s.toByteArray(Charsets.ISO_8859_1).copyOf(20))
         assertEquals("GOLDENEYE", name("GOLDENEYE           "))

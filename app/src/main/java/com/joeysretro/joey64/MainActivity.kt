@@ -1131,15 +1131,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         return com.joeysretro.joey64.video.ExtrasOn.of(x, v, com.joeysretro.joey64.achievements.RaHardcore.on())
     }
 
-    /** [rom]'s header name as texture packs are filed (RomHeader.packName), or null. */
-    private fun romPackName(rom: String): String? = if (rom.isEmpty()) null else try {
+    /** [rom]'s header (game code, cheat keys, pack name), or null ("" a 64DD disk with no cartridge, or unreadable: logged under [what]). */
+    private fun romHeader(rom: String, what: String): com.joeysretro.joey64.launcher.library.RomHeader? = if (rom.isEmpty()) null else try {
         val buf = File(rom).inputStream().use { i -> ByteArray(0x40).also { b -> if (i.read(b) < b.size) throw java.io.IOException("short ROM") } }
         val order = com.joeysretro.joey64.launcher.library.RomByteOrder.of(buf) ?: throw java.io.IOException("not an N64 ROM")
         order.toBigEndian(buf, buf.size)
-        com.joeysretro.joey64.launcher.library.RomReader.parseHeader(buf).packName.takeIf { it.isNotEmpty() }
+        com.joeysretro.joey64.launcher.library.RomReader.parseHeader(buf)
     } catch (e: Exception) {
-        JLog.e(TAG, "texture packs: can't read the ROM header: $e"); null
+        JLog.e(TAG, "$what: can't read the ROM header: $e"); null
     }
+
+    /** [rom]'s header name as texture packs are filed (RomHeader.packName), or null. */
+    private fun romPackName(rom: String): String? = romHeader(rom, "texture packs")?.packName?.takeIf { it.isNotEmpty() }
 
     /** The pack this play uses (null: none), and its name for the picture taken in play. */
     private var texPack: com.joeysretro.joey64.video.TexPack? = null
@@ -1157,29 +1160,50 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         store.finishConversions()
         val index = store.index() ?: return
         val pick = com.joeysretro.joey64.video.TexPacks.pick(index, name, video[com.joeysretro.joey64.video.VideoKey.TexPack]) ?: return
-        val ready = store.prepare(pick)
-        val p = if (ready == null) {
-            JLog.w(TAG, "texture packs: ${pick.file} can't be read, playing without it")
-            InGamePopup("texpack", InGamePopup.Kind.TexPackNote, "Texture packs folder can't be reached", "Playing with the game's own textures",
-                "Pick it again in Settings › Video › Texture packs")
-        } else {
-            android.system.Os.setenv("N64_RDP_TEXPACK", ready.dir.path, true)
-            texPack = pick
-            JLog.i(TAG, "texture packs: ${pick.shown} (${pick.file}, ${com.joeysretro.joey64.video.TexPacks.sizeLabel(pick.size)}) for $name" +
-                if (pick.png && !store.isConverted(pick)) ", converting it this play" else "")
-            if (!store.shot(name, "pack").isFile) fpsHandler.postDelayed({ texShot(name) }, TEXPACK_SHOT_MS)
-            InGamePopup("texpack", InGamePopup.Kind.TexPack, "Texture pack", pick.shown,
-                if (pick.png && !store.isConverted(pick)) "Getting it ready: HD textures come in after a while" else "HD textures come in as you play",
-                stayMs = 4_000)
+        val ready = store.prepare(pick, name)
+        val note = { title: String, line: String ->
+            InGamePopup("texpack", InGamePopup.Kind.TexPackNote, title, "Playing with the game's own textures", line)
+        }
+        val p = when (ready) {
+            is com.joeysretro.joey64.video.TexPackStore.Ready -> {
+                android.system.Os.setenv("N64_RDP_TEXPACK", ready.dir.path, true)
+                texPack = pick
+                val building = pick.png && !store.isConverted(pick)
+                JLog.i(TAG, "texture packs: ${pick.shown} (${pick.file}, ${com.joeysretro.joey64.video.TexPacks.sizeLabel(pick.size)}) for $name" +
+                    if (building) ", converting it this play" else "")
+                // The picture waits for a play with the pack whole (while it's converted, HD textures aren't in yet).
+                if (!building && !store.shot(pick, "pack").isFile) fpsHandler.postDelayed({ texShot(pick) }, TEXPACK_SHOT_MS)
+                InGamePopup("texpack", InGamePopup.Kind.TexPack, "Texture pack", pick.shown,
+                    if (building) "Getting it ready: HD textures come in after a while" else "HD textures come in as you play",
+                    stayMs = 4_000)
+            }
+            is com.joeysretro.joey64.video.TexPackStore.NotReady -> when (ready.why) {
+                com.joeysretro.joey64.video.TexPackStore.Why.NotCopied -> {
+                    // Why the last try failed (read before a new try clears it), then copy it now for a later start.
+                    val why = com.joeysretro.joey64.launcher.screens.TexConvert.failed[pick.id]
+                    com.joeysretro.joey64.launcher.screens.TexConvert.startFor(this, listOf(pick), mapOf(name.uppercase() to name))
+                    JLog.w(TAG, "texture packs: ${pick.shown} isn't copied yet${why?.let { " ($it)" } ?: ""}, playing without it")
+                    if (why != null) note("Texture pack can't be converted", why)
+                    else note("Texture pack is still being copied", "HD textures come in at a later start")
+                }
+                com.joeysretro.joey64.video.TexPackStore.Why.NotAPack -> {
+                    JLog.w(TAG, "texture packs: ${pick.file} doesn't load, playing without it")
+                    note("Texture pack can't be read", "${pick.file} isn't a whole GLideN64 pack")
+                }
+                com.joeysretro.joey64.video.TexPackStore.Why.Unreachable -> {
+                    JLog.w(TAG, "texture packs: ${pick.file} can't be read, playing without it")
+                    note("Texture packs folder can't be reached", "Pick it again in Settings › Video › Texture packs")
+                }
+            }
         }
         overlay?.show(p) ?: earlyPops.add(p)
     }
 
-    /** Keeps this frame as [name]'s picture with its pack, off the main thread; skipped while paused or in a menu. */
-    private fun texShot(name: String) {
+    /** Keeps this frame as [pack]'s picture with it, off the main thread; skipped while paused or in a menu. */
+    private fun texShot(pack: com.joeysretro.joey64.video.TexPack) {
         if (destroyed || !gameLoaded || texPack == null) return
-        if (!resumed || menuOpen || hotkeyPaused) { fpsHandler.postDelayed({ texShot(name) }, 15_000); return }
-        val f = com.joeysretro.joey64.video.TexPackStore(this).shot(name, "pack")
+        if (!resumed || menuOpen || hotkeyPaused) { fpsHandler.postDelayed({ texShot(pack) }, 15_000); return }
+        val f = com.joeysretro.joey64.video.TexPackStore(this).shot(pack, "pack")
         Thread {
             val png = com.joeysretro.joey64.states.FramePicture.capturePng(1500, 640) ?: return@Thread
             try { f.parentFile?.mkdirs(); val part = File(f.path + ".part"); part.writeBytes(png); part.renameTo(f) } catch (e: Exception) { JLog.e(TAG, "texture packs: picture: $e") }
@@ -1187,14 +1211,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     /** [rom]'s header game code ("NDOE"), or null ("" a 64DD disk with no cartridge, or unreadable). */
-    private fun romGameCode(rom: String): String? = if (rom.isEmpty()) null else try {
-        val buf = File(rom).inputStream().use { i -> ByteArray(0x40).also { b -> if (i.read(b) < b.size) throw java.io.IOException("short ROM") } }
-        val order = com.joeysretro.joey64.launcher.library.RomByteOrder.of(buf) ?: throw java.io.IOException("not an N64 ROM")
-        order.toBigEndian(buf, buf.size)
-        com.joeysretro.joey64.launcher.library.RomReader.parseHeader(buf).gameCode
-    } catch (e: Exception) {
-        JLog.e(TAG, "emulation: can't read the ROM header: $e"); null
-    }
+    private fun romGameCode(rom: String): String? = romHeader(rom, "emulation")?.gameCode
 
     /**
      * README item 36 (shipped block lists): a game with no block list of its own yet starts from the one in
@@ -1216,15 +1233,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     /** The cheat lists' keys for [rom]'s header ("" a 64DD disk with no cartridge: none). */
-    private fun headerKeys(rom: String): List<String> = if (rom.isEmpty()) emptyList() else try {
-        val buf = File(rom).inputStream().use { i -> ByteArray(0x40).also { b -> if (i.read(b) < b.size) throw java.io.IOException("short ROM") } }
-        val order = com.joeysretro.joey64.launcher.library.RomByteOrder.of(buf) ?: throw java.io.IOException("not an N64 ROM")
-        order.toBigEndian(buf, buf.size)
-        com.joeysretro.joey64.cheats.CheatLogic.keys(com.joeysretro.joey64.cheats.CheatLogic.keyOf(
-            com.joeysretro.joey64.launcher.library.RomReader.parseHeader(buf)))
-    } catch (e: Exception) {
-        JLog.e(TAG, "cheats: can't read the ROM header: $e"); emptyList()
-    }
+    private fun headerKeys(rom: String): List<String> = romHeader(rom, "cheats")?.let { h ->
+        try { com.joeysretro.joey64.cheats.CheatLogic.keys(com.joeysretro.joey64.cheats.CheatLogic.keyOf(h)) }
+        catch (e: Exception) { JLog.e(TAG, "cheats: can't key the ROM header: $e"); null }
+    } ?: emptyList()
 
     /** Settings › Video for the game this screen was started for (onCreate), then as Game settings changes it in game. */
     private var video = com.joeysretro.joey64.video.VideoSettings.DEFAULTS
