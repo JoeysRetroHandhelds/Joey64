@@ -53,6 +53,30 @@ object PadDevices {
         return out.takeIf { it != set }
     }
 
+    /**
+     * [set] with each player on this device's own pad moved off the setup Auto map gave before the pad's Xbox/Nintendo
+     * toggle was known (by position, as an Xbox pad: right in the toggle's Xbox position only), or null when none is.
+     * Only a player whose face buttons are still exactly that setup's moves: their A/B/X/Y codes are swapped, so each
+     * N64 button stays on the button it was on in the Xbox position. For the RG477M's sets from before 2026-11-16.
+     */
+    fun fixToggleFace(set: ControlsSet): ControlsSet? {
+        val d = builtIn() ?: return null
+        if (Controllers.profile(d).toggle == null) return null
+        val old = autoSetup(d, DeviceChoice.BuiltIn, face = AutoMap.FaceCodes.POSITION)
+        val faceKeys = setOf(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y)
+        fun faceOf(s: PlayerSetup) = s.buttons.filterValues { it is PadInput.Key && it.code in faceKeys }
+        val swap = mapOf(KeyEvent.KEYCODE_BUTTON_A to KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BUTTON_B to KeyEvent.KEYCODE_BUTTON_A,
+            KeyEvent.KEYCODE_BUTTON_X to KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_BUTTON_Y to KeyEvent.KEYCODE_BUTTON_X)
+        var out = set
+        for (i in 0..3) {
+            val p = set.players[i]
+            if (p.device != DeviceChoice.BuiltIn || faceOf(p) != faceOf(old) || faceOf(p).isEmpty()) continue
+            val moved = p.buttons.mapValues { (_, v) -> if (v is PadInput.Key && v.code in swap) PadInput.Key(swap.getValue(v.code)) else v }
+            out = out.with(i, p.copy(buttons = moved))
+        }
+        return out.takeIf { it != set }
+    }
+
     fun face(d: InputDevice?): AutoMap.FaceCodes =
         if (Controllers.profile(d).faceCodes == Controllers.FaceCodes.NINTENDO_LABELS) AutoMap.FaceCodes.NINTENDO_LABELS
         else AutoMap.FaceCodes.POSITION
@@ -77,8 +101,7 @@ object PadDevices {
      * the ID has several; the Controls page asks for the press), else by position. Stick, dead zone and
      * pak stay [keep]'s.
      */
-    fun autoSetup(d: InputDevice?, choice: DeviceChoice, keep: PlayerSetup? = null): PlayerSetup {
-        val face = face(d)
+    fun autoSetup(d: InputDevice?, choice: DeviceChoice, keep: PlayerSetup? = null, face: AutoMap.FaceCodes = face(d)): PlayerSetup {
         if (noSticks(d)) {
             // No sticks: the D-pad is the stick whatever [keep] had.
             val s = AutoMap.stickless(choice, face)

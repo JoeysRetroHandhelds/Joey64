@@ -118,6 +118,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         com.joeysretro.joey64.video.ScreenRefresh.update(this)
         super.onCreate(savedInstanceState)
         LogFiles.start(this, intent)
+        Controllers.init(this)
         if (gameLoaded && hasRom(intent)) { switching = true; afterLauncherSaved { if (!isDestroyed) switchGame() }; return }
         // A start with no ROM while a game is up (another app starting this exported screen bare): the setup below
         // would reload the core under the running game and end it with no quit save (code audit 4, A-H1, Thor). This
@@ -3211,6 +3212,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (!controlsStore.hasAll()) controlsStore.saveAll(PadDevices.firstSet(com.joeysretro.joey64.launcher.layout.Tv.isTv(this)))
         // A set made before stickless pads were known: moved to the stickless setup once (approved mockup 2026-11-13).
         else PadDevices.fixStickless(controlsStore.all())?.let { controlsStore.saveAll(it); JLog.i(TAG, "controls: this device has no sticks, moved to the stickless setup") }
+        // A set Auto map made before this pad's Xbox/Nintendo toggle was known: moved once (Controllers.faceKey).
+        if (controlsStore.hasAll()) PadDevices.fixToggleFace(controlsStore.all())?.let { controlsStore.saveAll(it); JLog.i(TAG, "controls: this pad's layout toggle is read now, its old Auto map moved") }
         controls = controlsStore.forGame(saveName.ifEmpty { null })
         hotkeys = controlsStore.hotkeys()
         applyRewind()
@@ -3461,7 +3464,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         stickCals[id]?.let { padDeviceId = id; return it }
         padDeviceId = id
         val profile = Controllers.profile(dev)
-        JLog.i(TAG, "Pad: ${dev?.name} (" + "%04x:%04x".format(dev?.vendorId ?: 0, dev?.productId ?: 0) + "), profile ${profile.name}")
+        JLog.i(TAG, "Pad: ${dev?.name} (" + "%04x:%04x".format(dev?.vendorId ?: 0, dev?.productId ?: 0) + "), profile ${profile.name}" +
+            (profile.toggle?.let { ", layout toggle " + (if (Controllers.toggleXbox(profile)) "Xbox" else "Nintendo") + " (${it.first})" } ?: ""))
         return Controllers.StickCal(dev?.descriptor ?: "unknown", profile.stickReach, stickPrefs).also { stickCals[id] = it }
     }
 
@@ -3541,7 +3545,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (event.action == KeyEvent.ACTION_DOWN && (KeyEvent.isGamepadButton(event.keyCode) ||
                 event.source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD)) touch?.controllerUsed()
         val inGame = states != null && overlay != null && mine
-        val code = event.keyCode
+        // A pad with an Xbox/Nintendo toggle (the RG477M): its Xbox position's codes as its Nintendo position sends them.
+        val code = Controllers.faceKey(event.device, event.keyCode)
         val down = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
         // The pause menu's button on its own (Back by default) opens it on release (the menu's window would get the release otherwise).
         if (inGame && hotkeys.isAlone(HotkeyAction.PauseMenu) && code == hotkeys.keys[HotkeyAction.PauseMenu]) {

@@ -41,7 +41,8 @@ object PadCapture {
         if (!takes(e.keyCode)) return null
         if (e.action != KeyEvent.ACTION_DOWN || e.repeatCount != 0) return null
         swallowUp = e.keyCode
-        return PadInput.Key(e.keyCode)
+        // A pad with an Xbox/Nintendo toggle is saved as its Nintendo position sends it (Controllers.faceKey).
+        return PadInput.Key(com.joeysretro.joey64.Controllers.faceKey(e.device, e.keyCode))
     }
 
     /** A hat D-pad press, as the D-pad key it is (no rest or release wait: it's a button). */

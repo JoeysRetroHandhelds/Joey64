@@ -128,6 +128,7 @@ class LauncherActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         com.joeysretro.joey64.video.ScreenRefresh.update(this)
         super.onCreate(savedInstanceState)
+        com.joeysretro.joey64.Controllers.init(this)
         // The session log (files/logs) starts here when the app opens to the launcher, so first run, the
         // import and library reads are in what a tester sends, not only what happens once a game is up.
         LogFiles.start(this, intent)

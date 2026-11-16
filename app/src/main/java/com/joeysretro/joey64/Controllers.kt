@@ -14,19 +14,60 @@ import android.view.KeyEvent
 object Controllers {
     enum class FaceCodes { POSITION, NINTENDO_LABELS }
 
-    /** [stickReach]: the starting guess for how far each stick direction reaches (0..1); calibration learns the real value. */
-    class Profile(val name: String, val faceCodes: FaceCodes, val stickReach: Float)
+    /**
+     * [stickReach]: the starting guess for how far each stick direction reaches (0..1); calibration learns the real value.
+     * [toggle]: the Settings.System key of the device's Xbox/Nintendo layout toggle and its Xbox value, when it has one.
+     */
+    class Profile(val name: String, val faceCodes: FaceCodes, val stickReach: Float, val toggle: Pair<String, String>? = null)
 
     val DEFAULT = Profile("generic", FaceCodes.POSITION, 0.9f)
 
     // By USB vendor/product id. Odin 3 built-in pad: "Odin Controller", 2020:0111; its stick reached
     // 77% forward and 93% back in getevent.
+    // Anbernic RG477M built-in pad "retrogame_joypad", 484b:1101 (Joey 2026-11-16, getevent both ways, results/abxy):
+    // Nintendo labels (A right, B bottom, X top, Y left); its toggle's NS position sends them by label (A = BTN_SOUTH,
+    // BUTTON_A), its Xbox position swaps A/B and X/Y (A = BTN_EAST) and sets Settings.System abxy_mode=1 (0, or no key
+    // before the first flip, in NS). [faceKey] turns the Xbox position's codes back into the NS position's, so a setup
+    // (Auto map's or a hand-made one) keeps each N64 button on the same physical button whichever way the toggle is.
     private val KNOWN = mapOf(
         (0x2020 shl 16) or 0x0111 to Profile("AYN Odin 3", FaceCodes.NINTENDO_LABELS, 0.75f),
+        (0x484b shl 16) or 0x1101 to Profile("Anbernic RG477M", FaceCodes.NINTENDO_LABELS, 0.9f, "abxy_mode" to "1"),
     )
 
     fun profile(dev: InputDevice?): Profile =
         dev?.let { KNOWN[(it.vendorId shl 16) or it.productId] } ?: DEFAULT
+
+    @Volatile private var resolver: android.content.ContentResolver? = null
+    @Volatile private var toggleRead = 0L
+    @Volatile private var toggleValue: String? = null
+
+    /** Gives [faceKey] the settings to read; the launcher and the game screen call it in onCreate. */
+    fun init(context: android.content.Context) { resolver = context.applicationContext.contentResolver }
+
+    /** Whether [p]'s toggle is in its Xbox position now (read at most twice a second, so a flip in game counts). */
+    fun toggleXbox(p: Profile): Boolean {
+        val t = p.toggle ?: return false
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - toggleRead > 500) {
+            toggleRead = now
+            toggleValue = try { resolver?.let { android.provider.Settings.System.getString(it, t.first) } }
+                catch (e: Exception) { null }
+        }
+        return toggleValue == t.second
+    }
+
+    /** [keyCode] from [dev] as its toggle's Nintendo position sends it: A/B and X/Y swapped back in the Xbox position. */
+    fun faceKey(dev: InputDevice?, keyCode: Int): Int {
+        val p = profile(dev)
+        if (p.toggle == null || !toggleXbox(p)) return keyCode
+        return when (keyCode) {
+            KeyEvent.KEYCODE_BUTTON_A -> KeyEvent.KEYCODE_BUTTON_B
+            KeyEvent.KEYCODE_BUTTON_B -> KeyEvent.KEYCODE_BUTTON_A
+            KeyEvent.KEYCODE_BUTTON_X -> KeyEvent.KEYCODE_BUTTON_Y
+            KeyEvent.KEYCODE_BUTTON_Y -> KeyEvent.KEYCODE_BUTTON_X
+            else -> keyCode
+        }
+    }
 
     private const val BOTTOM = 0
     private const val RIGHT = 1
