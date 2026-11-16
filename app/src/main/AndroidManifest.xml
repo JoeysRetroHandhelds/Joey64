@@ -15,6 +15,11 @@
     <!-- the low-latency Wi-Fi lock while in a netplay room (MainActivity.netWifiLock) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Texture packs (approved mockup texpacks4, 2026-11-15): PNG packs are converted in the background, outside
+         play, with a notification showing how far (TexConvertService); notifications are asked for once. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:label="Joey64"
@@ -98,5 +103,11 @@
                 <action android:name="${applicationId}.action.CLEAR_RETROACHIEVEMENTS_HOST_OVERRIDE" />
             </intent-filter>
         </receiver>
+        <!-- Its own process: the core is opened there to make packs, never next to a running game. -->
+        <service
+            android:name=".video.TexConvertService"
+            android:process=":texconv"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

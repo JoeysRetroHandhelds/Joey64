@@ -175,6 +175,15 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     val texPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) { com.joeysretro.joey64.video.TexPackStore(context).addFolder(uri); texVersion++ }
     }
+    // PNG packs converting in the background (approved mockup texpacks4): their bars move while shown, and the first time
+    // one starts, notifications are asked for once (screen 1).
+    val texConverting = tex.index.filter { tex.converting(it) }
+    TexConvPoll(texConverting.isNotEmpty())
+    var texAsk by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(texConverting.isNotEmpty()) {
+        if (texConverting.isNotEmpty() && withContext(Dispatchers.IO) { com.joeysretro.joey64.video.TexConvert.shouldAsk(context) }) texAsk = true
+    }
+    val notifyAsk = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
     val texInfo = if (target == null) texAllPanel(tex, v[VideoKey.TexPack], { set(VideoKey.TexPack, it) }, { texFolder = it }, { texPicker.launch(null) })
         else texGamePanel(context, tex, v[VideoKey.TexPack], target) { set(VideoKey.TexPack, it) }
 
@@ -313,6 +322,13 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         }
     }
 
+    if (texAsk && texConverting.isNotEmpty()) {
+        TexNotifyAsk(texConverting.first(), onShow = {
+            com.joeysretro.joey64.video.TexConvert.asked(context); texAsk = false
+            notifyAsk.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }) { com.joeysretro.joey64.video.TexConvert.asked(context); texAsk = false }
+        return
+    }
     texFolder?.let { f -> TexFolderPopup(tex, f, onDismiss = { texFolder = null }) { removeTexFolder(context, f.uri) { texVersion++ }; texFolder = null }; return }
     if (texPopup) { TexInfoPopup(texInfo) { texPopup = false }; return }
     when (val p = popup) {

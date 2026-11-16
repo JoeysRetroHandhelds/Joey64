@@ -3,6 +3,9 @@ package com.joeysretro.joey64.launcher.screens
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +16,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -37,9 +39,9 @@ import com.joeysretro.joey64.launcher.theme.JoeyTheme
 import com.joeysretro.joey64.video.TexPack
 import com.joeysretro.joey64.video.TexPackStore
 import com.joeysretro.joey64.video.TexPacks
+import com.joeysretro.joey64.video.TexConvert
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -68,8 +70,8 @@ data class TexState(
     companion object { val EMPTY = TexState(emptyList(), emptyList(), emptyMap(), null) }
 }
 
-/** A PNG pack's conversion: the .hts's size once whole, and whether the PNG copy is done. */
-data class TexConv(val htsSize: Long?, val copied: Boolean)
+/** A PNG pack's conversion as last read: the .hts once whole (its name and size), and whether an older core left it for the game to make. */
+data class TexConv(val htsName: String?, val htsSize: Long?, val gameMakesIt: Boolean)
 
 /** Reads the folders and packs (scanning when [rescan] or there's no index yet), the library's names, and [target]'s own. Off the main thread. */
 fun readTexState(context: Context, target: String?, rescan: Boolean): TexState {
@@ -80,57 +82,89 @@ fun readTexState(context: Context, target: String?, rescan: Boolean): TexState {
     val library = try { db.libraryGames().filter { !it.packName.isNullOrEmpty() } } catch (e: Exception) { emptyList() }
     val games = library.groupBy({ it.packName!!.uppercase() }, { it.title })
     val name = target?.let { t -> try { db.gameWithFile(t, com.joeysretro.joey64.states.GameStates::saveNameOf)?.packName } catch (e: Exception) { null } }
-    TexConvert.startFor(context, index, library.associate { it.packName!!.uppercase() to it.packName!! })
+    // PNG packs for library games are converted in the background (approved mockup texpacks4).
+    TexConvert.kick(context)
+    TexConvert.refresh(context)
     val conv = index.filter { it.png }.associate { p ->
-        p.id to TexConv(store.converted(p)?.takeIf { TexPacks.htsWhole(it) }?.length(), store.isCopied(p))
+        val hts = store.converted(p)?.takeIf { TexPacks.htsWhole(it) }
+        p.id to TexConv(hts?.name, hts?.length(), store.isCopied(p))
     }
     return TexState(store.folders(), index, games, name, conv, scanned = cached == null)
 }
 
-/**
- * PNG packs are converted once (Joey 2026-11-15): their PNGs are copied into Joey64's storage in the background as soon as a
- * pack folder holds one for a library game, and the core makes the .hts from them at the game's next start. One at a
- * time, for the whole process (leaving Settings doesn't stop it). [progress] by pack id, 0..1; [failed] says why not.
- */
-object TexConvert {
-    val progress = mutableStateMapOf<String, Float>()
-    val failed = mutableStateMapOf<String, String>()
-    /** Copies done since the state was read (TexState.conv is from before). */
-    val copied = mutableStateMapOf<String, Boolean>()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val queued = HashSet<String>()
+/** Whether [p] is a PNG pack for a library game still to be converted (its bar shows; the screens poll the status meanwhile). */
+fun TexState.converting(p: TexPack) = p.png && gameFor(p) != null && conv[p.id]?.let { it.htsSize == null && !it.gameMakesIt } != false
 
-    /** [names]: the library's header names, upper-case to as they are (the copy is named exactly as the game's). */
-    fun startFor(context: Context, index: List<TexPack>, names: Map<String, String>) {
-        val store = TexPackStore(context.applicationContext)
-        for (p in index) {
-            val romName = names[p.packName.uppercase()] ?: continue
-            if (!p.png || store.isConverted(p) || store.isCopied(p)) continue
-            synchronized(queued) { if (!queued.add(p.id)) continue }
-            scope.launch {
-                failed.remove(p.id)
-                progress[p.id] = 0f
-                val why = try { store.convert(p, romName) { f -> progress[p.id] = f } } catch (e: Exception) { "$e" }
-                progress.remove(p.id)
-                if (why != null) failed[p.id] = why else copied[p.id] = true
-                synchronized(queued) { queued.remove(p.id) }
-            }
+/** Polls the conversion's status while shown (once a second), so its bar and lines move. */
+@Composable
+fun TexConvPoll(on: Boolean) {
+    val context = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(on) {
+        while (on) {
+            withContext(Dispatchers.IO) { TexConvert.refresh(context) }
+            kotlinx.coroutines.delay(1000)
         }
     }
 }
 
-/** A pack's state line for the panel: PNG packs' conversion, .hts packs nothing. From [s] and TexConvert only (no files read). */
-private fun convLine(s: TexState, p: TexPack): String? {
-    if (!p.png) return null
-    TexConvert.progress[p.id]?.let { return "Copying it to convert: ${(it * 100).toInt()}%" }
-    TexConvert.failed[p.id]?.let { return "Can't convert it: $it" }
-    val conv = s.conv[p.id]
+/** The folder card's line for a PNG pack being converted: "converting, 42%" (approved mockup texpacks4 screen 4), or null. */
+fun texConvShort(s: TexState, p: TexPack): String? {
+    if (!s.converting(p)) return null
+    val st = TexConvert.status.value
+    val cur = st?.cur?.takeIf { st.fresh && it.id == p.id }
     return when {
-        conv?.htsSize != null -> "Converted once into Joey64's storage · ${TexPacks.sizeLabel(conv.htsSize)}"
-        conv?.copied == true || TexConvert.copied[p.id] == true -> "Converted into Joey64's storage the next time the game starts"
-        else -> "A folder of PNGs: Joey64 converts it once into its own storage"
+        cur != null -> "converting, ${cur.percent}%"
+        st?.room?.containsKey(p.id) == true -> "waits for room"
+        else -> "converting"
     }
 }
+
+/** A pack's File line: a PNG pack's .hts once made (texpacks4 screen 2), else the folder of PNGs, or the .hts as it is. */
+private fun fileLine(s: TexState, p: TexPack): String {
+    if (!p.png) return "${p.file} · ${TexPacks.sizeLabel(p.size)}"
+    val c = s.conv[p.id]
+    return if (c?.htsName != null && c.htsSize != null) "${c.htsName} · ${TexPacks.sizeLabel(c.htsSize)}, made from the PNG folder"
+        else "A folder of PNGs · ${TexPacks.sizeLabel(p.size)}"
+}
+
+/**
+ * Under a PNG pack's details while it converts (approved mockup texpacks4, screens 2 and 3): the step and how far, a bar,
+ * what it's doing, and that it stops while you play (or the game it waits for); no room, in orange.
+ */
+@Composable
+private fun TexConvBar(s: TexState, p: TexPack) {
+    val c = JoeyTheme.colors
+    val st = TexConvert.status.value
+    val pad = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH)
+    val cur = st?.cur?.takeIf { st.fresh && it.id == p.id }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp)) {
+        val room = st?.room?.get(p.id)
+        val failed = st?.failed?.get(p.id)
+        when {
+            cur != null -> {
+                Text(androidx.compose.ui.text.buildAnnotatedString {
+                    append("Converting · step ${cur.step} of 2 · ")
+                    pushStyle(androidx.compose.ui.text.SpanStyle(color = c.accent)); append("${cur.percent}%"); pop()
+                }, style = JoeyTheme.type.small, color = c.text, modifier = pad)
+                Box(pad.padding(vertical = 3.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(c.separator)) {
+                    Box(Modifier.fillMaxWidth(cur.percent / 100f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(c.accent))
+                }
+                Text(if (cur.step == 1) "Copying the PNGs · ${gb(cur.done)} of ${gb(cur.total)}"
+                    else "Making the pack file · ${"%,d".format(cur.done)} of ${"%,d".format(cur.total)} textures",
+                    style = JoeyTheme.type.small, color = c.textDim, modifier = pad)
+                if (cur.playing != null) Text("Waiting: you're playing ${cur.playing}", style = JoeyTheme.type.small, color = c.accent, modifier = pad)
+                else Text("Stops while you play, then goes on", style = JoeyTheme.type.small, color = c.textDim, modifier = pad)
+            }
+            room != null -> Text("Needs ${TexPacks.sizeLabel(room.first)}, ${TexPacks.sizeLabel(room.second)} free. Goes on by itself once there's room.",
+                style = JoeyTheme.type.small, color = c.warn, modifier = pad)
+            failed != null -> Text("Can't convert it: $failed. Tried again when Joey64 next opens.", style = JoeyTheme.type.small, color = c.warn, modifier = pad)
+            else -> Text("Converting · waits its turn. Stops while you play, then goes on", style = JoeyTheme.type.small, color = c.textDim, modifier = pad)
+        }
+    }
+}
+
+/** "1.3 GB" (one decimal from 1 GB, else MB), for the copy line. */
+private fun gb(bytes: Long): String = if (bytes >= 1L shl 30) String.format(java.util.Locale.ROOT, "%.1f GB", bytes / (1L shl 30).toDouble()) else "${bytes shr 20} MB"
 
 /** The All games panel (screen 1): On / Off, then PACK FOLDERS with each folder and Add a folder. */
 fun texAllPanel(s: TexState, value: String, onSet: (String) -> Unit, onFolder: (TexPackStore.Folder) -> Unit, onAdd: () -> Unit): PanelInfo {
@@ -174,14 +208,14 @@ fun texGamePanel(context: Context, s: TexState, value: String, target: String, o
         on = value.startsWith(TexPacks.PICK) && inUse == p))
     opts.add("off" to PanelChoice("None", "The game's own textures", on = value == "off"))
     val lines = inUse?.let { p ->
-        listOfNotNull("File" to "${p.file} · ${TexPacks.sizeLabel(p.size)}",
+        listOfNotNull("File" to fileLine(s, p),
             "Made for" to (if (s.packName != null) "${p.packName} · this game's name" else p.packName),
-            "Folder" to (s.folders.firstOrNull { it.uri == p.folder }?.name ?: "A folder no longer picked"),
-            convLine(s, p)?.let { "Converting" to it })
+            "Folder" to (s.folders.firstOrNull { it.uri == p.folder }?.name ?: "A folder no longer picked"))
     } ?: emptyList()
     val top: (@Composable () -> Unit)? = if (inUse == null) null else { { TexPictures(context, target, inUse) } }
+    val bottom: (@Composable () -> Unit)? = if (inUse == null || !s.converting(inUse)) null else { { TexConvBar(s, inUse) } }
     return PanelInfo("Texture pack", if (mine.isEmpty()) "No pack for this game in your pack folders. Add a folder in All games." else
-        "HD textures made for this game. Applies when the game next starts.", opts.map { it.second }, lines, onPick = { i -> onSet(opts[i].first) }, top = top)
+        "HD textures made for this game. Applies when the game next starts.", opts.map { it.second }, lines, onPick = { i -> onSet(opts[i].first) }, top = top, bottom = bottom)
 }
 
 /** Screen 3's two pictures: the game's newest screenshot and the frame kept with its pack, or the line before there are any. */
@@ -244,7 +278,9 @@ fun TexFolderPopup(s: TexState, folder: TexPackStore.Folder, onDismiss: () -> Un
                 modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH, vertical = 6.dp))
             for ((i, p) in packs.withIndex()) {
                 val game = s.gameFor(p)
-                JoeyRow(p.shown, Modifier.initialFocus(i == 0), detail = "${p.file} · ${TexPacks.sizeLabel(p.size)}", enabled = game != null,
+                val detail = if (p.png) "A folder of PNGs · ${TexPacks.sizeLabel(p.size)}" + (texConvShort(s, p)?.let { " · $it" } ?: "")
+                    else "${p.file} · ${TexPacks.sizeLabel(p.size)}"
+                JoeyRow(p.shown, Modifier.initialFocus(i == 0), detail = detail, enabled = game != null,
                     trailing = { _ -> Text(game ?: "No game in your library", style = JoeyTheme.type.small,
                         color = if (game != null) c.accent else c.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis) }) {}
             }
@@ -255,8 +291,9 @@ fun TexFolderPopup(s: TexState, folder: TexPackStore.Folder, onDismiss: () -> Un
 
 /** Gives back a removed folder's grant unless another setting uses it, then rescans. */
 internal fun removeTexFolder(context: Context, uri: String, done: () -> Unit) {
-    TexPackStore(context).removeFolder(uri)
     CoroutineScope(Dispatchers.IO).launch {
+        TexConvert.stopFor(context, uri)
+        TexPackStore(context).removeFolder(uri)
         com.joeysretro.joey64.launcher.storage.RomFolders.releaseIfUnused(context.applicationContext, uri)
         withContext(Dispatchers.Main) { done() }
     }
@@ -280,6 +317,7 @@ fun TexInfoPopup(info: PanelInfo, onDismiss: () -> Unit) {
             }
             for ((label, value) in info.lines) Text("$label: $value", style = JoeyTheme.type.small, color = c.textDim,
                 modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH, vertical = 2.dp))
+            info.bottom?.invoke()
         }
     }
 }
@@ -311,6 +349,23 @@ internal fun TexPanel(saveName: String, onDone: () -> Unit) {
             }
             Text("Used when the game starts again. Leaving Game settings asks \"Restart to use the new settings?\" as other start-up rows do.",
                 style = JoeyTheme.type.note, color = c.textDim, modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH, vertical = 8.dp))
+        }
+    }
+}
+
+/**
+ * Screen 1 of texpacks4: the first time a PNG pack starts converting, once. Show it in notifications brings up Android's
+ * own ask; Not now (or B) doesn't ask again, and the conversion runs the same.
+ */
+@Composable
+fun TexNotifyAsk(p: TexPack, onShow: () -> Unit, onNotNow: () -> Unit) {
+    JoeyDialog(onDismiss = onNotNow, hints = listOf(Hint("A", "Select"), Hint("B", "Not now")), width = 520.dp) {
+        Column {
+            PopupTitle("Converting ${p.shown}", "A folder of PNGs (${TexPacks.sizeLabel(p.size)}) is made into one pack file in Joey64's storage, " +
+                "once. It takes a while and keeps going after you leave Joey64. It stops while you play and goes on after. " +
+                "Joey64 can show how it's going in your notifications.")
+            JoeyRow("Show it in notifications", Modifier.initialFocus(true), detail = "Then Android asks to allow Joey64's notifications") { onShow() }
+            JoeyRow("Not now", detail = "It still converts: Settings › Video › Texture pack shows how far") { onNotNow() }
         }
     }
 }

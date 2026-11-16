@@ -1179,12 +1179,22 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             }
             is com.joeysretro.joey64.video.TexPackStore.NotReady -> when (ready.why) {
                 com.joeysretro.joey64.video.TexPackStore.Why.NotCopied -> {
-                    // Why the last try failed (read before a new try clears it), then copy it now for a later start.
-                    val why = com.joeysretro.joey64.launcher.screens.TexConvert.failed[pick.id]
-                    com.joeysretro.joey64.launcher.screens.TexConvert.startFor(this, listOf(pick), mapOf(name.uppercase() to name))
-                    JLog.w(TAG, "texture packs: ${pick.shown} isn't copied yet${why?.let { " ($it)" } ?: ""}, playing without it")
-                    if (why != null) note("Texture pack can't be converted", why)
-                    else note("Texture pack is still being copied", "HD textures come in at a later start")
+                    // Converting in the background, outside play (approved mockup texpacks4, screen 6): how far, or why it waits.
+                    val st = com.joeysretro.joey64.video.TexConvStatus.read(store)
+                    val room = st?.room?.get(pick.id)
+                    val why = st?.failed?.get(pick.id)
+                    val cur = st?.cur?.takeIf { st.fresh && it.id == pick.id }
+                    JLog.w(TAG, "texture packs: ${pick.shown} isn't converted yet" + (cur?.let { " (${it.percent}%)" } ?: room?.let { " (waits for room)" }
+                        ?: why?.let { " ($it)" } ?: "") + ", playing without it")
+                    // It starts (or goes on) after this game: the conversion waits while a game is played.
+                    Thread { com.joeysretro.joey64.video.TexConvert.kick(applicationContext) }.start()
+                    when {
+                        room != null -> note("Texture pack waits for room", "Needs ${com.joeysretro.joey64.video.TexPacks.sizeLabel(room.first)}, " +
+                            "${com.joeysretro.joey64.video.TexPacks.sizeLabel(room.second)} free")
+                        why != null -> note("Texture pack can't be converted", why)
+                        cur != null -> note("Texture pack isn't ready yet", "Converting it: ${cur.percent}%. It waits while you play")
+                        else -> note("Texture pack isn't ready yet", "Converting it after you play")
+                    }
                 }
                 com.joeysretro.joey64.video.TexPackStore.Why.NotAPack -> {
                     JLog.w(TAG, "texture packs: ${pick.file} doesn't load, playing without it")
@@ -1949,6 +1959,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             if (launcherBool(EXTRA_STATE_RING) && md5 != null) android.system.Os.setenv("N64_STATE_RING", stateRingDir(this, md5).path, true)
             else android.system.Os.unsetenv("N64_STATE_RING")
         }
+        // A texture pack converting in the background waits while a game is played (approved mockup texpacks4).
+        com.joeysretro.joey64.video.TexConvert.playing(this, launcherString(EXTRA_TITLE) ?: saveName.ifEmpty { "a game" })
         // Texture packs (approved mockup 2026-11-15; video/TexturePacks.kt): parallel-RDP reads the game's pack from the folder
         // set here. The env lives on in the process, so it's cleared for every other start; --es env N64_RDP_TEXPACK wins.
         if (devString("env")?.contains("N64_RDP_TEXPACK=") != true) {
@@ -3838,6 +3850,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (trialRestarting) { super.onDestroy(); return }
         held?.hide(); held = null
         if (isFinishing) {
+            com.joeysretro.joey64.video.TexConvert.playing(this, null)
             fpsHandler.removeCallbacks(sessionTick)
             session?.let { s ->
                 netStats.json()?.let { s.put("netplay", it) }

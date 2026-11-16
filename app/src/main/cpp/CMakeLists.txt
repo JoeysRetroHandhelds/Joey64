@@ -19,7 +19,8 @@ add_library(joey64host SHARED
     state_ring.cpp
     achievements.cpp
     netplay_server.cpp
-    upnp.cpp)
+    upnp.cpp
+    texpack_build.cpp)
 
 add_subdirectory(third_party/libadrenotools)
 

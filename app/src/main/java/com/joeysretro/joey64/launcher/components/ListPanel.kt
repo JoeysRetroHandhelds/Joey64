@@ -57,6 +57,8 @@ class PanelInfo(val title: String, val help: String, val choices: List<PanelChoi
                 val note: String? = null,
                 /** Drawn under the help, before the choices (texture packs' two pictures, approved mockup 2026-11-15 screen 3). */
                 val top: (@Composable () -> Unit)? = null,
+                /** Drawn after the lines (a texture pack's conversion bar, approved mockup texpacks4 screen 2). */
+                val bottom: (@Composable () -> Unit)? = null,
                 val onPick: ((Int) -> Unit)? = null) {
     val pickable get() = choices.isNotEmpty() && onPick != null
 }
@@ -240,5 +242,6 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
                 Text(value, style = JoeyTheme.type.small, color = c.textDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
+        info.bottom?.invoke()
     }
 }

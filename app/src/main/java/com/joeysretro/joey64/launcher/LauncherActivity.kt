@@ -113,6 +113,29 @@ class LauncherActivity : ComponentActivity() {
         com.joeysretro.joey64.saves.SettingsMirror.sync(this) { runOnUiThread { if (!isFinishing && !isDestroyed) recreate() } }
     }
 
+    // Texture packs (approved mockup texpacks4): with the launcher up no game is played, so a conversion waiting on one
+    // goes on, and PNG packs still to convert start (a pack that waited for room is tried again).
+    override fun onResume() {
+        super.onResume()
+        val app = applicationContext
+        Thread {
+            com.joeysretro.joey64.video.TexConvert.playing(app, null)
+            com.joeysretro.joey64.video.TexConvert.kick(app)
+        }.start()
+    }
+
+    // A conversion notification tapped: Settings › Video with that game's chip, on its Texture pack row.
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        texOpen(intent)
+    }
+
+    private fun texOpen(i: android.content.Intent?) {
+        val save = i?.getStringExtra(com.joeysretro.joey64.video.TexConvert.EXTRA_SAVE) ?: return
+        com.joeysretro.joey64.video.TexConvert.openPanel.value = save to (i.getStringExtra(com.joeysretro.joey64.video.TexConvert.EXTRA_TITLE) ?: save)
+        i.removeExtra(com.joeysretro.joey64.video.TexConvert.EXTRA_SAVE)
+    }
+
     override fun onStop() {
         com.joeysretro.joey64.saves.SettingsMirror.pushSoon(this)
         super.onStop()
@@ -132,6 +155,7 @@ class LauncherActivity : ComponentActivity() {
         // The session log (files/logs) starts here when the app opens to the launcher, so first run, the
         // import and library reads are in what a tester sends, not only what happens once a game is up.
         LogFiles.start(this, intent)
+        texOpen(intent)
         // Thermal fallback moved from Video to Emulation (2026-11-08): the store moves an older Video file's
         // value over as it opens, before Video can write that file again without it.
         com.joeysretro.joey64.emulation.EmuStore(this)
@@ -240,6 +264,17 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
             var fzFirst by remember { mutableStateOf(false) }
             var importRow by remember { mutableStateOf("import") }
             var settingsTab by remember { mutableStateOf(com.joeysretro.joey64.launcher.screens.SettingsTab.entries.first()) }
+            // A texture pack notification tapped (approved mockup texpacks4): its game's Texture pack row in Settings › Video.
+            val texOpen by com.joeysretro.joey64.video.TexConvert.openPanel
+            var texGame by remember { mutableStateOf<Pair<String, String>?>(null) }
+            LaunchedEffect(texOpen) {
+                texOpen?.let { g ->
+                    texGame = g
+                    settingsTab = com.joeysretro.joey64.launcher.screens.SettingsTab.Video
+                    place = RailPlace.Settings
+                    com.joeysretro.joey64.video.TexConvert.openPanel.value = null
+                }
+            }
             val cheatsFor by model.cheatsFor.collectAsStateWithLifecycle()
             val gameSettingsFor by model.gameSettingsFor.collectAsStateWithLifecycle()
             val achievementsFor by model.achievementsFor.collectAsStateWithLifecycle()
@@ -399,13 +434,15 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
                                     com.joeysretro.joey64.launcher.screens.GameAchievementsScreen(achievementsFor!!, onHints = { settingsHints = it }) { backFromGamePage { model.closeAchievements(back = true) } }
                                 }
                                 place == RailPlace.Achievements -> com.joeysretro.joey64.launcher.screens.AchievementsScreen(onHints = { settingsHints = it }) { backFromPage() }
-                                place == RailPlace.Settings -> androidx.compose.runtime.CompositionLocalProvider(com.joeysretro.joey64.launcher.components.LocalTabsTakePageKeys provides true) { SettingsScreen(updates, model, onHints = { settingsHints = it }, startTab = settingsTab,
-                                    startRow = if (settingsTab == com.joeysretro.joey64.launcher.screens.SettingsTab.Saves) importRow else null,
+                                place == RailPlace.Settings -> androidx.compose.runtime.CompositionLocalProvider(com.joeysretro.joey64.launcher.components.LocalTabsTakePageKeys provides true) { androidx.compose.runtime.key(texGame) { SettingsScreen(updates, model, onHints = { settingsHints = it }, startTab = settingsTab,
+                                    startRow = if (settingsTab == com.joeysretro.joey64.launcher.screens.SettingsTab.Saves) importRow else if (texGame != null) "tex" else null,
+                                    startTarget = texGame,
                                     onImport = { importModel.restart(); settingsTab = com.joeysretro.joey64.launcher.screens.SettingsTab.Saves; importRow = "import"; importAgain = true },
                                     onFzImport = { fzModel.restart(); settingsTab = com.joeysretro.joey64.launcher.screens.SettingsTab.Saves; importRow = "fzimport"; fzAgain = true }) {
                                     backFromPage()
+                                    texGame = null
                                     if (place != RailPlace.Settings) settingsTab = com.joeysretro.joey64.launcher.screens.SettingsTab.entries.first()
-                                } }
+                                } } }
                                 place == RailPlace.Controls -> androidx.compose.runtime.CompositionLocalProvider(com.joeysretro.joey64.launcher.components.LocalTabsTakePageKeys provides true) { ControlsScreen(onHints = { settingsHints = it }) { backFromPage() } }
                                 // Search is part of the Library (Joey 2026-11-12, not on the bar): B goes back to what opened
                                 // it, the Search chip or the tile Y was pressed on (A8).

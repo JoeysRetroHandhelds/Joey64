@@ -16,6 +16,11 @@
     public static void serverCall(java.lang.String, java.lang.String, long);
     public static void onEvent(java.lang.String);
 }
+# Texture packs' build progress (cpp/texpack_build.cpp: GetMethodID "onTexture" on the listener).
+-keepclassmembers class * implements com.joeysretro.joey64.video.TexBuild$Listener {
+    public void onTexture(int);
+}
+-keep interface com.joeysretro.joey64.video.TexBuild$Listener { *; }
 
 # Commons Compress refers to optional codecs (brotli, zstd, asm) that aren't in the build.
 -dontwarn org.brotli.dec.**

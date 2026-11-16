@@ -102,15 +102,17 @@ internal const val CHIP_HELP = "These settings are for every game. Pick a game t
  * own settings), opening the same popups as Controls'.
  */
 @Composable
-fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher.LibraryModel, onHints: (List<Hint>) -> Unit, onImport: () -> Unit = {}, onFzImport: () -> Unit = {}, startTab: SettingsTab = SettingsTab.entries.first(), startRow: String? = null, onClose: () -> Unit) {
+fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher.LibraryModel, onHints: (List<Hint>) -> Unit, onImport: () -> Unit = {}, onFzImport: () -> Unit = {}, startTab: SettingsTab = SettingsTab.entries.first(), startRow: String? = null,
+                   /** Video's game chip to start on (save name, title): a texture pack notification tapped. */
+                   startTarget: Pair<String, String>? = null, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val landing = LocalFocusLanding.current
     val c = JoeyTheme.colors
     val s = JoeyTheme.spacing
     var tab by remember { mutableStateOf(startTab) }
     // Video's or Audio's game ([GamesForPopup]): null = All games.
-    var target by remember { mutableStateOf<String?>(null) }
-    var targetTitle by remember { mutableStateOf<String?>(null) }
+    var target by remember { mutableStateOf<String?>(startTarget?.first) }
+    var targetTitle by remember { mutableStateOf<String?>(startTarget?.second) }
     var gamesPopup by remember { mutableStateOf(0) } // 1 = Video for / Audio for, 2 = Pick a game
     // The open tab's own buttons (Video: Y), offered what Settings doesn't use itself.
     var tabControl by remember { mutableStateOf<((Control) -> Boolean)?>(null) }
@@ -181,7 +183,7 @@ fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher
             val hints: (List<Hint>) -> Unit = { onHints(if (resettable) withResetHint(it) else it) }
             when (tab) {
                 SettingsTab.Appearance -> AppearanceTab(hints, Modifier.weight(1f))
-                SettingsTab.Video -> VideoTab(target, hints, { tabControl = it }, Modifier.weight(1f))
+                SettingsTab.Video -> VideoTab(target, hints, { tabControl = it }, Modifier.weight(1f), start = if (startTarget != null && startRow == "tex") "tex" else null)
                 SettingsTab.Emulation -> EmulationTab(target, hints, { tabControl = it }, Modifier.weight(1f))
                 SettingsTab.Audio -> AudioTab(target, hints, { tabControl = it }, Modifier.weight(1f))
                 SettingsTab.OnScreen -> OnScreenTab(hints, { tabControl = it }, Modifier.weight(1f))

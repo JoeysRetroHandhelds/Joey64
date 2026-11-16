@@ -211,6 +211,9 @@ class TexPackStore(private val context: Context) {
         // Packs gone from their folders (deleted or moved on the SD card) leave their conversions and pictures behind.
         val ids = out.map { it.id }.toSet()
         for (p in old) if (p.id !in ids) forget(p)
+        // And anything a stopped conversion wrote after its pack went (the conversion process is stopped, not waited for).
+        val keep = out.filter { it.png }.map { convDir(it).name }.toSet()
+        File(dir, "conv").listFiles()?.forEach { if (it.isDirectory && it.name !in keep) it.deleteRecursively() }
         JLog.i(TAG, "texture packs: ${out.size} in ${folders().size} folders" + if (unreadable.isEmpty()) "" else ", ${unreadable.size} can't be read")
         return out to unreadable
     }
@@ -225,49 +228,74 @@ class TexPackStore(private val context: Context) {
     /** The PNG copy is in place (the core builds the .hts from it at the game's next start). */
     fun isCopied(p: TexPack) = File(convDir(p), "copied").isFile
 
+    /** The room [p]'s conversion still needs (the PNGs not copied yet, then the .hts, about the pack's size) and the room free. */
+    fun room(p: TexPack): Pair<Long, Long> {
+        val copied = convDir(p).walkTopDown().filter { it.isFile && it.name.endsWith(".png", ignoreCase = true) }.sumOf { it.length() }
+        val need = (p.size - copied).coerceAtLeast(0) + p.size + (64L shl 20)
+        return need to dir.apply { mkdirs() }.usableSpace
+    }
+
+    /** What [copyPngs] did: the PNGs in the pack (the build's total), or why not. */
+    data class Copied(val pngs: Int, val why: String?)
+
     /**
      * Copies [p]'s PNGs into its conversion folder as `<romName>/...` ([romName] the game's header name exactly: the core
-     * looks for that folder on a file system where case counts), [progress] 0..1 as it goes. Null when done, else why
-     * not (no space, the folder can't be read, files that couldn't be copied). The core turns them into the .hts at the
-     * game's next start, in the same storage, so room for both is asked for.
+     * looks for that folder on a file system where case counts). Picks up where it left off: each file goes through
+     * `.part` and a rename, and a file already there at its size is kept (Joey64 closed, the device restarted).
+     * [progress] gets the bytes done and the total; [hold] is called between files (it waits while a game is played).
+     * Files that fail are counted and the copy goes on; then it's not done (tried again later, the rest kept).
      */
-    fun convert(p: TexPack, romName: String, progress: (Float) -> Unit): String? {
+    fun copyPngs(p: TexPack, romName: String, progress: (Long, Long) -> Unit, hold: () -> Unit): Copied {
         val out = convDir(p)
-        val need = 2 * p.size + (64L shl 20)
-        val free = dir.apply { mkdirs() }.usableSpace
-        if (free < need) return "needs ${TexPacks.sizeLabel(need)}, ${TexPacks.sizeLabel(free)} free"
+        nameFor(p, romName)
         val tree = Uri.parse(p.folder)
-        val space = com.joeysretro.joey64.launcher.storage.TreeSpace(context.contentResolver, tree,
-            DocumentsContract.getDocumentId(Uri.parse(p.id)))
-        val files = space.walkOrNull(maxDepth = 6) ?: return "the folder can't be read"
+        val space = try {
+            com.joeysretro.joey64.launcher.storage.TreeSpace(context.contentResolver, tree, DocumentsContract.getDocumentId(Uri.parse(p.id)))
+        } catch (e: Exception) { return Copied(0, "the folder can't be read") }
+        val files = space.walkOrNull(maxDepth = 6) ?: return Copied(0, "the folder can't be read")
         val pngs = files.filter { (_, e) -> !e.second.isDir && e.second.name.endsWith(".png", ignoreCase = true) }
-        if (pngs.isEmpty()) return "no PNGs found in it"
+        if (pngs.isEmpty()) return Copied(0, "no PNGs found in it")
         val total = pngs.sumOf { it.second.second.size }.coerceAtLeast(1)
         var done = 0L
         var failed = 0
-        out.deleteRecursively()
         for ((n, f) in pngs.withIndex()) {
             val (path, e) = f
-            if (n % 256 == 255 && folders().none { it.uri == p.folder }) { out.deleteRecursively(); return "its folder was removed" }
+            if (n % 256 == 255 && folders().none { it.uri == p.folder }) return Copied(pngs.size, "its folder was removed")
             val to = File(out, (listOf(romName) + path).joinToString("/"))
-            to.parentFile?.mkdirs()
-            val ok = try {
-                context.contentResolver.openInputStream(space.documentUri(e.first))?.use { i -> to.outputStream().use { o -> i.copyTo(o, 1 shl 16) } } != null
-            } catch (x: Exception) { false }
-            if (!ok) { failed++; JLog.w(TAG, "texture packs: can't copy ${e.second.name}"); continue }
+            if (!(to.isFile && to.length() == e.second.size)) {
+                hold()
+                to.parentFile?.mkdirs()
+                val part = File(to.path + ".part")
+                val ok = try {
+                    context.contentResolver.openInputStream(space.documentUri(e.first))?.use { i -> part.outputStream().use { o -> i.copyTo(o, 1 shl 16) } } != null &&
+                        (part.renameTo(to) || run { to.delete(); part.renameTo(to) })
+                } catch (x: Exception) { false }
+                if (!ok) { part.delete(); failed++; JLog.w(TAG, "texture packs: can't copy ${e.second.name}"); continue }
+            }
             done += e.second.size
-            progress(done.toFloat() / total)
+            progress(done, total)
         }
         if (failed > 0) {
-            // A part copy would become a part pack for good (the PNGs go once the .hts is made): none, and it's tried again.
-            out.deleteRecursively()
             JLog.w(TAG, "texture packs: $failed of ${pngs.size} PNGs of ${p.shown} couldn't be copied")
-            return "$failed of ${pngs.size} files couldn't be copied"
+            return Copied(pngs.size, "$failed of ${pngs.size} files couldn't be copied")
         }
-        File(out, "copied").writeText(p.id)
         JLog.i(TAG, "texture packs: ${pngs.size} PNGs of ${p.shown} copied for converting, ${TexPacks.sizeLabel(done)}")
-        return null
+        return Copied(pngs.size, null)
     }
+
+    /** With a core that can't make a pack outside play: the PNG copy is marked done, and the game makes the .hts at its start. */
+    fun markCopied(p: TexPack) = File(convDir(p), "copied").writeText(p.id)
+
+    /** The PNG copy goes once the .hts is whole. */
+    fun dropPngs(p: TexPack) {
+        convDir(p).listFiles { f -> f.isDirectory }?.forEach { it.deleteRecursively() }
+        File(convDir(p), "copied").delete()
+    }
+
+    /** The game screen is running a game (MainActivity writes it, the conversion waits): its process id and title. */
+    val playingFile = File(dir, "playing")
+    /** What the conversion process is doing, for the screens in Joey64's own process (TexConvertService writes it). */
+    val statusFile = File(dir, "status.json")
 
     /** Names [p]'s PNG copy and .hts after [romName] exactly (a game whose header name differs in case from the pack's). */
     private fun nameFor(p: TexPack, romName: String) {
