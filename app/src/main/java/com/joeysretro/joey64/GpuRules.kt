@@ -205,6 +205,12 @@ object GpuRules {
         // RSP, cxd4) and with parallel-n64's HLE geometry the file-select pad and sign are cut, on every driver;
         // GLideN64's HLE draws them whole, as M64Plus FZ does.
         "70059d4d7ba7ac0f0741b44aec8b44dc" to "SM64 Last Impact: GLideN64 + HLE draws its file select whole",
+        // Onegai Monsters (Japan), 2026-11-16: parallel-RDP draws black and striped blocks over the bedroom intro and
+        // after, on every GPU and driver (Odin 2 Portal Turnip, Odin 3 Qualcomm, Flip Mali), async, smart or plain sync,
+        // whole-page RDRAM uploads and early page locks alike; only a GPU wait after every command list clears it (a race
+        // inside parallel-RDP's RDRAM path, ~1 fps). GLideN64 draws it clean at 60 fps (Portal, with HLE or parallel RSP;
+        // Flip 13.5 ms a frame).
+        "3796829f54958ce103dcf5e3e8eb80b4" to "Onegai Monsters: GLideN64 draws its rooms without parallel-RDP's block junk",
     )
 
     /**
