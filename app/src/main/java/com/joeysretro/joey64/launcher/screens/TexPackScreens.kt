@@ -107,15 +107,28 @@ fun TexConvPoll(on: Boolean) {
     }
 }
 
-/** The folder card's line for a PNG pack being converted: "converting, 42%" (approved mockup texpacks4 screen 4), or null. */
+/** The folder card's line for a PNG pack being converted: "Converting · 42%" (Joey 2026-11-16, "Yes, all three"), or null. */
 fun texConvShort(s: TexState, p: TexPack): String? {
     if (!s.converting(p)) return null
     val st = TexConvert.status.value
     val cur = st?.cur?.takeIf { st.fresh && it.id == p.id }
     return when {
-        cur != null -> "converting, ${cur.percent}%"
-        st?.room?.containsKey(p.id) == true -> "waits for room"
-        else -> "converting"
+        cur != null -> "Converting · ${cur.percent}%"
+        st?.room?.containsKey(p.id) == true -> "Waits for room"
+        else -> "Converting"
+    }
+}
+
+/**
+ * A pack's line in the lists: a .hts's file and size; a PNG pack "A folder of PNGs · Converted · 565 MB" once made (the
+ * .hts it plays, not the PNGs' size), "· Converting · 42%" while it is, else the PNGs' size.
+ */
+fun texPackLine(s: TexState, p: TexPack): String {
+    if (!p.png) return "${p.file} · ${TexPacks.sizeLabel(p.size)}"
+    val made = s.conv[p.id]?.htsSize
+    return "A folder of PNGs · " + when {
+        made != null -> "Converted · ${TexPacks.sizeLabel(made)}"
+        else -> texConvShort(s, p) ?: TexPacks.sizeLabel(p.size)
     }
 }
 
@@ -177,7 +190,7 @@ fun texAllPanel(s: TexState, value: String, onSet: (String) -> Unit, onFolder: (
         choices.add(PanelChoice(f.name, "${packs.size} ${if (packs.size == 1) "pack" else "packs"}, $mine for your games",
             section = if (i == 0) "Pack folders" else null, value = "›"))
     }
-    choices.add(PanelChoice("Add a folder", "Packs stay where they are: nothing is copied", section = if (s.folders.isEmpty()) "Pack folders" else null))
+    choices.add(PanelChoice("Add a folder", "HTS packs are read where they are; PNG packs are copied once to convert", section = if (s.folders.isEmpty()) "Pack folders" else null))
     return PanelInfo("Texture packs", "HD textures made for one game, drawn in place of its own. Joey64 reads GLideN64 packs (.hts, or a folder of PNGs) " +
         "from folders you pick and finds each game's by its name. parallel-RDP only. Applies when the game next starts.", choices) { i: Int ->
         when {
@@ -204,7 +217,7 @@ fun texGamePanel(context: Context, s: TexState, value: String, target: String, o
     val opts = ArrayList<Pair<String, PanelChoice>>()
     opts.add("on" to PanelChoice(if (auto != null) "Auto · ${auto.shown}" else "Auto", if (auto != null) "The pack made for this game" else "No pack for this game in your pack folders",
         on = value == "on" || (value.startsWith(TexPacks.PICK) && inUse == auto && mine.size < 2)))
-    if (mine.size > 1) for (p in mine) opts.add(TexPacks.PICK + p.id to PanelChoice(p.shown, "${p.file} · ${TexPacks.sizeLabel(p.size)}",
+    if (mine.size > 1) for (p in mine) opts.add(TexPacks.PICK + p.id to PanelChoice(p.shown, texPackLine(s, p),
         on = value.startsWith(TexPacks.PICK) && inUse == p))
     opts.add("off" to PanelChoice("None", "The game's own textures", on = value == "off"))
     val lines = inUse?.let { p ->
@@ -263,7 +276,7 @@ fun TexFolderPopup(s: TexState, folder: TexPackStore.Folder, onDismiss: () -> Un
     if (asking) {
         JoeyDialog(onDismiss = { asking = false }, hints = listOf(Hint("A", "Select"), Hint("B", "Back")), width = 470.dp) {
             Column {
-                PopupTitle("Remove ${folder.name}?", "Its packs stay on the SD card. Games stop using them.")
+                PopupTitle("Remove ${folder.name}?", "The packs stay in this folder. Games stop using them.")
                 JoeyRow("Keep it", Modifier.initialFocus(true)) { asking = false }
                 JoeyRow("Remove this folder") { onRemove() }
             }
@@ -278,13 +291,11 @@ fun TexFolderPopup(s: TexState, folder: TexPackStore.Folder, onDismiss: () -> Un
                 modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH, vertical = 6.dp))
             for ((i, p) in packs.withIndex()) {
                 val game = s.gameFor(p)
-                val detail = if (p.png) "A folder of PNGs · ${TexPacks.sizeLabel(p.size)}" + (texConvShort(s, p)?.let { " · $it" } ?: "")
-                    else "${p.file} · ${TexPacks.sizeLabel(p.size)}"
-                JoeyRow(p.shown, Modifier.initialFocus(i == 0), detail = detail, enabled = game != null,
+                JoeyRow(p.shown, Modifier.initialFocus(i == 0), detail = texPackLine(s, p), enabled = game != null,
                     trailing = { _ -> Text(game ?: "No game in your library", style = JoeyTheme.type.small,
                         color = if (game != null) c.accent else c.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis) }) {}
             }
-            JoeyRow("Remove this folder", Modifier.initialFocus(packs.isEmpty()), detail = "The packs stay on the SD card") { asking = true }
+            JoeyRow("Remove this folder", Modifier.initialFocus(packs.isEmpty()), detail = "The packs stay in this folder") { asking = true }
         }
     }
 }

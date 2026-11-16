@@ -165,10 +165,16 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     // Texture packs (approved mockup 2026-11-15; TexPackScreens.kt): folders and packs read off the main thread, again after a folder changes.
     // The last scan shows at once; the folders are then looked through again, so packs put in a folder later are found.
     var texVersion by remember { mutableIntStateOf(0) }
-    val tex by androidx.compose.runtime.produceState(TexState.EMPTY, target, texVersion) {
-        val first = withContext(Dispatchers.IO) { readTexState(context, target, rescan = texVersion > 0) }
+    // A conversion that ends while shown: its pack is read again (no rescan), so its line says Converted (Duo 2026-11-16:
+    // it said Converting until the tab was opened again).
+    var texConvEnded by remember { mutableIntStateOf(0) }
+    val texScanned = remember { intArrayOf(0) }
+    val tex by androidx.compose.runtime.produceState(TexState.EMPTY, target, texVersion, texConvEnded) {
+        val rescan = texVersion > texScanned[0]
+        texScanned[0] = texVersion
+        val first = withContext(Dispatchers.IO) { readTexState(context, target, rescan = rescan) }
         value = first
-        if (!first.scanned && first.folders.isNotEmpty()) value = withContext(Dispatchers.IO) { readTexState(context, target, rescan = true) }
+        if (!first.scanned && first.folders.isNotEmpty() && texConvEnded == 0) value =withContext(Dispatchers.IO) { readTexState(context, target, rescan = true) }
     }
     var texFolder by remember { mutableStateOf<com.joeysretro.joey64.video.TexPackStore.Folder?>(null) }
     var texPopup by remember { mutableStateOf(false) }
@@ -179,6 +185,12 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     // one starts, notifications are asked for once (screen 1).
     val texConverting = tex.index.filter { tex.converting(it) }
     TexConvPoll(texConverting.isNotEmpty())
+    val texJob = com.joeysretro.joey64.video.TexConvert.status.value?.cur?.id
+    val texLastJob = remember { arrayOfNulls<String>(1) }
+    androidx.compose.runtime.LaunchedEffect(texJob) {
+        if (texLastJob[0] != null && texJob != texLastJob[0]) texConvEnded++
+        texLastJob[0] = texJob
+    }
     var texAsk by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(texConverting.isNotEmpty()) {
         if (texConverting.isNotEmpty() && withContext(Dispatchers.IO) { com.joeysretro.joey64.video.TexConvert.shouldAsk(context) }) texAsk = true

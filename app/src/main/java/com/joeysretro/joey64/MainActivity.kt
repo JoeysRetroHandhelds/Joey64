@@ -1159,17 +1159,30 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val store = com.joeysretro.joey64.video.TexPackStore(this)
         store.finishConversions()
         val index = store.index() ?: return
-        val pick = com.joeysretro.joey64.video.TexPacks.pick(index, name, video[com.joeysretro.joey64.video.VideoKey.TexPack]) ?: return
-        val ready = store.prepare(pick, name)
+        val choice = video[com.joeysretro.joey64.video.VideoKey.TexPack]
         val note = { title: String, line: String ->
             InGamePopup("texpack", InGamePopup.Kind.TexPackNote, title, "Playing with the game's own textures", line)
         }
+        // A pack picked for this game that's gone (its folder removed, or moved on the SD card) falls back to Auto; with no
+        // other pack for the game, the orange pop-up says so (Duo 2026-11-16: it started without a word).
+        val gone = choice.startsWith(com.joeysretro.joey64.video.TexPacks.PICK) &&
+            index.none { it.id == choice.removePrefix(com.joeysretro.joey64.video.TexPacks.PICK) }
+        if (gone) JLog.w(TAG, "texture packs: the pack picked for $name isn't in the pack folders any more, using Auto's")
+        val pick = com.joeysretro.joey64.video.TexPacks.pick(index, name, choice) ?: run {
+            if (gone) {
+                val p = note("Texture pack not found", "Its folder was removed or moved. Pick another in Settings › Video › Texture pack")
+                overlay?.show(p) ?: earlyPops.add(p)
+            }
+            return
+        }
+        val ready = store.prepare(pick, name)
         val p = when (ready) {
             is com.joeysretro.joey64.video.TexPackStore.Ready -> {
                 android.system.Os.setenv("N64_RDP_TEXPACK", ready.dir.path, true)
                 texPack = pick
                 val building = pick.png && !store.isConverted(pick)
-                JLog.i(TAG, "texture packs: ${pick.shown} (${pick.file}, ${com.joeysretro.joey64.video.TexPacks.sizeLabel(pick.size)}) for $name" +
+                val playsSize = if (pick.png) store.converted(pick)?.length() ?: pick.size else pick.size
+                JLog.i(TAG, "texture packs: ${pick.shown} (${pick.file}, ${com.joeysretro.joey64.video.TexPacks.sizeLabel(playsSize)}) for $name" +
                     if (building) ", converting it this play" else "")
                 // The picture waits for a play with the pack whole (while it's converted, HD textures aren't in yet).
                 if (!building && !store.shot(pick, "pack").isFile) fpsHandler.postDelayed({ texShot(pick) }, TEXPACK_SHOT_MS)
