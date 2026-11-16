@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: main (built in the clean worktree joey64-core-cic, branch cic-6103 = main 61545c3)
-commit: 61545c31d766da35c1eae603a8066b0b2c2c4f6d 2026-11-15 23:32:15 -0600 pif: boot checksum takes r when t2 >= d (IPL3's rule; n64crc's > gave Pokemon Stadium (USA) (
+branch: main (built in the clean worktree joey64-core-gbt, branch gbt-rsp = main 018ba79)
+commit: 018ba796c783442e0fc5f15aef3cecb56c0fce7f 2026-11-16 02:06:56 -0600 RSP resume after a yield backs off: doubles per resume with no CPU SP write, up to 64000 coun
 uncommitted: none
-built: 2026-11-15 23:33
-md5: b6b8aa858a31fae8cf366c7b520e79e3
+built: 2026-11-16 02:01
+md5: 3275931d6fa2980a2991987e1942317f
