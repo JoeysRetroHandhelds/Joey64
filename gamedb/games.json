@@ -577,6 +577,12 @@
         "Odin 2 Portal 2026-11-14: 4x + CRT light + widescreen code, walking and battling at 60 emu fps, run 2.4-7.5 ms a frame",
         "No 60 fps code in any cheat list; widescreen 8102D574 2407, 8102D576 018A"
       ]
+    },
+    {
+      "id": "NOM", "crc": "DC649466572FF0D9", "md5": "3796829f54958ce103dcf5e3e8eb80b4", "title": "Onegai Monsters (Japan)",
+      "fixed": [
+        {"devices": "all (new_dynarec)", "what": "the app quit about 3 s after start (RG477M; the Odin 3 Portal got through by timing): pass 1 ended a block on a JAL whose delay slot held a jump (code not loaded yet) or at the row before the last, so pass 2 found a branch at the end with no delay slot, and a compile the CPU waits on calls exit(1)", "fix": "core main 56741dd (a jump in a JAL delay slot stops the block like the J/JR case; the MAXBLOCK-2 stop only on a non-branch). The same fault printed in Banjo-Tooie, F-Zero X, Jet Force Gemini, Pokemon Snap and THPS2 at 1x (Pocket Block, Flip), surviving only because those compiles could bail; 0 there on the fix", "evidence": "RG477M 2026-11-16 05:45 (base and with the widescreen code, alive at 7/30/60 s, 58.5-60 fps); 21-game list 21/21 on the RG477M, Odin 3 and Duo; the five games 0 faults on the Pocket Block and Flip vs 12/3/11/1/1 and 13/3/11/1/1 on the old build"}
+      ]
     }
   ]
 }

@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: main (built in the clean worktree joey64-core-gbt, branch gbt-rsp = main 018ba79)
-commit: 018ba796c783442e0fc5f15aef3cecb56c0fce7f 2026-11-16 02:06:56 -0600 RSP resume after a yield backs off: doubles per resume with no CPU SP write, up to 64000 coun
+branch: main (built in the clean worktree joey64-core-rel, branch core-0.2.2 = main 56741dd)
+commit: 56741ddcc8f76310f857c9c94752e36106f6799b 2026-11-16 06:16:03 -0600 new_dynarec: never end a block between a branch and its delay slot
 uncommitted: none
-built: 2026-11-16 02:01
-md5: 3275931d6fa2980a2991987e1942317f
+built: 2026-11-16 08:55
+md5: e4bba9f70540d2078bfff23dc02a291c
