@@ -8,9 +8,13 @@ package com.joeysretro.joey64.video
  * Ocarina of Time (Joey 2026-11-12: "Yes, OoT only"): a small teal mark at the top left in dungeons, drawn by the game
  * into its own frame (both renderers, every VI filter; README Full-run fixes (f1)). Normal (8 lines) hides it, Thin
  * leaves a sliver. CZL is the USA and Japan code, NZL Europe's and LodgeNet's.
+ *
+ * Donkey Kong 64 (Joey 2026-11-15: "Yes", build it like OoT): the game draws its own black border inside its picture
+ * (the VI area trims only 1%, so Trim the game's border can't take it off): 21-28 px of 960 at the sides and 26 of 720
+ * top and bottom, about 8 lines of 240, so Normal. NDO is every region's code.
  */
 object GameCrop {
-    private val GAMES = mapOf("CZL" to 8, "NZL" to 8)
+    private val GAMES = mapOf("CZL" to 8, "NZL" to 8, "NDO" to 8)
 
     /** The lines [gameCode] ("CZLE" or "CZL") crops by default, or null when it has none or [v] sets Crop edges. */
     fun lines(gameCode: String?, v: VideoSettings): Int? =

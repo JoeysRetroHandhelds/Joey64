@@ -11,6 +11,11 @@ class GameCropTest {
         for (code in listOf("CZLE", "CZLJ", "NZLP", "NZLG", "czl")) assertEquals(code, 8, GameCrop.of(code, unset))
     }
 
+    @Test fun donkeyKong64GetsNormalInEveryRegion() {
+        for (code in listOf("NDOE", "NDOJ", "NDOP")) assertEquals(code, 8, GameCrop.of(code, unset))
+        assertEquals("Normal (this game's default)", GameCrop.label("NDOE", unset))
+    }
+
     @Test fun otherGamesKeepCropOff() {
         assertNull(GameCrop.lines("NSME", unset))
         assertEquals(0, GameCrop.of("NSME", unset))
