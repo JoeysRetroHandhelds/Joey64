@@ -782,8 +782,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var gpuWhy: GpuWhy? = null
     /** Auto's start-up trial on this GPU; null when the driver or renderer was picked. */
     private var trial: GpuTrial? = null
-    /** When the trial's start loaded (uptime ms), and whether it was taken back: once only (code audit 3, p1 L7). */
-    private var trialAt = 0L
+    /** Whether the trial's start was taken back: once only (code audit 3, p1 L7). */
     private var trialCancelled = false
     private fun cancelTrial() { if (!trialCancelled) { trialCancelled = true; trial?.cancel(); if (speedTry != null) speed?.cancel() } }
     /** The drivers Auto tries on this GPU (GpuRules.chain) and this start's place in the trial, from [setupGpu]. */
@@ -1864,7 +1863,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             if (launcherBool(EXTRA_STATE_RING) && md5 != null) android.system.Os.setenv("N64_STATE_RING", stateRingDir(this, md5).path, true)
             else android.system.Os.unsetenv("N64_STATE_RING")
         }
-        trial?.begin(); trialAt = android.os.SystemClock.uptimeMillis()
+        trial?.begin()
         if (speedTry != null) speed?.begin()
         NativeBridge.workTotals(workBase)
         if (NativeBridge.loadGame(rom, saveName)) {
@@ -3031,7 +3030,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val clearTask = owner != null
         // The game before is closed on purpose: nothing to recover for it (only its own; another game's stays, F3).
         val closing = owner?.states?.saveName
-        owner?.let { it.sessionEnd = "next"; NativeBridge.stop(); it.finish() }
+        // The process is ended for the new game before the old screen's onDestroy runs: a start that hadn't shown a
+        // picture yet is let off here (it was counted as one that died, and the trial stepped down).
+        owner?.let { it.sessionEnd = "next"; it.cancelTrial(); NativeBridge.stop(); it.finish() }
         owner = null
         // Unpacking the new ROM (up to 64 MB, or a zip / 7z) runs on gameIo, as prepareGame does for the first game: on
         // the main thread it risked an ANR, and a missing file or a full disk crashed the app (code audit 3, H2).
@@ -3765,12 +3766,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         raCache?.stop()
         touch?.destroy()
         overlay?.destroy()
-        // Quit before a frame could be drawn (within 5 s of the load, or in a netplay room still waiting for its
-        // players): not the GPU's doing, so the start doesn't count against Auto's trial. A longer wait on a black
-        // screen still counts (code audit 3, p1 L7).
-        if (isFinishing && gameLoaded && trial != null && NativeBridge.framesDrawn() <= 0 &&
-            (android.os.SystemClock.uptimeMillis() - trialAt < TRIAL_QUICK_QUIT_MS ||
-                android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null)) cancelTrial()
+        // Quit before the trial saw a picture: not the GPU's doing, so the start doesn't count against Auto's trial (code
+        // audit 3, p1 L7). Since the one-try trial (2026-11-15) a counted start steps the driver down at once, and a black
+        // screen is the watch's to fail (trialNoPicture), so every quit is let off, not only one in the first 5 s:
+        // 2026-11-15 night, Odin 2 Portal, a start ended 1 s in (frames drawn, not yet lit) moved ARMSX2 to Gen8.
+        if (isFinishing && gameLoaded && trial != null) cancelTrial()
         val stopped = if (owner === this) NativeBridge.stop().also { owner = null } else if (owner == null && !switching) NativeBridge.stop() else true
         if (!stopped) endStuckProcess()
         // The save RAM and a 64DD disk save written as the core stopped, into a picked data folder: on [gameIo], after
@@ -3913,7 +3913,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         /** A game was loaded in this process; the core cannot load a second one, so a new ROM restarts the process. */
         private var gameLoaded = false
         private const val SHUTDOWN_POLL_MS = 500L
-        private const val TRIAL_QUICK_QUIT_MS = 5_000L
         /** The driver trial's watch (approved gputry mockup 2026-11-15): how often, and how long a start gets. */
         private const val TRIAL_POLL_MS = 500L
         private const val SPEED_POLL_MS = 1_000L
