@@ -2510,31 +2510,9 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
     else g_rdpSync = idIn(kSyncRdpGames);
     g_optionOverrides["mupen64plus-parallel-rdp-synchronous"] = g_rdpSync ? "True" : "False";
     g_optionsDirty = true;
-    // Page-level smart sync (precise off) for games whose RSP loops forever with precise smart sync: Cruis'n USA
-    // (2026-11-13: Joey's Thor froze in a race from his RetroArch state, the RSP spinning in its vector code; Odin 2
-    // Portal stuck4/stuck5: precise froze in the first round every time, page-level and plain sync played 14 rounds).
-    // Precise lets a dynarec access open a page that also holds drawn bytes without waiting, so anything reading
-    // those bytes in the next 0.5 ms sees old RDRAM. --es env N64_RDP_SMART_PRECISE wins.
-    static const char* const kPageSmartGames[] = {"NCU"};
-    static bool s_preciseSetByUs = false;
-    if (s_preciseSetByUs) { unsetenv("N64_RDP_SMART_PRECISE"); s_preciseSetByUs = false; }
-    if (idIn(kPageSmartGames) && !getenv("N64_RDP_SMART_PRECISE")) {
-        setenv("N64_RDP_SMART_PRECISE", "0", 1);
-        s_preciseSetByUs = true;
-        LOGI("smart sync: page level for this game (precise off)");
-    }
-    // Page-level games also get the dynarec accesses that miss the drawn bytes done through the alias without a wait
-    // (core N64_RDP_SMART_EMULATE; Cruis'n USA's CPU variable 0x1657a0 shares a page with the framebuffer, which made
-    // the Thor wait for the whole 4x frame). 2026-11-15, core 1fab880: Odin 2 Portal 4x race 3.96 -> 3.30 ms, waits
-    // 424 -> 344 per 600; 0 crashes in 8 runs on the Odin 3 and 6 on the Odin 2 Portal. Not for precise games: Paper
-    // Mario 2.51 -> 2.95 ms (each access its own fault). --es env N64_RDP_SMART_EMULATE wins.
-    static bool s_emulateSetByUs = false;
-    if (s_emulateSetByUs) { unsetenv("N64_RDP_SMART_EMULATE"); s_emulateSetByUs = false; }
-    if (idIn(kPageSmartGames) && !getenv("N64_RDP_SMART_EMULATE")) {
-        setenv("N64_RDP_SMART_EMULATE", "1", 1);
-        s_emulateSetByUs = true;
-        LOGI("smart sync: dynarec accesses beside drawn bytes through the alias for this game");
-    }
+    // Cruis'n USA's own page-level smart sync rule (kPageSmartGames, 2026-11-13) is gone: the core's precise mode no
+    // longer opens a page beside drawn bytes for 0.5 ms before the GPU is done (core main, Joey 2026-11-16 "close
+    // it"), which was the race its RSP looped forever in.
     // RSP: cxd4 for Boss Game Studios' games, which draw nothing with parallel-RSP (black screen, 0 frames presented,
     // both Adreno and Turnip; 2026-11-14, a Snapdragon 8 Gen 3 tester's reports and Odin 2 Portal p2-gl/boss: Gauntlet
     // Legends, World Driver Championship and Stunt Racer 64 all play on cxd4 at 60 fps, Mario no Photopie is fine on

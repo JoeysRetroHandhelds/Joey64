@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: main (built in the clean worktree joey64-core-rel, branch core-0.2.2 = main 5b9695c)
-commit: 5b9695c60392362ac563034493ea9918a3d7ba8e 2026-11-16 08:58:17 -0600 Transfer Pak joybus time: the hardware ~54000 count units per access (was 20000)
+branch: main
+commit: adafe99ed5b613b7a4598bcafd0286aace81c02c 2026-11-16 15:05:49 -0600 Precise smart sync without the open window: a dynarec access beside the drawn bytes unlocks t
 uncommitted: none
-built: 2026-11-16 08:58
-md5: 53ba77ee4d87df39dbb59684a6da6457
+built: 2026-11-16 15:05
+md5: 442da4b5bfa2652d113d9d3cb5eb4e32
