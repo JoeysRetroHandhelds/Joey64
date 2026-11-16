@@ -152,7 +152,7 @@ struct Room {
     std::map<uint64_t, SlotTimes> times; // player << 32 | slot -> when the room got it, when each game first asked
     std::vector<float> lateMs;            // this window's lateness samples in ms (> 0: that game waited for it)
     void sample(int r, tp arr, tp req) {
-        lateMs.push_back((float)(std::chrono::duration<double, std::milli>(arr - req).count() + rosterPing[r]));
+        lateMs.push_back((float)(std::chrono::duration<double, std::milli>(arr - req).count() + pathMs[r]));
     }
     void arrived(int p, uint32_t slot) {
         if (!adaptive) return;
@@ -255,6 +255,7 @@ struct Room {
     }
     void adapt() {
         if (!adaptive) return;
+        updatePaths();
         using namespace std::chrono;
         auto now = steady_clock::now();
         bool quiet = pausedMask != 0;
@@ -276,6 +277,8 @@ struct Room {
         size_t n = lateMs.size();
         if (n < 40) { lateMs.clear(); calmSince = now; return; } // too few to say
         size_t waited = 0; for (float v : lateMs) waited += v > 0;
+        // Step down by the 95th percentile (Joey 2026-11-16 "p95 rule": a 1%-late rule tried 2026-11-15 gave 4.07 frames
+        // mean delay with 17 changes against this rule's 4.31 with 11, sim A/B ab5b on the Portals).
         std::nth_element(lateMs.begin(), lateMs.begin() + n * 95 / 100, lateMs.end());
         float p95 = lateMs[n * 95 / 100];
         lateMs.clear();
@@ -306,6 +309,31 @@ struct Room {
     // [7, count, then per player: player 0-3, ping ms u16, name length, name] (Joey64 2026-11-10, netplayPlayers)
     std::string rosterName[4];
     uint16_t rosterPing[4] = {};
+    std::chrono::steady_clock::time_point rosterPingAt[4]; // when that player last reported a ping above 0
+    // The round trip the lateness counts for each player's game (2026-11-15): its own reported ping while it's under 3 s
+    // old and above 0, else the kernel's for the room's TCP connection to it (TCP_INFO, also measured on the internet).
+    // A joiner's ping froze over the internet in the 2026-11-12 rooms (0 for a whole game, or 92 ms that never changed),
+    // and the lateness took it as it was: a stuck 92 kept the delay up (2 -> 7, never down). Updated once a second.
+    float pathMs[4] = {};
+    std::chrono::steady_clock::time_point pathAt;
+    void updatePaths() {
+        using namespace std::chrono;
+        auto now = steady_clock::now();
+        if (now - pathAt < seconds(1)) return;
+        pathAt = now;
+        for (int p = 0; p < 4; p++) {
+            if (rosterPing[p] > 0 && now - rosterPingAt[p] < seconds(3)) { pathMs[p] = rosterPing[p]; continue; }
+            const Client* c = clientOf(p);
+            float ms = 0;
+            struct tcp_info ti{}; socklen_t tl = sizeof ti;
+            if (c && !c->local && getsockopt(c->fd, IPPROTO_TCP, TCP_INFO, &ti, &tl) == 0) ms = ti.tcpi_rtt / 1000.0f;
+            if (c && !c->local) ms += (float)simDelay + simJitter / 2.0f;
+            if (c && !c->local && std::fabs(ms - pathMs[p]) >= 5)
+                NLOGI("netplay server: player %d's own ping is %s; lateness counts its TCP round trip %.0f ms", p + 1,
+                      rosterPing[p] ? "over 3 s old" : "not known", ms);
+            pathMs[p] = ms;
+        }
+    }
     sockaddr_storage rosterAddr[4];
     socklen_t rosterAddrLen[4] = {};
     std::chrono::steady_clock::time_point rosterAt = std::chrono::steady_clock::now();
@@ -707,6 +735,7 @@ struct Room {
             if (n >= 10) {
                 int p = d[1];
                 rosterPing[p] = (uint16_t)(d[7] << 8 | d[8]);
+                if (rosterPing[p] > 0) rosterPingAt[p] = std::chrono::steady_clock::now();
                 size_t l = std::min<size_t>(d[9], (size_t)n - 10);
                 std::string nm((const char*)d + 10, l);
                 for (char& ch : nm) if (ch == '|' || ch == ';' || (unsigned char)ch < 32) ch = ' ';

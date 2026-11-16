@@ -107,12 +107,15 @@ static void npPauseStart(const char* np) {
         using clk = std::chrono::steady_clock;
         uint32_t seq = 0, sent = 0, answered = 0;
         double sum = 0, worst = 0, smooth = -1; // smooth: the ping the others see (each answer moves it 1/4 of the way)
-        clk::time_point sentAt[16], logAt = clk::now();
+        clk::time_point sentAt[16], logAt = clk::now(), answeredAt{};
         std::unique_lock<std::mutex> lk(g_npPauseMutex);
         while (g_npPauseRun) {
             uint8_t b[64] = {5, (uint8_t)player, (uint8_t)(g_npPausedNow ? 1 : 0)};
             b[3] = seq >> 24; b[4] = seq >> 16; b[5] = seq >> 8; b[6] = (uint8_t)seq;
-            const int pms = smooth < 0 ? 0 : std::min(65535, (int)(smooth + 0.5));
+            // 0 (not known) once no answer came for 3 s (2026-11-15): over the internet a joiner's ping stayed at its
+            // last figure for whole games, and the room counted it in the input delay; with 0 it uses its own TCP figure
+            const bool fresh = smooth >= 0 && clk::now() - answeredAt < std::chrono::seconds(3);
+            const int pms = fresh ? std::min(65535, (int)(smooth + 0.5)) : 0;
             b[7] = (uint8_t)(pms >> 8); b[8] = (uint8_t)pms;
             b[9] = (uint8_t)name.size(); memcpy(b + 10, name.data(), name.size());
             sentAt[seq % 16] = clk::now();
@@ -160,6 +163,7 @@ static void npPauseStart(const char* np) {
                     double ms = std::chrono::duration<double, std::milli>(clk::now() - sentAt[s % 16]).count();
                     sum += ms; if (ms > worst) worst = ms; ++answered;
                     smooth = smooth < 0 ? ms : smooth + (ms - smooth) / 4;
+                    answeredAt = clk::now();
                 }
             }
             if (clk::now() - logAt >= std::chrono::seconds(10)) {
