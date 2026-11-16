@@ -6,6 +6,7 @@ import com.joeysretro.joey64.BuildConfig
 import com.joeysretro.joey64.JLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.joeysretro.joey64.DataFeed
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -19,8 +20,9 @@ import java.net.UnknownHostException
  * The cheat lists (plan, Phase 6; decided 2026-11-05): nothing bundled, every list downloaded
  * from `joey64-data` (its `release` branch, `dist/`) and kept in `files/cheatlists/`. The
  * index says which sources have a list for a game; a game's lists are fetched the first time
- * they're wanted (Cheats opened, or the scan's pass), then kept. The index is fetched again when
- * it's more than a week old; when it changed, the kept lists go, so they're fetched fresh.
+ * they're wanted (Cheats opened, or the scan's pass), then kept. The index is looked at again when
+ * the kept one is 15 minutes old ([DataFeed]: only "has it changed?", so each opening of Joey64 sees a
+ * change on release); when it changed, the kept lists go, so they're fetched fresh.
  */
 class CheatLists(private val context: Context) {
 
@@ -116,17 +118,24 @@ class CheatLists(private val context: Context) {
     private fun index(download: Boolean): Map<String, Map<String, Int>>? {
         val kept = File(dir, INDEX)
         var keptAt = if (kept.exists()) kept.lastModified() else 0L
-        cached?.let { (at, m) -> if (at == keptAt && (fresh(at) || !download)) return m }
-        if (keptAt > 0 && (fresh(keptAt) || !download)) {
+        cached?.let { (at, m) -> if (at == keptAt && (!DataFeed.due(kept) || !download)) return m }
+        if (keptAt > 0 && (!DataFeed.due(kept) || !download)) {
             read(kept)?.let { return it }
             keptAt = 0L // it didn't parse and is gone: downloaded again
             if (!download) return null
         }
         if (!download) return null
-        val text = try { String(get(base() + INDEX), Charsets.UTF_8) } catch (e: IOException) {
+        var got = try { DataFeed.get(base() + INDEX, kept.takeIf { keptAt > 0 }, INDEX_MAX, "The cheat index") } catch (e: IOException) {
             if (keptAt > 0) read(kept)?.let { return it }
             throw e
         }
+        if (got is DataFeed.Got.Same) {
+            read(kept)?.let { return it }
+            keptAt = 0L // unchanged on the server but the kept copy didn't parse (and is gone): fetched whole
+            got = DataFeed.get(base() + INDEX, null, INDEX_MAX, "The cheat index")
+        }
+        got as DataFeed.Got.New
+        val text = String(got.bytes, Charsets.UTF_8)
         val parsed = try { CheatLogic.parseIndex(text) } catch (e: Exception) {
             JLog.e(TAG, "the cheat index doesn't parse" + "\n" + Log.getStackTraceString(e))
             if (keptAt > 0) read(kept)?.let { return it }
@@ -136,6 +145,7 @@ class CheatLists(private val context: Context) {
         dir.mkdirs()
         if (changed) dir.listFiles()?.filter { it.isDirectory }?.forEach { it.deleteRecursively() }
         writeWhole(kept, text)
+        DataFeed.keep(kept, got)
         cached = kept.lastModified() to parsed
         return parsed
     }
@@ -149,7 +159,7 @@ class CheatLists(private val context: Context) {
     } catch (e: IOException) {
         throw e
     } catch (e: Exception) {
-        JLog.e(TAG, "the kept cheat index doesn't parse, dropped: $e"); f.delete(); null
+        JLog.e(TAG, "the kept cheat index doesn't parse, dropped: $e"); f.delete(); DataFeed.forget(f); null
     }
 
     private fun list(src: String, key: String, download: Boolean): String? {
@@ -167,8 +177,6 @@ class CheatLists(private val context: Context) {
         part.writeText(text)
         if (!part.renameTo(f)) { part.delete(); throw IOException("can't keep ${f.name}") }
     }
-
-    private fun fresh(at: Long) = System.currentTimeMillis() - at < INDEX_DAYS * 24 * 3600_000L
 
     private fun get(url: String): ByteArray {
         val c = URL(url).openConnection() as HttpURLConnection
@@ -199,6 +207,7 @@ class CheatLists(private val context: Context) {
         const val TAG = "Joey64Cheats"
         const val BASE = "https://raw.githubusercontent.com/JoeysRetroHandhelds/joey64-data/release/dist/"
         const val INDEX = "index.json"
-        const val INDEX_DAYS = 7
+        /** The index is 91 KB today (code audit 3, p1 L2: no cap before). */
+        const val INDEX_MAX = 8 * com.joeysretro.joey64.Capped.MB
     }
 }

@@ -3,6 +3,7 @@ package com.joeysretro.joey64.launcher.boxart
 import android.content.Context
 import com.joeysretro.joey64.BuildConfig
 import com.joeysretro.joey64.Capped
+import com.joeysretro.joey64.DataFeed
 import com.joeysretro.joey64.JLog
 import java.io.File
 import java.io.FileNotFoundException
@@ -15,22 +16,26 @@ import java.net.URL
  * ScreenScraper has none for, kept in the joey64-data repo's `boxart/` folder and read from its `release`
  * branch like the cheat lists. `boxart/index.tsv` lists them: the ROM's MD5, the picture's own MD5 (a
  * changed picture is fetched again) and the game; the picture is `boxart/<rom md5>.png`. The index is
- * read again at most once a week. Publisher artwork is never bundled in the APK.
+ * looked at again when the kept one is 15 minutes old ([DataFeed], only "has it changed?").
+ * Publisher artwork is never bundled in the APK.
  */
 class JoeyCovers(private val context: Context) {
 
-    /** Our covers by ROM MD5: the picture's MD5. Last week's index when the network is down; empty when there is none. */
+    /** Our covers by ROM MD5: the picture's MD5. The kept index when the network is down; empty when there is none. */
     fun index(): Map<String, String> {
         val f = File(File(context.filesDir, "boxart"), INDEX_FILE)
-        if (!f.exists() || System.currentTimeMillis() - f.lastModified() > INDEX_DAYS * 24 * 3600_000L) {
+        if (DataFeed.due(f)) {
             try {
-                val text = String(get(base() + INDEX), Charsets.UTF_8)
-                f.parentFile?.mkdirs()
-                val part = File(f.parentFile, f.name + ".part")
-                part.writeText(text)
-                if (!part.renameTo(f)) { part.delete(); throw IOException("can't keep ${f.name}") }
+                val got = DataFeed.get(base() + INDEX, f, MAX_REPLY, INDEX)
+                if (got is DataFeed.Got.New) {
+                    f.parentFile?.mkdirs()
+                    val part = File(f.parentFile, f.name + ".part")
+                    part.writeBytes(got.bytes)
+                    if (!part.renameTo(f)) { part.delete(); throw IOException("can't keep ${f.name}") }
+                    DataFeed.keep(f, got)
+                }
             } catch (e: IOException) {
-                JLog.w(TAG, "box art: Joey64's cover list not read ($e), ${if (f.exists()) "using last week's" else "none yet"}")
+                JLog.w(TAG, "box art: Joey64's cover list not read ($e), ${if (f.exists()) "using the kept one" else "none yet"}")
             }
         }
         return try { parse(f.readText()) } catch (e: IOException) { emptyMap() }
@@ -68,7 +73,6 @@ class JoeyCovers(private val context: Context) {
         const val BASE = "https://raw.githubusercontent.com/JoeysRetroHandhelds/joey64-data/release/boxart/"
         private const val INDEX = "index.tsv"
         private const val INDEX_FILE = "joey64-covers.tsv"
-        private const val INDEX_DAYS = 7
         /** Our covers are a few hundred KB and the index less: past this a reply isn't one (code audit 3, p3 L10). */
         private const val MAX_REPLY = 16 * Capped.MB
         /** What `box_art.cover` says for one of ours: "joey64:<picture md5>". */

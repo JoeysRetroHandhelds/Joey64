@@ -4,15 +4,13 @@ import android.content.Context
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * The players' reports' fastest drivers per GPU (approved drvspeed mockup 2026-11-15, screen 4): joey64-data's
  * `drivers/order.json` on release, made by devtools/driver-order.py from the reports server's sessions (each driver's
  * work a frame on the games played on more than one driver). {"version":1,"gpus":{"adreno 750":["armsx2","turnip"]}},
- * GPU names as [key] makes them, driver ids as [GpuRules.Driver]. The launcher reads it again at most weekly
- * ([refresh], off the main thread); the game screen only reads the kept copy ([cached]).
+ * GPU names as [key] makes them, driver ids as [GpuRules.Driver]. The launcher looks at it again when the kept one is
+ * 15 minutes old ([refresh], off the main thread; [DataFeed]); the game screen only reads the kept copy ([cached]).
  */
 object GpuOrder {
     /** "Adreno (TM) 750", "Turnip Adreno 750" -> "adreno 750": the system's and Turnip's names of one GPU alike. */
@@ -52,20 +50,23 @@ object GpuOrder {
         if (f.isFile && f.length() > 0) parse(f.readText())[key(gpuName)] else null
     } catch (e: Exception) { null }
 
-    /** Reads the list again when the kept one is a week old (or missing). Network: call off the main thread. */
+    /** Looks at the list again when the kept one is 15 minutes old (or missing). Network: call off the main thread. */
     fun refresh(ctx: Context) {
         val f = file(ctx)
-        if (f.exists() && System.currentTimeMillis() - f.lastModified() < DAYS * 24 * 3600_000L) return
+        if (!DataFeed.due(f)) return
         try {
-            val text = String(get(base(ctx) + PATH), Charsets.UTF_8)
+            val got = DataFeed.get(base(ctx) + PATH, f, 256 * Capped.KB, "order.json")
+            if (got !is DataFeed.Got.New) return
+            val text = String(got.bytes, Charsets.UTF_8)
             parse(text)
             f.parentFile?.mkdirs()
             val part = File(f.parentFile, f.name + ".part")
             part.writeText(text)
             if (!part.renameTo(f)) { part.delete(); throw IOException("can't keep ${f.name}") }
+            DataFeed.keep(f, got)
         } catch (e: FileNotFoundException) {
-            // No list published yet: kept empty so it isn't asked for at every start.
-            f.parentFile?.mkdirs(); f.writeText("")
+            // No list published yet: kept empty, looked at again like a kept list.
+            f.parentFile?.mkdirs(); f.writeText(""); DataFeed.forget(f)
         } catch (e: Exception) {
             JLog.w(TAG, "driver order not read ($e), ${if (f.exists()) "using the kept one" else "none yet"}")
         }
@@ -80,19 +81,6 @@ object GpuOrder {
         return com.joeysretro.joey64.staterequest.StateRequests.BASE
     }
 
-    private fun get(url: String): ByteArray {
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 10_000; c.readTimeout = 20_000
-        c.setRequestProperty("User-Agent", "Joey64/${BuildConfig.VERSION_NAME}")
-        try {
-            val code = c.responseCode
-            if (code == 404) throw FileNotFoundException(url)
-            if (code != 200) throw IOException("HTTP $code from $url")
-            return c.inputStream.use { Capped.bytes(it, 256 * Capped.KB, "order.json") }
-        } finally { c.disconnect() }
-    }
-
     private const val PATH = "drivers/order.json"
-    private const val DAYS = 7
     private const val TAG = "Joey64Drivers"
 }

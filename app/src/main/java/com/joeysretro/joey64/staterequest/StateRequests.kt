@@ -3,13 +3,12 @@ package com.joeysretro.joey64.staterequest
 import android.content.Context
 import com.joeysretro.joey64.BuildConfig
 import com.joeysretro.joey64.Capped
+import com.joeysretro.joey64.DataFeed
 import com.joeysretro.joey64.JLog
 import org.json.JSONObject
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * Asking players for a state of games we need data for (Joey 2026-11-12, joey64-notes queue.md "Ask players for a
@@ -257,16 +256,19 @@ object StateRequests {
     /** The host's switch for the ring (MainActivity.EXTRA_STATE_RING on the host side's branch). */
     const val EXTRA_STATE_RING = "com.joeysretro.joey64.STATE_RING"
 
-    /** The wanted list; last week's when the network is down, empty when there's none yet. */
+    /** The wanted list, looked at again when the kept one is 15 minutes old ([DataFeed]); the kept one when the network is down, empty when there's none yet. */
     fun wanted(ctx: Context): Map<String, Wanted> {
         val f = File(dir(ctx), WANTED_FILE)
-        if (!f.exists() || System.currentTimeMillis() - f.lastModified() > WANTED_DAYS * 24 * 3600_000L) {
+        if (DataFeed.due(f)) {
             try {
-                val text = String(get(base(ctx) + WANTED), Charsets.UTF_8)
+                val got = DataFeed.get(base(ctx) + WANTED, f, MAX_REPLY, WANTED_FILE)
+                if (got !is DataFeed.Got.New) return try { parseWanted(f.readText()) } catch (e: IOException) { emptyMap() }
+                val text = String(got.bytes, Charsets.UTF_8)
                 f.parentFile?.mkdirs()
                 val part = File(f.parentFile, f.name + ".part")
                 part.writeText(text)
                 if (!part.renameTo(f)) { part.delete(); throw IOException("can't keep ${f.name}") }
+                DataFeed.keep(f, got)
                 val now = try { parseWanted(text) } catch (e: Exception) { null }
                 if (now != null) {
                     val p = prefs(ctx)
@@ -276,9 +278,9 @@ object StateRequests {
                 }
             } catch (e: FileNotFoundException) {
                 // No list published yet: nothing is wanted. Kept as empty so it isn't asked for every session.
-                f.parentFile?.mkdirs(); f.writeText("")
+                f.parentFile?.mkdirs(); f.writeText(""); DataFeed.forget(f)
             } catch (e: IOException) {
-                JLog.w(TAG, "wanted list not read ($e), ${if (f.exists()) "using last week's" else "none yet"}")
+                JLog.w(TAG, "wanted list not read ($e), ${if (f.exists()) "using the kept one" else "none yet"}")
             }
         }
         return try { if (f.exists()) parseWanted(f.readText()) else emptyMap() } catch (e: IOException) { emptyMap() }
@@ -295,21 +297,8 @@ object StateRequests {
         return BASE
     }
 
-    private fun get(url: String): ByteArray {
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 10_000; c.readTimeout = 20_000
-        c.setRequestProperty("User-Agent", "Joey64/${BuildConfig.VERSION_NAME}")
-        try {
-            val code = c.responseCode
-            if (code == 404) throw FileNotFoundException(url)
-            if (code != 200) throw IOException("HTTP $code from $url")
-            return c.inputStream.use { Capped.bytes(it, MAX_REPLY, url.substringAfterLast('/')) }
-        } finally { c.disconnect() }
-    }
-
     const val BASE = "https://raw.githubusercontent.com/JoeysRetroHandhelds/joey64-data/release/"
     private const val WANTED = "wanted/wanted.json"
     private const val WANTED_FILE = "wanted.json"
-    private const val WANTED_DAYS = 7
     private const val MAX_REPLY = 2 * Capped.MB
 }
