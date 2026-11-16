@@ -85,6 +85,8 @@ data class InGamePopup(
         GpuNote,
         /** Auto tries a faster driver (approved drvspeed mockup 2026-11-15, screens 1, 4). */
         GpuFaster,
+        /** Texture packs (approved mockup 2026-11-15, screen 5): the pack a game starts with, and its folder that can't be reached (orange). */
+        TexPack, TexPackNote,
         /** The tried driver wasn't faster, or didn't start: back to the one in use (screen 2b). */
         GpuBack }
 }
@@ -170,13 +172,16 @@ fun InGamePopupCard(p: InGamePopup) {
         InGamePopup.Kind.GpuNote -> R.drawable.ic_alert
         InGamePopup.Kind.GpuFaster -> R.drawable.ic_bolt
         InGamePopup.Kind.GpuBack -> R.drawable.ic_arrow_back_up
+        InGamePopup.Kind.TexPack -> R.drawable.ic_hd
+        InGamePopup.Kind.TexPackNote -> R.drawable.ic_alert
     }
     JoeyToast(icon, p.label, p.name, p.line, iconTint = when (p.kind) {
         InGamePopup.Kind.Problem, InGamePopup.Kind.ChallengeFailed -> JoeyTheme.colors.error
         InGamePopup.Kind.Account, InGamePopup.Kind.Achievement, InGamePopup.Kind.Progress, InGamePopup.Kind.Game,
         InGamePopup.Kind.NoAchievements, InGamePopup.Kind.AchievementsOff, InGamePopup.Kind.GpuFaster,
         InGamePopup.Kind.Turbo, InGamePopup.Kind.TurboOff, InGamePopup.Kind.NetBlocked -> JoeyTheme.colors.gold
-        InGamePopup.Kind.NetWait, InGamePopup.Kind.GpuNote -> JoeyTheme.colors.tagMissable
+        InGamePopup.Kind.NetWait, InGamePopup.Kind.GpuNote, InGamePopup.Kind.TexPackNote -> JoeyTheme.colors.tagMissable
+        InGamePopup.Kind.TexPack -> JoeyTheme.colors.accent
         InGamePopup.Kind.GpuOk -> JoeyTheme.colors.good
         InGamePopup.Kind.GpuBack -> JoeyTheme.colors.textDim
         else -> null

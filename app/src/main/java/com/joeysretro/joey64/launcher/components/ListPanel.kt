@@ -41,7 +41,11 @@ import kotlinx.coroutines.launch
 class PanelChoice(val label: String, val detail: String? = null, val on: Boolean = false, val experimental: Boolean = false,
                   val enabled: Boolean = true,
                   /** The detail line in gold (a driver that didn't load, approved drvnote mockup 2026-11-15). */
-                  val detailWarn: Boolean = false)
+                  val detailWarn: Boolean = false,
+                  /** A group heading drawn above this choice (texture packs' PACK FOLDERS, approved mockup 2026-11-15). */
+                  val section: String? = null,
+                  /** Shown at the row's end when it isn't the one in use ("›" for a choice that opens a popup). */
+                  val value: String? = null)
 
 /**
  * What the panel shows for the focused row (approved list + panel, Joey 2026-11-11, scratchpad setlist_mock.png): its
@@ -51,6 +55,8 @@ class PanelChoice(val label: String, val detail: String? = null, val on: Boolean
 class PanelInfo(val title: String, val help: String, val choices: List<PanelChoice> = emptyList(), val lines: List<Pair<String, String>> = emptyList(),
                 /** A [DeviceNote] under the help: what this device makes of these choices (Resolution's note). */
                 val note: String? = null,
+                /** Drawn under the help, before the choices (texture packs' two pictures, approved mockup 2026-11-15 screen 3). */
+                val top: (@Composable () -> Unit)? = null,
                 val onPick: ((Int) -> Unit)? = null) {
     val pickable get() = choices.isNotEmpty() && onPick != null
 }
@@ -208,8 +214,11 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
         if (info.help.isNotEmpty()) Text(info.help, style = JoeyTheme.type.note, color = c.textDim,
             modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH).padding(top = 2.dp, bottom = 8.dp))
         info.note?.let { DeviceNote(it) }
+        info.top?.invoke()
         val firstAt = shown.indexOfFirst { it.on && it.enabled }.takeIf { it >= 0 } ?: shown.indexOfFirst { it.enabled }.coerceAtLeast(0)
         shown.forEachIndexed { i, ch ->
+            ch.section?.let { Text(it.uppercase(), style = JoeyTheme.type.small, color = c.textDim, maxLines = 1,
+                modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH).padding(top = 8.dp, bottom = 2.dp)) }
             JoeyRow(ch.label,
                 Modifier
                     .landFocus(state.landing, enabled = inside && i == firstAt)
@@ -219,7 +228,8 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
                         if (i == shown.lastIndex) down = FocusRequester.Cancel
                     },
                 detail = ch.detail, detailWarn = ch.detailWarn, enabled = ch.enabled, experimental = ch.experimental,
-                trailing = if (ch.on) { _ -> com.joeysretro.joey64.launcher.screens.PickerTick() } else null) {
+                trailing = if (ch.on) { _ -> com.joeysretro.joey64.launcher.screens.PickerTick() }
+                    else ch.value?.let { v -> { _ -> Text(v, style = JoeyTheme.type.small, color = c.textDim, maxLines = 1) } }) {
                 info.onPick?.invoke(i)
                 state.leave()
             }

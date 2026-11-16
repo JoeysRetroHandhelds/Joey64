@@ -81,6 +81,7 @@ fun InGameGameSettings(game: GameRef, onPictureChanged: () -> Unit = {}, onClose
     var back by remember { mutableStateOf<String?>(null) }
     panel?.let { row ->
         if (row == "crop") CropPanel(game.saveName) { back = row; panel = null }
+        else if (row == "tex") TexPanel(game.saveName) { back = row; panel = null }
         else PicturePanel(game.saveName, row, onPictureChanged) { back = row; panel = null }
         return
     }

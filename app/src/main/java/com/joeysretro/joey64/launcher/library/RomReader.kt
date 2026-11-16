@@ -83,6 +83,11 @@ data class RomHeader(
     val revision: Int,
     val crc1: Long,
     val crc2: Long,
+    /**
+     * The name a texture pack is filed under: GLideN64's RSP.romname, the 20 header bytes as they are (no Shift-JIS),
+     * cut at the first NUL, trailing spaces off, ':' and '/' as '-' (the core's pack_exists, TxHiResCache's removeColon).
+     */
+    val packName: String = "",
 ) {
     val revisionLabel get() = if (revision == 0) "Original" else "Rev $revision"
 }
@@ -206,7 +211,14 @@ object RomReader {
             revision = z64[0x3F].toInt() and 0xFF,
             crc1 = u32(z64, 0x10),
             crc2 = u32(z64, 0x14),
+            packName = packNameOf(nameBytes),
         )
+    }
+
+    /** [RomHeader.packName] from the 20 name bytes in .z64 order. */
+    fun packNameOf(nameBytes: ByteArray): String {
+        val end = nameBytes.indexOf(0).let { if (it < 0) nameBytes.size else it }
+        return String(nameBytes, 0, end, Charsets.ISO_8859_1).trimEnd(' ').replace(':', '-').replace('/', '-')
     }
 
     private fun u32(b: ByteArray, at: Int): Long =

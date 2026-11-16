@@ -19,7 +19,7 @@ import com.joeysretro.joey64.launcher.library.RomInfo
  * the file is renamed or moved, or the same ROM sits in two folders.
  */
 object LibrarySchema {
-    const val VERSION = 7
+    const val VERSION = 8
 
     val V1 = listOf(
         // md5: RetroAchievements' N64 hash, the MD5 of the ROM in big-endian (.z64) byte order.
@@ -175,6 +175,14 @@ object LibrarySchema {
         "ALTER TABLE games ADD COLUMN picked_at INTEGER",
     )
 
+    /**
+     * Version 8 (texture packs, approved mockup 2026-11-15): the header name a pack is filed under (RomHeader.packName).
+     * Set by every read; the upgrade has the files read again, as V3's did.
+     */
+    val V8 = listOf(
+        "ALTER TABLE games ADD COLUMN header_name TEXT",
+    )
+
     /** Tables the cache owns; emptied on sign-out. */
     val RA_CACHE = listOf("ra_achievements", "ra_sets")
 }
@@ -205,6 +213,8 @@ data class LibraryGame(
     val hiddenAt: Long? = null,
     /** When it was picked in its game's Versions (V7); the tile plays the copy played or picked last. */
     val pickedAt: Long? = null,
+    /** The header name texture packs are filed under (V8, RomHeader.packName); null until the file is read again. */
+    val packName: String? = null,
 )
 
 /** A collection the user made (Phase 5). Favourites isn't one: it's games.favorite, always first. */
@@ -269,7 +279,7 @@ class LibraryDb private constructor(context: Context) :
     }
 
     override fun onCreate(db: SQLiteDatabase) {
-        for (sql in LibrarySchema.V1 + LibrarySchema.V2 + LibrarySchema.V3 + LibrarySchema.V4 + LibrarySchema.V5 + LibrarySchema.V6 + LibrarySchema.V7) db.execSQL(sql)
+        for (sql in LibrarySchema.V1 + LibrarySchema.V2 + LibrarySchema.V3 + LibrarySchema.V4 + LibrarySchema.V5 + LibrarySchema.V6 + LibrarySchema.V7 + LibrarySchema.V8) db.execSQL(sql)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -289,6 +299,10 @@ class LibraryDb private constructor(context: Context) :
         if (oldVersion < 5) for (sql in LibrarySchema.V5) db.execSQL(sql)
         if (oldVersion < 6) for (sql in LibrarySchema.V6) db.execSQL(sql)
         if (oldVersion < 7) for (sql in LibrarySchema.V7) db.execSQL(sql)
+        if (oldVersion < 8) {
+            for (sql in LibrarySchema.V8) db.execSQL(sql)
+            db.execSQL("UPDATE files SET size = -1")
+        }
     }
 
     /** Adds a finished play session and keeps the game's total and last-played in step. */
@@ -428,6 +442,7 @@ class LibraryDb private constructor(context: Context) :
                     put("region", info.header.region.code.code)
                     put("revision", info.header.revision)
                     put("rom_size", info.size)
+                    put("header_name", info.header.packName)
                     // A 64DD disk has no header CRCs, so no cheat-list key (every disk would share 00000000-00000000-4A).
                     if (info.header.crc1 == 0L && info.header.crc2 == 0L) putNull("header_key")
                     else put("header_key", com.joeysretro.joey64.cheats.CheatLogic.keyOf(info.header))
@@ -505,7 +520,7 @@ class LibraryDb private constructor(context: Context) :
     fun libraryGames(): List<LibraryGame> =
         readableDatabase.rawQuery(
             "SELECT g.id, g.title, g.md5, a.kind, g.crc32, g.last_played_at IS NOT NULL, g.favorite, g.header_key, g.header_id," +
-                " g.last_played_at, g.play_seconds, g.added_at, g.region, g.revision, g.hidden_at, g.picked_at FROM games g LEFT JOIN box_art a ON a.game_id = g.id" +
+                " g.last_played_at, g.play_seconds, g.added_at, g.region, g.revision, g.hidden_at, g.picked_at, g.header_name FROM games g LEFT JOIN box_art a ON a.game_id = g.id" +
                 " WHERE EXISTS (SELECT 1 FROM files f WHERE f.game_id = g.id) ORDER BY g.title COLLATE NOCASE",
             null,
         ).use { c ->
@@ -515,7 +530,7 @@ class LibraryDb private constructor(context: Context) :
                     headerId = c.getString(8), lastPlayedAt = if (c.isNull(9)) null else c.getLong(9), playSeconds = c.getLong(10),
                     addedAt = c.getLong(11), region = if (c.isNull(12)) null else c.getInt(12).toChar(),
                     revision = if (c.isNull(13)) null else c.getInt(13), hiddenAt = if (c.isNull(14)) null else c.getLong(14),
-                    pickedAt = if (c.isNull(15)) null else c.getLong(15)))
+                    pickedAt = if (c.isNull(15)) null else c.getLong(15), packName = c.getString(16)))
             }
         }
 

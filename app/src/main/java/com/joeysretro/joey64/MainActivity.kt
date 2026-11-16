@@ -1131,6 +1131,61 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         return com.joeysretro.joey64.video.ExtrasOn.of(x, v, com.joeysretro.joey64.achievements.RaHardcore.on())
     }
 
+    /** [rom]'s header name as texture packs are filed (RomHeader.packName), or null. */
+    private fun romPackName(rom: String): String? = if (rom.isEmpty()) null else try {
+        val buf = File(rom).inputStream().use { i -> ByteArray(0x40).also { b -> if (i.read(b) < b.size) throw java.io.IOException("short ROM") } }
+        val order = com.joeysretro.joey64.launcher.library.RomByteOrder.of(buf) ?: throw java.io.IOException("not an N64 ROM")
+        order.toBigEndian(buf, buf.size)
+        com.joeysretro.joey64.launcher.library.RomReader.parseHeader(buf).packName.takeIf { it.isNotEmpty() }
+    } catch (e: Exception) {
+        JLog.e(TAG, "texture packs: can't read the ROM header: $e"); null
+    }
+
+    /** The pack this play uses (null: none), and its name for the picture taken in play. */
+    private var texPack: com.joeysretro.joey64.video.TexPack? = null
+
+    /**
+     * Texture packs at game start (approved mockup 2026-11-15, screen 5): the game's pack by Settings › Video's choice, made
+     * ready for the core (N64_RDP_TEXPACK), with the pop-up naming it for 4 s; a pack whose folder can't be read gets the
+     * orange pop-up and the game plays with its own textures. A minute in, the frame is kept as the pack's picture
+     * for Settings (Joey 2026-11-15, "Take them in play"), once.
+     */
+    private fun setUpTexPack(rom: String) {
+        texPack = null
+        val name = romPackName(rom) ?: return
+        val store = com.joeysretro.joey64.video.TexPackStore(this)
+        store.finishConversions()
+        val index = store.index() ?: return
+        val pick = com.joeysretro.joey64.video.TexPacks.pick(index, name, video[com.joeysretro.joey64.video.VideoKey.TexPack]) ?: return
+        val ready = store.prepare(pick)
+        val p = if (ready == null) {
+            JLog.w(TAG, "texture packs: ${pick.file} can't be read, playing without it")
+            InGamePopup("texpack", InGamePopup.Kind.TexPackNote, "Texture packs folder can't be reached", "Playing with the game's own textures",
+                "Pick it again in Settings › Video › Texture packs")
+        } else {
+            android.system.Os.setenv("N64_RDP_TEXPACK", ready.dir.path, true)
+            texPack = pick
+            JLog.i(TAG, "texture packs: ${pick.shown} (${pick.file}, ${com.joeysretro.joey64.video.TexPacks.sizeLabel(pick.size)}) for $name" +
+                if (pick.png && !store.isConverted(pick)) ", converting it this play" else "")
+            if (!store.shot(name, "pack").isFile) fpsHandler.postDelayed({ texShot(name) }, TEXPACK_SHOT_MS)
+            InGamePopup("texpack", InGamePopup.Kind.TexPack, "Texture pack", pick.shown,
+                if (pick.png && !store.isConverted(pick)) "Getting it ready: HD textures come in after a while" else "HD textures come in as you play",
+                stayMs = 4_000)
+        }
+        overlay?.show(p) ?: earlyPops.add(p)
+    }
+
+    /** Keeps this frame as [name]'s picture with its pack, off the main thread; skipped while paused or in a menu. */
+    private fun texShot(name: String) {
+        if (destroyed || !gameLoaded || texPack == null) return
+        if (!resumed || menuOpen || hotkeyPaused) { fpsHandler.postDelayed({ texShot(name) }, 15_000); return }
+        val f = com.joeysretro.joey64.video.TexPackStore(this).shot(name, "pack")
+        Thread {
+            val png = com.joeysretro.joey64.states.FramePicture.capturePng(1500, 640) ?: return@Thread
+            try { f.parentFile?.mkdirs(); val part = File(f.path + ".part"); part.writeBytes(png); part.renameTo(f) } catch (e: Exception) { JLog.e(TAG, "texture packs: picture: $e") }
+        }.start()
+    }
+
     /** [rom]'s header game code ("NDOE"), or null ("" a 64DD disk with no cartridge, or unreadable). */
     private fun romGameCode(rom: String): String? = if (rom.isEmpty()) null else try {
         val buf = File(rom).inputStream().use { i -> ByteArray(0x40).also { b -> if (i.read(b) < b.size) throw java.io.IOException("short ROM") } }
@@ -1881,6 +1936,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             val md5 = gameMd5 ?: knownMd5()
             if (launcherBool(EXTRA_STATE_RING) && md5 != null) android.system.Os.setenv("N64_STATE_RING", stateRingDir(this, md5).path, true)
             else android.system.Os.unsetenv("N64_STATE_RING")
+        }
+        // Texture packs (approved mockup 2026-11-15; video/TexturePacks.kt): parallel-RDP reads the game's pack from the folder
+        // set here. The env lives on in the process, so it's cleared for every other start; --es env N64_RDP_TEXPACK wins.
+        if (devString("env")?.contains("N64_RDP_TEXPACK=") != true) {
+            android.system.Os.unsetenv("N64_RDP_TEXPACK")
+            if (parallel) setUpTexPack(if (RomFiles.isDiskName(rom)) ddCart ?: "" else rom)
         }
         trial?.begin()
         if (speedTry != null) speed?.begin()
@@ -3944,6 +4005,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         private const val SHUTDOWN_POLL_MS = 500L
         /** The driver trial's watch (approved gputry mockup 2026-11-15): how often, and how long a start gets. */
         private const val TRIAL_POLL_MS = 500L
+        /** When in a play with a texture pack its picture is taken (Joey 2026-11-15): past the title screens in most games. */
+        private const val TEXPACK_SHOT_MS = 60_000L
         private const val SPEED_POLL_MS = 1_000L
         private const val SPEED_FLUSH_MS = 30_000L
         private const val TRIAL_NO_FRAME_MS = 10_000L

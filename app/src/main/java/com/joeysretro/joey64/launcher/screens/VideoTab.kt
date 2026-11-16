@@ -162,13 +162,27 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         }
     }
 
+    // Texture packs (approved mockup 2026-11-15; TexPackScreens.kt): folders and packs read off the main thread, again after a folder changes.
+    var texVersion by remember { mutableIntStateOf(0) }
+    val tex by androidx.compose.runtime.produceState(TexState.EMPTY, target, texVersion) {
+        value = withContext(Dispatchers.IO) { readTexState(context, target, rescan = texVersion > 0) }
+    }
+    var texFolder by remember { mutableStateOf<com.joeysretro.joey64.video.TexPackStore.Folder?>(null) }
+    var texPopup by remember { mutableStateOf(false) }
+    val texPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) { com.joeysretro.joey64.video.TexPackStore(context).addFolder(uri); texVersion++ }
+    }
+    val texInfo = if (target == null) texAllPanel(tex, v[VideoKey.TexPack], { set(VideoKey.TexPack, it) }, { texFolder = it }, { texPicker.launch(null) })
+        else texGamePanel(context, tex, v[VideoKey.TexPack], target) { set(VideoKey.TexPack, it) }
+
     val rowKeys: Map<String, List<VideoKey>> = mapOf(
         "res" to listOf(VideoKey.Resolution), "asp" to listOf(VideoKey.Aspect), "crop" to listOf(VideoKey.Crop, VideoKey.Trim), "int" to listOf(VideoKey.Integer),
         "ori" to listOf(VideoKey.Orientation), "cut" to listOf(VideoKey.Cutout), "col" to COLOUR_ROW_KEYS,
         "sh" to SHADER_KEYS, "sd" to SIDES_KEYS, "ov" to OVERLAY_KEYS,
         "ws" to listOf(VideoKey.Widescreen), "fps" to listOf(VideoKey.Fps),
         "shp" to listOf(VideoKey.Sharpen, VideoKey.SharpenStrength), "bfi" to listOf(VideoKey.Bfi),
-        "rend" to listOf(VideoKey.Renderer), "drv" to listOf(VideoKey.Driver), "pace" to listOf(VideoKey.Pacing), "filt" to FILTER_KEYS)
+        "rend" to listOf(VideoKey.Renderer), "drv" to listOf(VideoKey.Driver), "pace" to listOf(VideoKey.Pacing), "filt" to FILTER_KEYS,
+        "tex" to listOf(VideoKey.TexPack))
 
     // The handler is set once per target; it calls this composition's Y through rememberUpdatedState.
     val onY by rememberUpdatedState { if (popup == null) { rowKeys[focused]?.let { reset(it) }; true } else false }
@@ -221,6 +235,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
                 VideoSettings.colourLabel(k, v.int(k)) })
         focused == "shp" -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOf("Sharpening" to sharpenValue(v)))
         focused == "filt" -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOf("Look" to lookLabel(v)))
+        focused == "tex" -> texInfo
         focused == "crop" -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOf("Trim the game's border" to VideoChoices.label(VideoKey.Trim, v[VideoKey.Trim]),
             "Crop edges" to com.joeysretro.joey64.video.GameCrop.label(gameCode, v)))
         else -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help)
@@ -265,6 +280,11 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
                 dot = dot(*SHADER_KEYS.toTypedArray()), onFocused = { if (it) focused = "sh" }) {
                 if (onPicturePanel != null) onPicturePanel("sh") else popup = VPopup.Picture(PicPage.Shader)
             }
+            JoeyRow(if (target == null) "Texture packs" else "Texture pack", Modifier.initialFocus(startRow == "tex"),
+                value = texRowValue(tex, v[VideoKey.TexPack], target != null) + "  ›", sideways = true, dot = dot(VideoKey.TexPack),
+                onFocused = { if (it) focused = "tex" }) {
+                if (onPicturePanel != null) onPicturePanel("tex") else if (!panel.enter()) texPopup = true
+            }
             JoeyRow("Sides of the picture", Modifier.initialFocus(startRow == "sd"), value = com.joeysretro.joey64.video.Picture.sidesLabel(v, widescreenOn) + "  ›",
                 sideways = true, dot = dot(*SIDES_KEYS.toTypedArray()), onFocused = { if (it) focused = "sd" }) {
                 if (onPicturePanel != null) onPicturePanel("sd") else popup = VPopup.Picture(PicPage.Sides)
@@ -290,6 +310,8 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         }
     }
 
+    texFolder?.let { f -> TexFolderPopup(tex, f, onDismiss = { texFolder = null }) { removeTexFolder(context, f.uri) { texVersion++ }; texFolder = null }; return }
+    if (texPopup) { TexInfoPopup(texInfo) { texPopup = false }; return }
     when (val p = popup) {
         null -> {}
         is VPopup.Choice -> ChoicePopup(p.key, v[p.key], sub = p.row?.let { describe(it, v).second },

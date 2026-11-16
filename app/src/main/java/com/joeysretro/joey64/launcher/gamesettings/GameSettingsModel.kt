@@ -104,6 +104,9 @@ class GameSettingsModel(private val video: VideoStore, private val emu: EmuStore
         one(VideoKey.Cutout, "Fill the camera cutout", "cut")
         if (COLOUR.any { it in own }) out += GameChange(GamePart.Video, "Colour", colour(g), colour(all), "col")
         if (VideoKey.Sharpen in own || VideoKey.SharpenStrength in own) out += GameChange(GamePart.Video, "Sharpening", sharpenValue(g), sharpenValue(all), "shp")
+        if (VideoKey.TexPack in own) out += GameChange(GamePart.Video, "Texture pack",
+            when { g[VideoKey.TexPack] == "off" -> "None"; g[VideoKey.TexPack] == "on" -> "Auto"; else -> "A pack picked" },
+            if (all[VideoKey.TexPack] == "off") "Off" else "On", "tex")
         one(VideoKey.Bfi, "Black frame insertion", "bfi")
         one(VideoKey.Renderer, "Renderer", "adv:renderer")
         one(VideoKey.Driver, "GPU driver", "adv:driver")

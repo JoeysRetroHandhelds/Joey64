@@ -69,7 +69,9 @@ enum class VideoKey(val key: String, private val base: String) {
     /** Widescreen code (version A, 2026-11-08): "off"; All games "auto" (When a game has one); a game a version's cheat name. */
     Widescreen("widescreen", "off"),
     /** 60 fps code, stored as [Widescreen]. */
-    Fps("fps60", "off");
+    Fps("fps60", "off"),
+    /** Texture packs (approved mockup 2026-11-15; TexturePacks.kt): All games "on" / "off"; a game "on" (Auto), "off" (None) or "pack:<id>". */
+    TexPack("texpack", "on");
 
     /**
      * The value a row has when nobody set it. Frame pacing is Steady on a screen running at 120 Hz (Joey 2026-11-15:
@@ -87,7 +89,7 @@ enum class VideoKey(val key: String, private val base: String) {
         /** Rows that only do something when the game is drawn above Native (1x). */
         val UPSCALE_ONLY = setOf(Supersample, NativeTexLod, NativeTexRect)
         /** Rows read when the game starts, not while it runs. */
-        val AT_START = setOf(Resolution, Renderer, Driver, Pacing, Supersample, NativeTexLod, NativeTexRect, Widescreen, Fps)
+        val AT_START = setOf(Resolution, Renderer, Driver, Pacing, Supersample, NativeTexLod, NativeTexRect, Widescreen, Fps, TexPack)
     }
 }
 

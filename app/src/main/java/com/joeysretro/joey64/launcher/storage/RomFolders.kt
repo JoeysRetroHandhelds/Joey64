@@ -136,7 +136,8 @@ object RomFolders {
         val s = com.joeysretro.joey64.launcher.settings.SettingsStore(context).settings.first()
         val used = tree in s.romFolders || tree in s.gbFolders || tree == DataFolders.treeUri(context) ||
             tree == com.joeysretro.joey64.video.SlangStore(context).folder()?.uri ||
-            tree == com.joeysretro.joey64.video.RaOverlayStore(context).folder()?.uri
+            tree == com.joeysretro.joey64.video.RaOverlayStore(context).folder()?.uri ||
+            com.joeysretro.joey64.video.TexPackStore(context).folders().any { it.uri == tree }
         if (used) { com.joeysretro.joey64.JLog.i("Joey64Folders", "a folder's permission is kept: another setting still uses it"); return }
         try { release(context, tree.toUri()) } catch (e: Exception) { com.joeysretro.joey64.JLog.w("Joey64Folders", "can't give a folder's permission back: $e") }
     }
