@@ -617,8 +617,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         trialGpuName = system?.name ?: "none"
         val trialPick = if (autoOnly) GpuTrial(trialStore(), install, trialGpuName, chain.value.size).also { trial = it }.apply {
             // After an update, start on the driver Auto ran before (review 2026-11-15)
-            // (not when that was only Auto's first pick then: a new best first replaces it, GpuRules.carryOver)
-            GpuRules.carryOver(GpuRules.Driver.byId(devicePrefs.getString("driver", null)), devicePrefs.getString("driver_first", null), systemFamily)
+            // (not when that was only Auto's first pick then: a new best first replaces it, GpuRules.carryOver; never on
+            // a GPU we test, where our pick is the one to run)
+            if (!GpuRules.tested(systemFamily)) GpuRules.carryOver(GpuRules.Driver.byId(devicePrefs.getString("driver", null)), devicePrefs.getString("driver_first", null), systemFamily)
                 ?.let { d -> carry(chain.value.indexOf(d)) }
         }.decide() else null
         val level = trialPick?.level ?: 0
@@ -630,7 +631,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         speed = null; speedTry = null; speedGood = level
         val md5Now = earlyMd5()
         var speedGone: GpuSpeed.Start.Gone? = null
-        if (trialPick != null && trialPick.good && level < chain.value.size && md5Now != null && (devString("env") == null || devString("env")!!.matches(Regex("N64_TRIAL_BLACK=[0-9:]+"))) &&
+        // Not on the GPUs we test ourselves: Auto runs our pick there (GpuRules.tested, Joey 2026-11-15 night)
+        if (trialPick != null && trialPick.good && level < chain.value.size && md5Now != null && !GpuRules.tested(systemFamily) && (devString("env") == null || devString("env")!!.matches(Regex("N64_TRIAL_BLACK=[0-9:]+"))) &&
             devString("opts") == null && GpuRules.gameRenderer(md5Now) == null) {
             val sp = GpuSpeed(trialStore(), install, trialGpuName, chain.value.size, upscale)
             val listLevel = GpuOrder.pick(GpuOrder.cached(this, trialGpuName), chain.value, level)
@@ -645,8 +647,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         speedLevel = runLevel
         // The driver this start runs: a dev driver, a dev switch or Settings' pick, else the trial's level of the chain
         // (past the chain's end: the system driver with GLideN64).
+        // A game broken on a tested GPU's pick runs its own driver (GpuRules.gameDriver), only where Auto would run the
+        // first one: a trial that stepped down keeps its step.
+        val gameDrv = if (autoOnly && runLevel == 0 && GpuRules.tested(systemFamily)) GpuRules.gameDriver(md5Now, systemFamily) else null
+        gameDrv?.let { JLog.i(TAG, "GPU: game rule: ${it.value.shown} (${it.rule})") }
         val stepDriver: GpuRules.Driver = autoInstead ?: GpuRules.Driver.byId(devString("driver") ?: videoDriver)
-            ?: chain.value.getOrNull(runLevel) ?: GpuRules.Driver.SYSTEM
+            ?: gameDrv?.value ?: chain.value.getOrNull(runLevel) ?: GpuRules.Driver.SYSTEM
         val lib = dev ?: stepDriver.asset?.let { bundledDriver(it) }
         if (speedTry != null && stepDriver.asset != null && lib == null) { speedFailNow("not in this build"); return "gliden64" }
         // A bundled driver this build doesn't have: the trial moves on (no game start spent on it)
@@ -750,6 +756,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             custom == null -> "system"
             dev != null -> "custom"
             speedTry != null -> chain.value.getOrNull(level)?.id ?: stepDriver.id
+            gameDrv != null -> chain.value.getOrNull(runLevel)?.id ?: stepDriver.id
             else -> stepDriver.id
         })
         chain.value.firstOrNull()?.let { prefs.putString("driver_first", it.id) }

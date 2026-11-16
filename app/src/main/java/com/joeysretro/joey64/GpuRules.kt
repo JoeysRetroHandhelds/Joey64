@@ -207,6 +207,32 @@ object GpuRules {
         "70059d4d7ba7ac0f0741b44aec8b44dc" to "SM64 Last Impact: GLideN64 + HLE draws its file select whole",
     )
 
+    /**
+     * GPUs we run ourselves (Joey 2026-11-15 night: "where we have the devices to test on, we choose the best driver
+     * to use and it shouldn't change unless a game is broken"): Auto's pick there is our measured best, so the speed
+     * check and the reports' list leave them alone; a broken game gets a [gameDriver] rule. Thor and Odin 2 Portal
+     * (Adreno 740), Duo (722), Odin 3 and Odin 3 Portal (830), RG477M (Mali-G615), Flip and Pocket Block (Mali-G52).
+     * The trial still steps down from a driver that doesn't load. A new test device's GPU joins once measured.
+     */
+    fun tested(f: Family): Boolean = when (f.vendor) {
+        Vendor.ADRENO -> f.model in setOf(740, 722, 830)
+        Vendor.MALI -> f.model in setOf(615, 52)
+        Vendor.OTHER -> false
+    }
+
+    /**
+     * Per-game drivers on a tested GPU (Joey 2026-11-15 night: a game broken on the GPU's chosen driver gets the driver
+     * that draws it right, the rest keep the best): ROM MD5 to (GPU family key, driver, why). The key is
+     * "adreno740", "mali615" and so on; each line goes in with its fix, its evidence and its gamedb entry. None yet.
+     */
+    private val GAME_DRIVERS: Map<String, List<Triple<String, Driver, String>>> = mapOf()
+
+    fun familyKey(f: Family): String = f.vendor.name.lowercase() + f.model
+
+    /** Auto's driver for this game on this GPU when a rule gives it one, else null. */
+    fun gameDriver(md5: String?, f: Family, rules: Map<String, List<Triple<String, Driver, String>>> = GAME_DRIVERS): Pick<Driver>? =
+        md5?.lowercase()?.let { rules[it] }?.firstOrNull { it.first == familyKey(f) }?.let { Pick(it.second, it.third) }
+
     /** Auto's per-game renderer, or null when the game has none. */
     fun gameRenderer(md5: String?): Pick<String>? = md5?.lowercase()?.let { GLIDEN_GAMES[it] }?.let { Pick("gliden64", it) }
 

@@ -73,6 +73,28 @@ class GpuRulesTest {
         assertEquals(GpuRules.Driver.SYSTEM, GpuRules.autoDriver(GpuRules.family(arm, "Mali-G52 MC2", null)).value)
     }
 
+    @Test fun testedGpus() {
+        for (n in listOf("Adreno (TM) 740", "Turnip Adreno (TM) 722", "Adreno (TM) 830"))
+            assertTrue(n, GpuRules.tested(GpuRules.family(adreno, n, null)))
+        assertTrue(GpuRules.tested(GpuRules.family(arm, "Mali-G615 MC6", null)))
+        assertTrue(GpuRules.tested(GpuRules.family(arm, "Mali-G52 MC2", null)))
+        for (n in listOf("Adreno (TM) 750", "Adreno (TM) 650", "Adreno (TM) A32"))
+            assertFalse(n, GpuRules.tested(GpuRules.family(adreno, n, null)))
+        assertFalse(GpuRules.tested(GpuRules.family(arm, "Mali-G57 MC2", null)))
+        assertFalse(GpuRules.tested(GpuRules.family(0x10DE, "Tegra", null)))
+    }
+
+    @Test fun gameDriverRules() {
+        val f740 = GpuRules.family(adreno, "Adreno (TM) 740", null)
+        val rules = mapOf("abc123" to listOf(Triple("adreno722", GpuRules.Driver.FAUX123, "x"), Triple("adreno740", GpuRules.Driver.TURNIP, "draws it right")))
+        assertEquals(GpuRules.Driver.TURNIP, GpuRules.gameDriver("ABC123", f740, rules)?.value)
+        assertEquals("draws it right", GpuRules.gameDriver("abc123", f740, rules)?.rule)
+        assertEquals(null, GpuRules.gameDriver("abc123", GpuRules.family(adreno, "Adreno (TM) 830", null), rules))
+        assertEquals(null, GpuRules.gameDriver("other", f740, rules))
+        assertEquals(null, GpuRules.gameDriver(null, f740, rules))
+        assertEquals("mali615", GpuRules.familyKey(GpuRules.family(arm, "Mali-G615 MC6", null)))
+    }
+
     @Test fun carryOverOnlyWhatTheTrialFound() {
         val f740 = GpuRules.family(adreno, "Adreno (TM) 740", null)
         // an install from before driver_first that ran the old first pick moves to the new best
