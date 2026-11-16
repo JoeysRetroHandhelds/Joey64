@@ -2497,9 +2497,11 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
     // Yoshi's Story on Adreno in fast-forward), Blast Corps (async on the recompiler: freezes on the Rareware logo
     // ~2 s in on the Flip's Mali, 2026-11-11 bc-flip/bc3-flip; the cached interpreter and sync both play it), Tony
     // Hawk's Pro Skater 2 (async on Mali: stops drawing ~35 s in, the emulation spinning; Pocket Block 2026-11-16:
-    // async 2 of 6 runs as shipped, 6 of 6 with the compile thread off; sync 0 of 6, 59.5 fps, run 9.0 vs 8.6 ms). An
+    // async 2 of 6 runs as shipped, 6 of 6 with the compile thread off; sync 0 of 6, 59.5 fps, run 9.0 vs 8.6 ms), Onegai
+    // Monsters (async on the Flip's Mali: black at 0.2 fps, the game spinning on "Unaligned dword write"; the cached
+    // interpreter too; sync plays the title and intro, 2026-11-16 og2-flip). An
     // explicit option override (--es opts) wins.
-    static const char* const kSyncRdpGames[] = {"NPF", "NRI", "NRE", "NCU", "NYS", "NSL", "NBC", "NTQ"};
+    static const char* const kSyncRdpGames[] = {"NPF", "NRI", "NRE", "NCU", "NYS", "NSL", "NBC", "NTQ", "NOM"};
     std::string id = romGameId(buf);
     auto idIn = [&](auto& list) { return std::any_of(std::begin(list), std::end(list), [&](const char* g) { return id.compare(0, 3, g) == 0; }); };
     g_ffKeepSync = idIn(kSyncRdpGames);
