@@ -15,7 +15,9 @@ import com.joeysretro.joey64.Controllers
  */
 object PadDevices {
     /** Handhelds' own pads that report external. AYN: Odin 2/3, Thor, Portal ("Odin Controller"). */
-    private val BUILT_IN_IDS = setOf(0x2020 shl 16 or 0x0111)
+    private val BUILT_IN_IDS = setOf(0x2020 shl 16 or 0x0111,
+        // The same AYN pad in its Xbox/Odin toggle's Xbox position ("Xbox Wireless Controller", Joey 2026-11-16).
+        0x2020 shl 16 or 0x0112)
 
     fun isPad(d: InputDevice): Boolean = !d.isVirtual &&
         (d.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
@@ -57,11 +59,13 @@ object PadDevices {
      * [set] with each player on this device's own pad moved off the setup Auto map gave before the pad's Xbox/Nintendo
      * toggle was known (by position, as an Xbox pad: right in the toggle's Xbox position only), or null when none is.
      * Only a player whose face buttons are still exactly that setup's moves: their A/B/X/Y codes are swapped, so each
-     * N64 button stays on the button it was on in the Xbox position. For the RG477M's sets from before 2026-11-16.
+     * N64 button stays on the button it was on in the Xbox position. For the RG477M and AYN sets from before 2026-11-16.
      */
     fun fixToggleFace(set: ControlsSet): ControlsSet? {
         val d = builtIn() ?: return null
-        if (Controllers.profile(d).toggle == null) return null
+        // Pads saved in their Nintendo position's codes: the RG477M, and the AYN pads (a set made while one was in its
+        // Xbox position, an unknown external pad then, was by position).
+        if (Controllers.profile(d).faceCodes != Controllers.FaceCodes.NINTENDO_LABELS) return null
         val old = autoSetup(d, DeviceChoice.BuiltIn, face = AutoMap.FaceCodes.POSITION)
         val faceKeys = setOf(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y)
         fun faceOf(s: PlayerSetup) = s.buttons.filterValues { it is PadInput.Key && it.code in faceKeys }

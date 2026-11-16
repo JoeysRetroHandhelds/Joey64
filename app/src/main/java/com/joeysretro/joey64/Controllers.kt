@@ -18,7 +18,8 @@ object Controllers {
      * [stickReach]: the starting guess for how far each stick direction reaches (0..1); calibration learns the real value.
      * [toggle]: the Settings.System key of the device's Xbox/Nintendo layout toggle and its Xbox value, when it has one.
      */
-    class Profile(val name: String, val faceCodes: FaceCodes, val stickReach: Float, val toggle: Pair<String, String>? = null)
+    class Profile(val name: String, val faceCodes: FaceCodes, val stickReach: Float, val toggle: Pair<String, String>? = null,
+                  val xboxPosition: Boolean = false)
 
     val DEFAULT = Profile("generic", FaceCodes.POSITION, 0.9f)
 
@@ -29,8 +30,15 @@ object Controllers {
     // BUTTON_A), its Xbox position swaps A/B and X/Y (A = BTN_EAST) and sets Settings.System abxy_mode=1 (0, or no key
     // before the first flip, in NS). [faceKey] turns the Xbox position's codes back into the NS position's, so a setup
     // (Auto map's or a hand-made one) keeps each N64 button on the same physical button whichever way the toggle is.
+    // AYN (Odin 3, Odin 3 Portal, Odin 2 Portal; Joey 2026-11-16, getevent both ways, results/abxy): the Xbox/Odin
+    // toggle decides the codes, not the printed letters (the Odin 3 has Nintendo letters, the Odin 3 Portal Xbox ones).
+    // Odin mode is "Odin Controller" 2020:0111 and sends Nintendo-style (bottom BUTTON_B, right A, left Y, top X); Xbox
+    // mode re-enumerates as "Xbox Wireless Controller" 2020:0112, a new device, and sends by position (bottom A, right B,
+    // left X, top Y), with Settings.System flip_button_layout 1. So 0112 is the same built-in pad in its Xbox position:
+    // [faceKey] turns its codes back into 0111's.
     private val KNOWN = mapOf(
-        (0x2020 shl 16) or 0x0111 to Profile("AYN Odin 3", FaceCodes.NINTENDO_LABELS, 0.75f),
+        (0x2020 shl 16) or 0x0111 to Profile("AYN, Odin position", FaceCodes.NINTENDO_LABELS, 0.75f),
+        (0x2020 shl 16) or 0x0112 to Profile("AYN, Xbox position", FaceCodes.NINTENDO_LABELS, 0.75f, xboxPosition = true),
         (0x484b shl 16) or 0x1101 to Profile("Anbernic RG477M", FaceCodes.NINTENDO_LABELS, 0.9f, "abxy_mode" to "1"),
     )
 
@@ -59,7 +67,7 @@ object Controllers {
     /** [keyCode] from [dev] as its toggle's Nintendo position sends it: A/B and X/Y swapped back in the Xbox position. */
     fun faceKey(dev: InputDevice?, keyCode: Int): Int {
         val p = profile(dev)
-        if (p.toggle == null || !toggleXbox(p)) return keyCode
+        if (!p.xboxPosition && (p.toggle == null || !toggleXbox(p))) return keyCode
         return when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_A -> KeyEvent.KEYCODE_BUTTON_B
             KeyEvent.KEYCODE_BUTTON_B -> KeyEvent.KEYCODE_BUTTON_A
