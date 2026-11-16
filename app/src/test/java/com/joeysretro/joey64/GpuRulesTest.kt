@@ -16,7 +16,9 @@ class GpuRulesTest {
     @Test fun thorAndPortal740() {
         val f = GpuRules.family(adreno, "Adreno (TM) 740", null)
         assertEquals(740, f.model)
-        assertEquals(GpuRules.Driver.TURNIP, GpuRules.autoDriver(f).value)
+        assertEquals(GpuRules.Driver.ARMSX2, GpuRules.autoDriver(f).value)
+        // other 7xx keep Turnip Gen8 until a finding covers them
+        assertEquals(GpuRules.Driver.TURNIP, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 750", null)).value)
         // with Turnip loaded the name is Turnip's
         val t = GpuRules.family(adreno, "Turnip Adreno (TM) 740", null)
         assertEquals(mapOf("N64_SMOOTHER" to "1", "mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0"), env(t))
@@ -49,9 +51,9 @@ class GpuRulesTest {
         // Turnip (custom driver) on Adreno tops out at 4x; stock stays 8x
         assertEquals(4, GpuRules.upscaleTop(f, customDriver = true).value)
         assertEquals(8, GpuRules.upscaleTop(f).value)
-        // a7xx at 8x keeps Turnip (it caps to 4x anyway)
+        // a7xx at 8x keeps its Turnip, ARMSX2 on the 740 (it caps to 4x anyway)
         val t = GpuRules.family(adreno, "Adreno (TM) 740", null)
-        assertEquals(GpuRules.Driver.TURNIP, GpuRules.autoDriver(t, 8).value)
+        assertEquals(GpuRules.Driver.ARMSX2, GpuRules.autoDriver(t, 8).value)
         assertEquals("gliden64", GpuRules.autoRenderer(true, true, false, t, upscale = 8).value)
         // Duo stays 2x with Turnip; Mali untouched
         assertEquals(2, GpuRules.upscaleTop(GpuRules.family(adreno, "Turnip Adreno (TM) 722", null), customDriver = true).value)
@@ -59,9 +61,29 @@ class GpuRulesTest {
 
     @Test fun duo722() {
         val f = GpuRules.family(adreno, "Turnip Adreno (TM) 722", null)
-        assertEquals(GpuRules.Driver.FAUX123, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 722", null)).value)
+        assertEquals(GpuRules.Driver.ARMSX2, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 722", null)).value)
         assertEquals(mapOf("mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0"), env(f))
         assertEquals(2, GpuRules.upscaleTop(f).value)
+    }
+
+    @Test fun maliG615() {
+        val f = GpuRules.family(arm, "Mali-G615 MC6", null)
+        assertEquals(615, f.model)
+        assertEquals(GpuRules.Driver.MALISX2, GpuRules.autoDriver(f).value)
+        assertEquals(GpuRules.Driver.SYSTEM, GpuRules.autoDriver(GpuRules.family(arm, "Mali-G52 MC2", null)).value)
+    }
+
+    @Test fun carryOverOnlyWhatTheTrialFound() {
+        val f740 = GpuRules.family(adreno, "Adreno (TM) 740", null)
+        // an install from before driver_first that ran the old first pick moves to the new best
+        assertEquals(null, GpuRules.carryOver(GpuRules.Driver.TURNIP, null, f740))
+        // one the trial or the speed check moved keeps it
+        assertEquals(GpuRules.Driver.R2, GpuRules.carryOver(GpuRules.Driver.R2, null, f740))
+        assertEquals(GpuRules.Driver.TURNIP, GpuRules.carryOver(GpuRules.Driver.TURNIP, "armsx2", f740))
+        assertEquals(null, GpuRules.carryOver(GpuRules.Driver.ARMSX2, "armsx2", f740))
+        assertEquals(null, GpuRules.carryOver(GpuRules.Driver.FAUX123, null, GpuRules.family(adreno, "Adreno (TM) 722", null)))
+        assertEquals(null, GpuRules.carryOver(GpuRules.Driver.SYSTEM, null, GpuRules.family(arm, "Mali-G615 MC6", null)))
+        assertEquals(null, GpuRules.carryOver(null, null, f740))
     }
 
     @Test fun flipMaliG52() {
@@ -177,9 +199,15 @@ class GpuRulesTest {
 
     @Test fun chains() {
         val names = { f: GpuRules.Family, sdk: Int -> GpuRules.chain(f, sdk).value }
-        // the GPUs we run keep their first driver
-        assertEquals(GpuRules.Driver.TURNIP, names(GpuRules.family(adreno, "Adreno (TM) 740", null), 35).first())
-        assertEquals(GpuRules.Driver.FAUX123, names(GpuRules.family(adreno, "Adreno (TM) 722", null), 34).first())
+        // best measured first, the old first pick right after it
+        val a740 = names(GpuRules.family(adreno, "Adreno (TM) 740", null), 35)
+        assertEquals(listOf(GpuRules.Driver.ARMSX2, GpuRules.Driver.TURNIP), a740.take(2))
+        assertEquals(a740.size, a740.distinct().size)
+        val a722 = names(GpuRules.family(adreno, "Adreno (TM) 722", null), 34)
+        assertEquals(listOf(GpuRules.Driver.ARMSX2, GpuRules.Driver.FAUX123), a722.take(2))
+        assertEquals(a722.size, a722.distinct().size)
+        val g615 = names(GpuRules.family(0x13B5, "Mali-G615 MC6", null), 34)
+        assertEquals(listOf(GpuRules.Driver.MALISX2, GpuRules.Driver.SYSTEM), g615.take(2))
         assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(adreno, "Adreno (TM) 830", null), 35).first())
         assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(0x13B5, "Mali-G52 MC2", null), 30).first())
         // the 650: Mr Purple first, then the rest, the phone's own last; no repeats

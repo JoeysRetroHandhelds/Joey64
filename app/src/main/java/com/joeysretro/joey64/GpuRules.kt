@@ -9,11 +9,11 @@ package com.joeysretro.joey64
 object GpuRules {
     enum class Vendor { ADRENO, MALI, OTHER }
 
-    /** model: the Adreno's number (740), 0 when not known or not an Adreno; source: where it came from, for the log. */
+    /** model: the Adreno's number (740) or the Mali-G number (615), 0 when not known; source: where it came from, for the log. */
     data class Family(val vendor: Vendor, val model: Int, val name: String, val source: String = "") {
         override fun toString() = when (vendor) {
             Vendor.ADRENO -> if (model > 0) "Adreno $model (from the $source)" else "Adreno, model not known"
-            Vendor.MALI -> "Mali"
+            Vendor.MALI -> if (model > 0) "Mali-G$model" else "Mali"
             Vendor.OTHER -> "not Adreno or Mali"
         } + if (name.isNotEmpty()) " [$name]" else ""
     }
@@ -34,7 +34,8 @@ object GpuRules {
                 ?.let { return Family(Vendor.ADRENO, it, vkName, "marketing name") }
             return Family(Vendor.ADRENO, 0, vkName)
         }
-        if (vendorId == 0x13B5 || "Mali" in vkName) return Family(Vendor.MALI, 0, vkName)
+        if (vendorId == 0x13B5 || "Mali" in vkName)
+            return Family(Vendor.MALI, Regex("""Mali-G(\d+)""").find(vkName)?.groupValues?.get(1)?.toInt() ?: 0, vkName, "Vulkan name")
         return Family(Vendor.OTHER, 0, vkName)
     }
 
@@ -90,8 +91,8 @@ object GpuRules {
     /**
      * The drivers Auto tries on this GPU, best first (Joey 2026-11-15: "try as much as possible to avoid a new user with
      * untested device having to fall back to glide"). The start-up trial ([GpuTrial]) gives each one try with
-     * parallel-RDP; after the last, GLideN64 on the system driver. The first is [autoDriver]'s pick, so the GPUs we run
-     * keep what they had. Drivers whose [Driver.minSdk] is above [sdk] are left out.
+     * parallel-RDP; after the last, GLideN64 on the system driver. The first is [autoDriver]'s pick, the fastest measured on that GPU
+     * (Joey 2026-11-15: "Auto should be reordered when we get findings, it should put the best first"). Drivers whose [Driver.minSdk] is above [sdk] are left out.
      */
     fun chain(f: Family, sdk: Int, upscale: Int = 1): Pick<List<Driver>> {
         val first = autoDriver(f, upscale)
@@ -103,7 +104,7 @@ object GpuRules {
             f.vendor == Vendor.ADRENO && f.model in 800..899 -> listOf(Driver.TURNIP, Driver.FAUX123, Driver.ARMSX2, Driver.K11, Driver.APEX, Driver.PURPLE)
             // The Duo's 722: faux123 (Mario Party 2's text boxes), then by the smoke bench (duo-dz): the Duo build, ARMSX2,
             // Gen8 and K11 even with faux123, R2 ~10% slower, Apex and Mr Purple about half
-            f.vendor == Vendor.ADRENO && f.model == 722 -> listOf(Driver.DUO, Driver.ARMSX2, Driver.TURNIP, Driver.K11, Driver.R2, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
+            f.vendor == Vendor.ADRENO && f.model == 722 -> listOf(Driver.FAUX123, Driver.DUO, Driver.TURNIP, Driver.K11, Driver.R2, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
             // Adreno 6xx: Mesa gives a6xx no 8-bit storage, so only Mr Purple's build (8-bit storage as a Vulkan 1.2
             // feature, the RP Mini V2 / Flip 2 testers 2026-11-08) can run parallel-RDP; the rest are checked on the
             // probe, which costs no game start
@@ -112,20 +113,43 @@ object GpuRules {
             // (smoke bench o2p-dz, Odin 2 Portal's 740: R2, faux123 and ARMSX2 even with Gen8, ARMSX2 up to 10% faster;
             // K11 R8 doesn't load there; Apex and Mr Purple about half speed)
             f.vendor == Vendor.ADRENO && (f.model in 700..799 || f.model == 0) ->
-                listOf(Driver.R2, Driver.ARMSX2, Driver.FAUX123, Driver.K11, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
+                listOf(Driver.TURNIP, Driver.R2, Driver.ARMSX2, Driver.FAUX123, Driver.K11, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
             f.vendor == Vendor.ADRENO -> listOf(Driver.PURPLE, Driver.K11, Driver.SYSTEM)
-            f.vendor == Vendor.MALI -> listOf(Driver.MALISX2, Driver.PANVK)
+            f.vendor == Vendor.MALI -> listOf(Driver.SYSTEM, Driver.MALISX2, Driver.PANVK)
             else -> emptyList()
         }
         val list = (listOf(first.value) + rest).distinct().filter { sdk >= it.minSdk }
         return Pick(list, first.rule + if (list.size > 1) ", then " + list.drop(1).joinToString(", ") { it.shown } else "")
     }
 
+    /**
+     * The driver Auto ran before an update ([prev], the `device` pref "driver") is carried over only when the trial or
+     * the speed check moved there, not when it was just Auto's first pick then, so a new best first reaches devices
+     * already playing. [prevFirst] is the `device` pref "driver_first" (the chain's first at that start); installs from
+     * before it compare with the first picks Auto had until 2026-11-15.
+     */
+    fun carryOver(prev: Driver?, prevFirst: String?, f: Family): Driver? {
+        prev ?: return null
+        val first = Driver.byId(prevFirst) ?: when {
+            f.vendor == Vendor.ADRENO && f.model == 722 -> Driver.FAUX123
+            f.vendor == Vendor.ADRENO && f.model == 740 -> Driver.TURNIP
+            f.vendor == Vendor.MALI && f.model == 615 -> Driver.SYSTEM
+            else -> autoDriver(f).value
+        }
+        return prev.takeIf { it != first }
+    }
+
     /** Auto's driver for the system GPU's family; [upscale] is the parallel-RDP Resolution the game starts at. */
     fun autoDriver(f: Family, upscale: Int = 1): Pick<Driver> = when {
         // faux123's Turnip (Duo fixes) draws Mario Party 2's text boxes without the stray lines the general build
         // leaves, and passed the 82-game compat run (2026-11-04)
-        f.vendor == Vendor.ADRENO && f.model == 722 -> Pick(Driver.FAUX123, "Adreno 722: Turnip faux123")
+        // Best first (Joey 2026-11-15: "Auto should be reordered when we get findings, it should put the best first"):
+        // ARMSX2's Turnip on the 722 and the 740 (smoke bench 102% / 105% of faux123 / Gen8, Odin 2 Portal A/B up to
+        // +15% uncapped; compat duo-armsx2 and o2p-armsx2 82/82; Mario Party 2's text boxes drawn as faux123 draws them),
+        // malisx2 on the Mali-G615 (113% of the stock driver, rg-malisx2 82/82). On the Mali-G52 malisx2 was ~14% slower.
+        f.vendor == Vendor.ADRENO && f.model == 722 -> Pick(Driver.ARMSX2, "Adreno 722: ARMSX2 Turnip (fastest measured)")
+        f.vendor == Vendor.ADRENO && f.model == 740 -> Pick(Driver.ARMSX2, "Adreno 740: ARMSX2 Turnip (fastest measured)")
+        f.vendor == Vendor.MALI && f.model == 615 -> Pick(Driver.MALISX2, "Mali-G615: malisx2 (fastest measured)")
         // The stock Adreno 740 driver (676.53) fails to compile a parallel-RDP shader; Turnip runs it. Turnip Gen8's
         // device table knows every Adreno 6xx-8xx part (README item 38, offline coverage).
         // 8x on Adreno 8xx (Odin 3, Adreno 830; Joey 2026-11-09, "Stock driver at 8x"): Turnip draws nothing with a 256 or

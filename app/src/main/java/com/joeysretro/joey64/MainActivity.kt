@@ -617,7 +617,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         trialGpuName = system?.name ?: "none"
         val trialPick = if (autoOnly) GpuTrial(trialStore(), install, trialGpuName, chain.value.size).also { trial = it }.apply {
             // After an update, start on the driver Auto ran before (review 2026-11-15)
-            GpuRules.Driver.byId(devicePrefs.getString("driver", null))?.let { d -> carry(chain.value.indexOf(d)) }
+            // (not when that was only Auto's first pick then: a new best first replaces it, GpuRules.carryOver)
+            GpuRules.carryOver(GpuRules.Driver.byId(devicePrefs.getString("driver", null)), devicePrefs.getString("driver_first", null), systemFamily)
+                ?.let { d -> carry(chain.value.indexOf(d)) }
         }.decide() else null
         val level = trialPick?.level ?: 0
         trialChain = chain.value
@@ -750,6 +752,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             speedTry != null -> chain.value.getOrNull(level)?.id ?: stepDriver.id
             else -> stepDriver.id
         })
+        chain.value.firstOrNull()?.let { prefs.putString("driver_first", it.id) }
         speedNote()?.let { prefs.putString("speed_note", it) }
         prefs.apply()
         devString("renderer")?.let { return it }
