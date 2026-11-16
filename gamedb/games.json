@@ -490,8 +490,8 @@
     },
     {
       "id": "", "crc": "AEC6E579EA9885B0", "md5": "1dea2e7699a150237f65565ac6317eca", "title": "ZZ Gunner (World) (N64brew Game Jam 2021) (homebrew, libdragon + ugfx)",
-      "issues": [
-        {"status": "parked", "devices": "all", "what": "nothing drawn: waits at 80025ab0 for its DP interrupt; the ugfx RSP task ends (SP broke) without writing any DP register, on HLE, parallel and cxd4", "evidence": "joey64-notes queue.md 19 broken entries, 2026-11-13; dev counters on core branch blk-pclog-dev"}
+      "fixed": [
+        {"what": "nothing drawn after its first frame: it waits at 80025ab0 for the DP interrupt of an RSP task that never ran. Its old libdragon (ugfx) starts each task with SP_STATUS 0x101 (clear HALT, no CLR_BROKE), and parallel-RSP would not run while the last task's BROKE stood, yet the core reported the task done", "fix": "core main 700db7f (parallel-RSP: only HALT stops the RSP, as on the hardware; the stale BROKE is cleared as the task starts)", "evidence": "Pocket Block 2026-11-16 (hbtask13: 0 RDP lists, 0 RSP DPC writes; hbtask14: title screen, 300 new frames in 300 scanouts)"}
       ]
     },
     {
