@@ -332,6 +332,18 @@ class ControlsTest {
         assertEquals(Pak.Controller, PakDb.auto(rumble, null))
     }
 
+    @Test fun controllerPakOnlyGamesNeverGetTheRumblePak() {
+        val f = listOf(java.io.File("src/main/assets/pakonly.tsv"), java.io.File("app/src/main/assets/pakonly.tsv")).first { it.exists() }
+        val only = f.readLines().map { it.trim().lowercase() }.filter { it.length == 32 }.toSet()
+        val cruisn = "00A3E885F8D899646228A21D946B2102" // Cruis'n USA (U) (V1.0): "ERROR ACCESSING PAK!" with a Rumble Pak
+        val rayman = "03AA4D09FDE77EED9B95BE68E603D233" // Rayman 2 (U): rumble in Nintendo64EVER's list, missing from the ini
+        assertEquals(Pak.Controller, PakDb.resolve(Pak.Rumble, emptySet(), only, cruisn))
+        assertEquals(Pak.Controller, PakDb.resolve(Pak.Auto, emptySet(), only, cruisn))
+        assertEquals(Pak.None, PakDb.resolve(Pak.None, emptySet(), only, cruisn))
+        assertEquals(Pak.Rumble, PakDb.resolve(Pak.Rumble, emptySet(), only, rayman))
+        assertEquals(Pak.Rumble, PakDb.resolve(Pak.Rumble, emptySet(), only, null))
+    }
+
     @Test fun inputNamesForThePage() {
         assertEquals("A (bottom)", InputNames.key(KeyEvent.KEYCODE_BUTTON_A, AutoMap.FaceCodes.POSITION))
         assertEquals("X (left)", InputNames.key(KeyEvent.KEYCODE_BUTTON_X, AutoMap.FaceCodes.POSITION))

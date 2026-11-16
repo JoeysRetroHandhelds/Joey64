@@ -1,0 +1,280 @@
+# N64 games that support the Rumble Pak, by title (Nintendo64EVER's "Nintendo 64 games compatibles with Rumble Pak",
+# https://www.nintendo64ever.com/Nintendo-64-Games-Rumble-Pak.html, read 2026-11-16). make-pakdb.py keeps these out of
+# pakonly.tsv: the core's mupen64plus.ini leaves Rumble=Yes off many of them (Rayman 2, Castlevania, Gex 64...).
+007: The World is not Enough
+1080 Snowboarding
+64 Oozumou
+64 Oozumou 2
+64 Toranpu Collection: Alice no Waku Waku Toranpu World
+A Bug's Life
+Aero Fighters Assault
+Airboarder 64
+All Star Tennis 99
+All-Star Baseball 2000
+All-Star Baseball 2001
+All-Star Baseball 99
+Armorines: Project S.W.A.R.M.
+Army Men: Air Combat
+Army Men: Sarge's Heroes
+Army Men: Sarge's Heroes 2
+Asteroids Hyper 64
+Automobili Lamborghini
+Bakuretsu Muteki Bangaioh
+Banjo-Kazooie
+Banjo-Tooie
+Bass Hunter 64
+Bass Masters 2000
+Bass Rush: Ecogear Powerworm Championship
+Batman of the Future: Return of the Joker
+Battletanx
+Battletanx: Global Assault
+Battlezone: Rise of the Black Dogs
+Beast Wars Metals 64
+Beetle Adventure Racing
+Big Mountain 2000
+Bio F.R.E.A.K.S.
+Blues Brothers 2000
+Body Harvest
+Bomberman 64: The Second Attack
+Bomberman Hero
+Brunswick Circuit Pro Bowling
+Buck Bumble
+Bust-A-Move 3 DX
+California Speed
+Carmageddon 64
+Castlevania
+Castlevania: Legacy of Darkness
+Centre Court Tennis
+Chameleon Twist
+Chameleon Twist 2
+Charlie Blast's Territory
+Chopper Attack
+Choro Q 64 2
+Chou-Kuukan Night Pro Yakyuu King 2
+ClayFighter: The Sculptor's Cut
+Command & Conquer
+Conker's Bad Fur Day
+Cruis'n Exotica
+Cruis'n World
+Custom Robo V2
+Cyber Tiger
+Daikatana
+Dance Dance Revolution featuring Disney Characters
+Densha de Go! 64
+Destruction Derby 64
+Dezaemon 3D
+Diddy Kong Racing
+Donkey Kong 64
+Doraemon 2: Hikari no Shinden
+Doraemon 3: Nobi Dai no Machi SOS!
+Duck Dodgers Starring Daffy Duck
+Duke Nukem 64
+Duke Nukem Zero Hour
+ECW Hardcore Revolution
+Earthworm Jim 3D
+Excitebike 64
+Extreme-G
+Extreme-G 2
+F-1 World Grand Prix
+F-1 World Grand Prix II
+F-Zero X
+F-Zero X Expansion Kit
+F1 Racing Championship
+FIFA 99
+Fighter Destiny 2
+Fighters Destiny
+Fighting Force 64
+Flying Dragon
+Forsaken
+G.A.S.P!!: Fighter's NEXTream
+GT 64: Championship Edition
+Gauntlet Legends
+Getter Love!! Chô Renai Party Game
+Gex 3: Deep Cover Gecko
+Gex 64: Enter the Gecko
+Glover
+Goldeneye 007
+Haruka Naru Augusta Masters '98
+Hercules: The Legendary Journeys
+Hey You, Pikachu!
+Hot Wheels Turbo Racing
+Hybrid Heaven
+Hydro Thunder
+Iggy's Reckin' Balls
+Indiana Jones and the Infernal Machine
+Indy Racing 2000
+International Superstar Soccer 2000
+International Track & Field 2000
+Itoi Shigesato no Bus Tsuri No. 1 Ketteihan!
+Jeremy McGrath Supercross 2000
+Jet Force Gemini
+Jikkyou Powerful Pro Yakyuu 4
+Ken Griffey Jr.'s Slugfest
+Kira to Kaiketsu! 64 Tanteidan
+Kirby 64: The Crystal Shards
+Knife Edge
+Knockout Kings 2000
+Kobe Bryant in NBA Courtside
+Kyojin no Doshin: Kaihou Sensen Chibikko Chikko Daishuugou
+Last Legion UX
+Lego Racers
+Lode Runner 3D
+Lylat Wars
+Madden Football 64
+Madden NFL 2000
+Madden NFL 2001
+Madden NFL 2002
+Madden NFL 99
+Magical Tetris Challenge
+Major League Baseball Featuring Ken Griffey, Jr.
+Mario Golf
+Mario Party
+Mario Party 2
+Mario Party 3
+Mario Tennis
+Mega Man 64
+Michael Owen's World League Soccer 2000
+Mickey's Speedway USA
+Micro Machines 64 Turbo
+Mike Piazza's Strike Zone
+Milo's Astro Lanes
+Mission: Impossible
+Monaco Grand Prix Racing Simulation 2
+Monster Truck Madness 64
+Mortal Kombat 4
+Mortal Kombat Mythologies: Sub-Zero
+Ms. Pac-Man Maze Madness
+Multi Racing Championship
+Mystical Ninja 2
+Mystical Ninja Starring Goemon
+NASCAR '99
+NASCAR 2000
+NBA Courtside 2 featuring Kobe Bryant
+NBA In The Zone 2000
+NBA Jam '99
+NBA Jam 2000
+NBA Live 2000
+NBA Pro 98
+NBA Pro 99
+NFL Blitz
+NFL Blitz 2000
+NFL Blitz 2001
+NFL Blitz Special Edition
+NFL QB Club 2001
+NFL Quarterback Club '98
+NFL Quarterback Club '99
+NFL Quarterback Club 2000
+NHL Breakaway '99
+NHL Breakaway 98
+NHL Pro '99
+Neon Genesis Evangelion 64
+Nightmare Creatures
+Nuclear Strike 64
+Nushi Tsuri 64
+Nushi Tsuri 64: Shiokaze Ni Notte
+Off Road Challenge
+Operation WinBack
+Paper Mario
+Paperboy
+Penny Racers
+Perfect Dark
+Pocket Monsters Stadium
+Pokemon Puzzle League
+Pokemon Snap
+Pokemon Stadium
+Pokemon Stadium 2
+Puyo Puyo Sun 64
+Puyo Puyo~n Party
+Quake
+Quake II
+Rakuga Kids
+Rally Challenge 2000
+Rampage 2: Universal Tour
+Rampage World Tour
+Rat Attack
+Rayman 2: The Great Escape
+Razor Freestyle Scooter
+Re-Volt
+Ready 2 Rumble Boxing
+Ready 2 Rumble Boxing: Round 2
+Resident Evil 2
+Ridge Racer 64
+Road Rash 64
+Roadsters
+Robotron 64
+Rocket: Robot on Wheels
+Rugrats in Paris
+Rugrats: Scavenger Hunt
+Rush 2: Extreme Racing
+S.C.A.R.S.
+SD Hiryu no Ken Densetsu
+San Francisco Rush 2049
+Shadow Man
+Sim City 64
+Sin and Punishment: Successor of the Earth
+Snowboard Kids
+Snowboard Kids 2
+South Park
+South Park Rally
+Space Invaders
+Space Station Silicon Valley
+Spider-Man
+Star Soldier: Vanishing Earth
+Star Wars: Episode I: Battle for Naboo
+Star Wars: Episode I: Racer
+Star Wars: Rogue Squadron
+Starcraft 64
+Stunt Racer 64
+Super Bowling
+Super Mario 64
+Super Robot Spirits
+Super Smash Bros.
+Supercross 2000
+Superman
+Susume! Taisen Puzzle Dama: Toukon! Marutama Chou
+Tarzan
+Taz Express
+The Legend Of Zelda: Majora's Mask
+The Legend Of Zelda: Ocarina Of Time
+Tom & Jerry in Fists of Furry
+Tom Clancy's Rainbow Six
+Tonic Trouble
+Tony Hawk's Pro Skater 2
+Tony Hawk's Pro Skater 3
+Tony Hawk's Skateboarding
+Top Gear Hyper Bike
+Top Gear OverDrive
+Top Gear Rally
+Top Gear Rally 2
+Toy Story 2
+Triple Play 2000
+Turok 2: Seeds Of Evil
+Turok 3: Shadow of Oblivion
+Turok: Rage Wars
+Twisted Edge Snowboarding
+Uchhannanchan no Honoo no Challenge: Denryuu IraIra Bou
+V-Rally Edition 99
+Vigilante 8
+Vigilante 8: Second Offense
+Virtual Pro Wrestling 2: Oudou Keishou
+Virtual Pro Wrestling 64
+WCW Backstage Assault
+WCW Mayhem
+WCW Nitro
+WCW vs. NWO: World Tour
+WCW/NWO Revenge
+WWF Attitude
+WWF No Mercy
+WWF War Zone
+WWF Wrestlemania 2000
+Waialae Country Club: True Golf Classics
+Wave Race 64
+Wayne Gretzky's 3D Hockey
+Wheel of Fortune
+WipeOut 64
+World Cup 98
+World Driver Championship
+Xena: Warrior Princess: The Talisman of Fate
+Yakouchuu 2: Satsujin Kouru
+Yoshi's Story
+Zool: Majou Tsukai Densetsu

@@ -75,3 +75,43 @@ with open(out, "w", newline="\n") as f:
     f.write("# Rumble Pak games for Auto pak: made by devtools/make-pakdb.py from mupen64plus.ini (GPLv2+)\n")
     for md5 in sorted(rumble): f.write(md5 + "\n")
 print(f"{len(rumble)} Rumble Pak games of {len(entries)} -> {out}")
+
+# Controller-Pak-only games (Joey 2026-11-16: "if cruisn doesnt support the rumble pak, then controller pak should be the
+# only option for it"): games the ini says use the Controller Pak (Mempak=Yes) and not the Rumble Pak, whose title isn't
+# in rumble-titles.txt (Nintendo64EVER's Rumble Pak list: the ini misses rumble on Rayman 2, Castlevania, Gex 64...).
+# They read any pak as a Controller Pak (Cruis'n USA: "ERROR ACCESSING PAK!" with a Rumble Pak), so a picked Rumble Pak
+# becomes the Controller Pak there (PakDb.resolve). No-Intro copies the ini doesn't list join by title as above.
+def norm(t):
+    return re.sub(r"[^a-z0-9]", "", t.lower())
+rumble_titles = {norm(l) for l in open(os.path.join(here, "rumble-titles.txt"), encoding="utf-8")
+                 if l.strip() and not l.startswith("#")}
+def cp_only(md5):
+    name = field(md5, "GoodName") or ""
+    # A listed title that starts the name counts too ("Rugrats in Paris" for "Rugrats in Paris - The Movie"): wrongly
+    # leaving a game out only keeps the Rumble Pak choice it has today.
+    s = short(name)
+    return (field(md5, "Mempak") == "Yes" and field(md5, "Rumble") != "Yes"
+            and not any(s.startswith(t) for t in rumble_titles))
+only = [m for m in entries if cp_only(m)]
+only_titles = {}
+for md5 in entries:
+    name = field(md5, "GoodName")
+    if not name or "[!]" not in name or "(iQue)" in name: continue
+    t = only_titles.setdefault(short(name), {"only": False, "other": False})
+    t["only" if cp_only(md5) else "other"] = True
+added = 0
+for line in open(names, encoding="utf-8"):
+    parts = line.rstrip("\n").split("\t")
+    if len(parts) < 2 or line.startswith("#"): continue
+    md5, name = parts[0].lower(), parts[1]
+    if md5 in entries: continue
+    t = only_titles.get(short(name))
+    if t and t["only"] and not t["other"]:
+        only.append(md5); added += 1
+only_out = os.path.join(here, "..", "app", "src", "main", "assets", "pakonly.tsv")
+with open(only_out, "w", newline="\n") as f:
+    f.write("# Controller-Pak-only games (no Rumble Pak support): made by devtools/make-pakdb.py from mupen64plus.ini (GPLv2+)"
+            " and rumble-titles.txt\n")
+    for md5 in sorted(only): f.write(md5 + "\n")
+print(f"{len(only)} Controller-Pak-only games ({added} No-Intro copies by title) -> {only_out}")
+print("titles: " + "; ".join(sorted({short(field(m, 'GoodName') or '?') for m in only if field(m, 'GoodName')})))

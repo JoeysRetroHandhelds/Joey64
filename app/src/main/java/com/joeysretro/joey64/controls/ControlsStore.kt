@@ -126,4 +126,28 @@ object PakDb {
     /** The pak Auto picks for the game with [md5] (null: unknown, the Controller Pak). */
     fun auto(rumbleGames: Set<String>, md5: String?): Pak =
         if (md5 != null && md5.lowercase() in rumbleGames) Pak.Rumble else Pak.Controller
+
+    @Volatile private var cpOnly: Set<String>? = null
+
+    /**
+     * Games with no Rumble Pak support that use the Controller Pak (assets/pakonly.tsv, devtools/make-pakdb.py; Joey
+     * 2026-11-16: "if cruisn doesnt support the rumble pak, then controller pak should be the only option for it").
+     * They read any pak as a Controller Pak: Cruis'n USA with a Rumble Pak stops at "ERROR ACCESSING PAK!".
+     */
+    fun loadControllerOnly(context: Context): Set<String> = cpOnly ?: try {
+        context.assets.open("pakonly.tsv").bufferedReader().useLines { lines ->
+            lines.map { it.trim().lowercase() }.filter { it.length == 32 && !it.startsWith("#") }.toHashSet()
+        }
+    } catch (e: Exception) {
+        JLog.e("Joey64Controls", "can't read pakonly.tsv: $e"); emptySet()
+    }.also { cpOnly = it }
+
+    fun controllerOnly(controllerOnlyGames: Set<String>, md5: String?) = md5 != null && md5.lowercase() in controllerOnlyGames
+
+    /** The pak [picked] gives the game with [md5]: Auto's pick, and the Controller Pak where a Controller-Pak-only game has the Rumble Pak. */
+    fun resolve(picked: Pak, rumbleGames: Set<String>, controllerOnlyGames: Set<String>, md5: String?): Pak = when {
+        picked == Pak.Auto -> auto(rumbleGames, md5)
+        picked == Pak.Rumble && controllerOnly(controllerOnlyGames, md5) -> Pak.Controller
+        else -> picked
+    }
 }

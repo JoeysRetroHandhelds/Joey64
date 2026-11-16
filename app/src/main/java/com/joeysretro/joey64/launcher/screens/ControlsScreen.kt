@@ -276,13 +276,16 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
 
     // Auto pak on a game says which pak it picks.
     var autoPak by remember(target) { mutableStateOf<Pak?>(null) }
+    // A game with no Rumble Pak support that uses the Controller Pak: Rumble Pak is greyed (PakDb.resolve).
+    var cpOnly by remember(target) { mutableStateOf(false) }
     LaunchedEffect(target) {
         val t = target ?: return@LaunchedEffect
-        autoPak = withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             try {
                 val md5 = LibraryDb.get(context).gameWithFile(t, GameStates::saveNameOf)?.md5
-                PakDb.auto(PakDb.load(context), md5)
-            } catch (e: Exception) { JLog.e(TAG, "Auto pak: can't look up $t: $e"); null }
+                autoPak = PakDb.auto(PakDb.load(context), md5)
+                cpOnly = PakDb.controllerOnly(PakDb.loadControllerOnly(context), md5)
+            } catch (e: Exception) { JLog.e(TAG, "Auto pak: can't look up $t: $e") }
         }
     }
 
@@ -407,9 +410,10 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                     all.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it == setup.stick) }) { i ->
                     edit { editor.set(player, setup.copy(stick = all[i])) } } }
                 focused == "Pak" -> Pak.entries.let { all -> com.joeysretro.joey64.launcher.components.PanelInfo(ctlTitle, ctlHelp,
-                    all.map { val oneGame = it == Pak.Transfer && target == null
+                    all.map { val oneGame = it == Pak.Transfer && target == null; val noRumble = it == Pak.Rumble && cpOnly
                         com.joeysretro.joey64.launcher.components.PanelChoice(pakValue(it, autoPak),
-                            if (oneGame) "For one game: pick it in the chip" else pakDetail(it), it == setup.pak, enabled = !oneGame) }) { i ->
+                            if (oneGame) "For one game: pick it in the chip" else if (noRumble) NO_RUMBLE else pakDetail(it),
+                            it == setup.pak, enabled = !oneGame && !noRumble) }) { i ->
                     // Transfer Pak opens its setup (Game Boy game and save), as the popup did.
                     if (all[i] == Pak.Transfer) popup = Popup.PakChoice else edit { editor.set(player, setup.copy(pak = all[i])) } } }
                 focused == "RumbleOn" -> {
@@ -470,11 +474,12 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                     dot = changed.any { it.startsWith("Feel.") },
                     onFocused = { if (it) focused = "StickFeel" }) { popup = Popup.StickFeel() }
                 SectionLabel("Pak")
-                JoeyRow("Pak", value = pakValue(setup.pak, autoPak, setup) + "  ›", enabled = !off, sideways = true,
+                JoeyRow("Pak", value = (if (setup.pak == Pak.Rumble && cpOnly) "Controller Pak · no rumble here"
+                        else pakValue(setup.pak, autoPak, setup)) + "  ›", enabled = !off, sideways = true,
                     dot = "Pak" in changed,
                     onFocused = { if (it) focused = "Pak" }) { if (!panel.enter()) popup = Popup.PakChoice }
                 // Greyed when the pak can't be a Rumble Pak (approved paks mockup 2026-11-08, screens 1 and 4a).
-                val rumble = !off && when (setup.pak) { Pak.Rumble -> true; Pak.Auto -> autoPak == null || autoPak == Pak.Rumble; else -> false }
+                val rumble = !off && when (setup.pak) { Pak.Rumble -> !cpOnly; Pak.Auto -> autoPak == null || autoPak == Pak.Rumble; else -> false }
                 JoeyRow("Rumble on", value = setup.rumbleOn.label + "  ›", enabled = rumble, sideways = true,
                     dot = "RumbleOn" in changed,
                     onFocused = { if (it) focused = "RumbleOn" }) { if (rumble && !panel.enter()) popup = Popup.RumbleOnChoice }
@@ -593,8 +598,9 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             Pak.entries.map {
                 // Transfer Pak is set for one game: each game needs its own Game Boy game (screen 2).
                 val oneGame = it == Pak.Transfer && target == null
-                Choice(pakValue(it, autoPak), if (oneGame) "For one game: pick it in the chip" else pakDetail(it), it == setup.pak,
-                    enabled = !oneGame)
+                val noRumble = it == Pak.Rumble && cpOnly
+                Choice(pakValue(it, autoPak), if (oneGame) "For one game: pick it in the chip" else if (noRumble) NO_RUMBLE else pakDetail(it),
+                    it == setup.pak, enabled = !oneGame && !noRumble)
             }, close) { i ->
             val pak = Pak.entries[i]
             edit { editor.set(player, setup.copy(pak = pak)) }
@@ -839,6 +845,9 @@ private fun rumbleStrengthWorks(context: android.content.Context, dev: android.v
     val v = pad ?: sys.takeIf { it.hasVibrator() } ?: return true
     return v.hasAmplitudeControl()
 }
+
+/** A Controller-Pak-only game's greyed Rumble Pak (PakDb.resolve). */
+private const val NO_RUMBLE = "This game has no Rumble Pak support: it gets the Controller Pak"
 
 private fun pakDetail(p: Pak) = when (p) {
     Pak.Auto -> "The Rumble Pak for games that use one, else the Controller Pak"
