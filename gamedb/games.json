@@ -575,7 +575,10 @@
       ],
       "notes": [
         "Odin 2 Portal 2026-11-14: 4x + CRT light + widescreen code, walking and battling at 60 emu fps, run 2.4-7.5 ms a frame",
-        "No 60 fps code in any cheat list; widescreen 8102D574 2407, 8102D576 018A"
+        "No 60 fps code in any cheat list; the shared widescreen code 8102D574 2407, 8102D576 018A keeps the game's frame (field 296x200) and stretches battles ~8%"
+      ],
+      "fixed": [
+        {"devices": "all", "what": "widescreen wasn't full 16:9 (tester): the shared code widens only the aspect; the game's frame stayed, and Trim the game's border left 10 + 11 px bars at 1920", "fix": "joey64-data 14dc35f: our own Widescreen 16:9 (camera 0's viewport, Vp scales and the aspect written every frame) for USA, Japan, Europe and USA LodgeNet, first in CheatLogic.SOURCES; Display::fit fills bars under 3% (4bc2ff0)", "evidence": "Odin 2 Portal 2026-11-16: pmws3 field, battle, pause; pmws5 USA power-on to the castle party; pmws8 the other three; pmws7 0 dark columns"}
       ]
     },
     {
