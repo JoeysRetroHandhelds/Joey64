@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
 branch: main
-commit: adafe99ed5b613b7a4598bcafd0286aace81c02c 2026-11-16 15:05:49 -0600 Precise smart sync without the open window: a dynarec access beside the drawn bytes unlocks t
+commit: 5418b282ea43ac6446e9c7a4b1635ffa7827b8ba 2026-11-16 15:12:31 -0600 Texture packs: joey64_texpack_build makes a PNG pack's .hts with no game loaded (the app's ba
 uncommitted: none
-built: 2026-11-16 15:05
-md5: 442da4b5bfa2652d113d9d3cb5eb4e32
+built: 2026-11-16 15:12
+md5: b66e2c71f8ce32308676c85e8870769b
