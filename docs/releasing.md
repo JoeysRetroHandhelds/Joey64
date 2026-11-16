@@ -10,8 +10,11 @@ New-Item -ItemType Directory -Force C:\Users\Joey\keystores
 & "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkeypair -v -keystore C:\Users\Joey\keystores\joey64-release.jks -alias joey64 -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Joey64"
 ```
 
-keytool asks for the password twice. Then copy `keystore.properties.example` to `keystore.properties`
-(gitignored) and fill in both passwords (the same one, unless a separate key password was chosen).
+keytool asks for the password twice. Then copy `keystore.properties.example` to
+`C:\Users\Joey\keystores\joey64-release.properties` and fill in both passwords (the same one, unless a
+separate key password was chosen). That is its only copy (Joey 2026-11-16: no copy stays in a repo
+folder). A release build copies it into the release worktree's root as `keystore.properties`
+(gitignored) and deletes it after the build.
 
 **Back the .jks and its password up somewhere safe.** Android only installs an update signed with the
 same key, so a lost key means every handheld has to uninstall Joey64 (and lose its data) to move to
