@@ -589,6 +589,24 @@ fun PopupInfoNote(text: String) {
     }
 }
 
+/**
+ * What this device makes of a choice, in a box with the alert circle (Settings › Video › Resolution, approved resnote
+ * mockup A 2026-11-16): the same box in the settings panel and in the choice popup.
+ */
+@Composable
+fun DeviceNote(text: String, modifier: Modifier = Modifier) {
+    val c = JoeyTheme.colors
+    androidx.compose.foundation.layout.Row(
+        modifier.padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp).fillMaxWidth()
+            .background(c.chip, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(com.joeysretro.joey64.R.drawable.ic_alert), contentDescription = null,
+            tint = c.tagMissable, modifier = Modifier.padding(end = 8.dp, top = 2.dp).size(18.dp))
+        Text(text, style = JoeyTheme.type.note, color = c.text)
+    }
+}
+
 /** A warning in a popup, in a box with the warning triangle: what a choice takes away ("L2 is Z for Player 1 ..."). */
 @Composable
 fun PopupWarnNote(text: String) {

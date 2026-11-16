@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.joeysretro.joey64.launcher.components.DescriptionLine
+import com.joeysretro.joey64.launcher.components.DeviceNote
 import com.joeysretro.joey64.launcher.components.Hint
 import com.joeysretro.joey64.launcher.components.JoeyDialog
 import com.joeysretro.joey64.launcher.components.JoeyRow
@@ -179,6 +180,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     // One list with the panel beside it (approved 2026-11-11, setlist_mock.png): Picture, then Look, then Advanced.
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
     val failedDrivers = remember { failedDrivers(context) }
+    val resNote = remember { com.joeysretro.joey64.video.ResNote.of(context) }
     val speedTried = remember { speedTried(context) }
     val changed = target != null && rowKeys[focused].orEmpty().any { it in own }
     val (title, text) = when (focused) {
@@ -193,7 +195,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         "cut" to VideoKey.Cutout, "bfi" to VideoKey.Bfi, "rend" to VideoKey.Renderer, "drv" to VideoKey.Driver, "pace" to VideoKey.Pacing)[focused]
     val info = when {
         choiceKey != null -> VideoChoices.of(choiceKey).let { chs ->
-            com.joeysretro.joey64.launcher.components.PanelInfo(title, help,
+            com.joeysretro.joey64.launcher.components.PanelInfo(title, help, note = if (choiceKey == VideoKey.Resolution) resNote else null, choices =
                 chs.map { val bad = if (choiceKey == VideoKey.Driver) com.joeysretro.joey64.GpuRules.failedLabel(failedDrivers[it.value]) else null
                     val fastest = if (choiceKey == VideoKey.Driver && it.value == "auto") speedDetail(speedTried) else null
                     com.joeysretro.joey64.launcher.components.PanelChoice(it.label, bad ?: fastest ?: it.detail, it.value == v[choiceKey], it.experimental, detailWarn = bad != null) }) { i ->
@@ -452,6 +454,7 @@ private fun ChoicePopup(k: VideoKey, current: String, sub: String? = null, onDis
     JoeyDialog(onDismiss = onDismiss, hints = listOf(Hint("A", "Select"), Hint("B", "Close")), width = 470.dp) {
         Column {
             PopupTitle(title(k), sub)
+            if (k == VideoKey.Resolution) { val ctx = LocalContext.current; remember { com.joeysretro.joey64.video.ResNote.of(ctx) }?.let { DeviceNote(it) } }
             for (ch in choices) {
                 val on = ch.value == current
                 val bad = com.joeysretro.joey64.GpuRules.failedLabel(failed[ch.value])

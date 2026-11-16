@@ -49,6 +49,8 @@ class PanelChoice(val label: String, val detail: String? = null, val on: Boolean
  * [lines] set inside it (a row that opens a page of its own: Colour's four values, screen 5; A opens it as before).
  */
 class PanelInfo(val title: String, val help: String, val choices: List<PanelChoice> = emptyList(), val lines: List<Pair<String, String>> = emptyList(),
+                /** A [DeviceNote] under the help: what this device makes of these choices (Resolution's note). */
+                val note: String? = null,
                 val onPick: ((Int) -> Unit)? = null) {
     val pickable get() = choices.isNotEmpty() && onPick != null
 }
@@ -205,6 +207,7 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
             modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH))
         if (info.help.isNotEmpty()) Text(info.help, style = JoeyTheme.type.note, color = c.textDim,
             modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH).padding(top = 2.dp, bottom = 8.dp))
+        info.note?.let { DeviceNote(it) }
         val firstAt = shown.indexOfFirst { it.on && it.enabled }.takeIf { it >= 0 } ?: shown.indexOfFirst { it.enabled }.coerceAtLeast(0)
         shown.forEachIndexed { i, ch ->
             JoeyRow(ch.label,

@@ -592,6 +592,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val system = parseGpu(NativeBridge.probeVulkan(false))
         val kgsl = kgslModel()
         val systemFamily = GpuRules.family(system?.vendor ?: 0, system?.name.orEmpty(), kgsl)
+        // For Settings › Video › Resolution's note (the launcher doesn't open Vulkan).
+        if (systemFamily.vendor != GpuRules.Vendor.OTHER) com.joeysretro.joey64.video.ResNote.remember(this, GpuRules.familyKey(systemFamily))
         val upscale = wantedUpscale()
         val auto = GpuRules.autoDriver(systemFamily, upscale)
         // Every driver Auto tries on this GPU, best first (GpuRules.chain; Joey 2026-11-15)
