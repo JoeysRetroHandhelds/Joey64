@@ -46,10 +46,16 @@ object TexConvert {
     fun jobFor(context: Context, id: String): TexJob? = pending(context).firstOrNull { it.pack.id == id }
         ?: TexPackStore(context).index()?.firstOrNull { it.id == id }?.let { p -> TexJob(p, p.packName, null, p.shown) }
 
-    /** Starts the conversion when packs wait and it isn't running already. Off the main thread; only from a screen Joey64 shows. */
+    /**
+     * Starts the conversion when packs wait and it isn't running already. Off the main thread; only from a screen Joey64 shows.
+     * Running means the :texconv process is alive, not only a recent status: a converter killed seconds before Joey64 opens
+     * leaves a status under STALE_MS old, and nothing else would start it again (Pocket Block 2026-11-16). On the Pocket
+     * Block's ROM a package in the stopped state (after a force-stop or an install) gets no service started
+     * ("bringUpServiceLocked, suppress to start service!") until it's opened from the launcher; started that way it converts.
+     */
     fun kick(context: Context) {
         val app = context.applicationContext
-        val running = TexConvStatus.read(TexPackStore(app))?.let { it.fresh && it.cur != null } == true
+        val running = converterAlive(app) && TexConvStatus.read(TexPackStore(app))?.let { it.fresh && it.cur != null } == true
         if (running) return
         val jobs = pending(app)
         if (jobs.isEmpty()) return
@@ -58,6 +64,12 @@ object TexConvert {
             JLog.i(TAG, "texture packs: converting ${jobs.size} in the background: ${jobs.joinToString { it.pack.shown }}")
         } catch (e: Exception) { JLog.w(TAG, "texture packs: can't start converting: $e") }
     }
+
+    /** The :texconv process is running (Android lists an app's own processes). */
+    private fun converterAlive(context: Context): Boolean = try {
+        context.getSystemService(android.app.ActivityManager::class.java)?.runningAppProcesses
+            ?.any { it.processName.endsWith(":texconv") } == true
+    } catch (e: Exception) { false }
 
     /**
      * A pack folder is being removed: a conversion of one of its packs stops now (its process is ended; the next scan

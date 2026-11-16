@@ -128,9 +128,9 @@ class TexConvertService : Service() {
             publish(TexConvStatus(null, 0, room.toMap(), failed.toMap(), System.currentTimeMillis()), force = true)
             wake?.let { if (it.isHeld) it.release() }
             stopForeground(STOP_FOREGROUND_REMOVE)
-            for (j in ready) nm.notify(RESULT_ID + j.pack.id.hashCode(), note("${j.pack.shown} is ready", "HD textures from the game's next start", null, ongoing = false, job = j))
+            for (j in ready) nm.notify(resultId(j.pack.id), note("${j.pack.shown} is ready", "HD textures from the game's next start", null, ongoing = false, job = j))
             for ((id, r) in room) TexConvert.jobFor(applicationContext, id)?.let { j ->
-                nm.notify(RESULT_ID + id.hashCode(), note("${j.pack.shown} waits for room",
+                nm.notify(resultId(id), note("${j.pack.shown} waits for room",
                     "Needs ${TexPacks.sizeLabel(r.first)}, ${TexPacks.sizeLabel(r.second)} free. Goes on by itself once there's room.", null, ongoing = false, job = j))
             }
             worker = null
@@ -142,6 +142,7 @@ class TexConvertService : Service() {
     private fun convert(job: TexJob, after: Int, room: Map<String, Pair<Long, Long>>, failed: Map<String, String>): String? {
         val p = job.pack
         fun cur(step: Int, done: Long, total: Long) = TexConvStatus.Cur(p.id, p.shown, step, done, total, playingTitle)
+        nm.cancel(resultId(p.id)) // a note from an earlier conversion of this pack ("is ready") no longer holds
         publish(TexConvStatus(cur(1, 0, p.size), after, room, failed, 0), force = true)
         awake(true)
         val copied = store.copyPngs(p, job.romName, { d, t -> publish(status.copy(cur = cur(1, d, t))) }, { hold(job, after) })
@@ -252,5 +253,8 @@ class TexConvertService : Service() {
         const val CHANNEL = "texpacks"
         private const val RUNNING_ID = 6401
         private const val RESULT_ID = 6500
+
+        /** The id of a pack's result note ("is ready", "waits for room"). */
+        fun resultId(packId: String) = RESULT_ID + packId.hashCode()
     }
 }

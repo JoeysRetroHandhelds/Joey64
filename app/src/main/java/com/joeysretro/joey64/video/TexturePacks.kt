@@ -182,6 +182,9 @@ class TexPackStore(private val context: Context) {
 
     private fun forget(p: TexPack) {
         if (p.png) convDir(p).deleteRecursively()
+        // Its "is ready" / "waits for room" note goes too (Pocket Block 2026-11-16: it stayed after the folder was removed).
+        try { context.getSystemService(android.app.NotificationManager::class.java)?.cancel(TexConvertService.resultId(p.id)) }
+        catch (e: Exception) { }
         for (which in listOf("pack", "own")) shot(p, which).delete()
     }
 
