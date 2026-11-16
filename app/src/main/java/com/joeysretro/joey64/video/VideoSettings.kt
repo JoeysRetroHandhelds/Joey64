@@ -62,7 +62,9 @@ enum class VideoKey(val key: String, private val base: String) {
     GammaDither("gamma_dither", "on"),
     Deinterlace("deinterlace", "weave"), // Weave since 2026-11-10 (Joey): upscaled, Bob shook still 480i pictures (THPS2, Spider-Man)
     Supersample("supersample", "off"),
-    NativeTexLod("native_tex_lod", "off"),
+    // On since 2026-11-15 (Joey: "Test on by default all games"): upscaled, Paper Mario's Shooting Star Summit stair tops
+    // drew lavender (the LOD picked by the upscaled size). 82/82 on the Odin 3 4x, Duo 2x and RG477M 4x, same speed.
+    NativeTexLod("native_tex_lod", "on"),
     NativeTexRect("native_tex_rect", "on"),
     /** Widescreen code (version A, 2026-11-08): "off"; All games "auto" (When a game has one); a game a version's cheat name. */
     Widescreen("widescreen", "off"),
