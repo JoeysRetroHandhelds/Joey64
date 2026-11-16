@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: main (built in the clean worktree joey64-core-port, detached at 431aec4)
-commit: 431aec4f57319e43ccae30e7f8e8e9e6cb9c5086 2026-11-15 17:28:07 -0600 parallel-RDP: four bug fixes libretro found in its C rewrite (notes issue 2)
+branch: main (built in the clean worktree joey64-core-cic, branch cic-6103 = main 61545c3)
+commit: 61545c31d766da35c1eae603a8066b0b2c2c4f6d 2026-11-15 23:32:15 -0600 pif: boot checksum takes r when t2 >= d (IPL3's rule; n64crc's > gave Pokemon Stadium (USA) (
 uncommitted: none
-built: 2026-11-15 17:28
-md5: 52364b7d3b45dfce508533835bae960b
+built: 2026-11-15 23:33
+md5: b6b8aa858a31fae8cf366c7b520e79e3

@@ -448,6 +448,12 @@
       ]
     },
     {
+      "id": "NPO", "crc": "9C8FB2FA9B84A09B", "md5": "6dc6820cef755fc1253d06df45c9bd2a", "title": "Pokemon Stadium (USA) (Rev 2)",
+      "fixed": [
+        {"what": "never drew a frame since 0.2.0: the boot checksum rewrite for the Virtual Console copies (c994aa7) used the n64crc tool's t2 > d where the boot code uses t2 >= d, so this dump got a wrong CRC2 and the boot code looped", "fix": "core main 61545c3 (t2 >= d); of the 1,198 test-set ROMs with a known CIC only this one changes, all 1,188 that matched still match", "evidence": "Odin 3 Portal 2026-11-15 23:38, app-cic1 (release-0.2.2 + 61545c3), scratchpad compat/gbt.sh: CIC X103, no header CRC warning, title screen at 30 s, 60 emu fps (compat/gbt/stadium-rev2-cic1.png)"}
+      ]
+    },
+    {
       "id": "", "crc": "0000000000000000", "md5": "3f348189bfebc8cd94dc15b8e35c5c42", "title": "Turok - Dinosaur Hunter (USA) (Demo) (Kiosk, E3 1997)",
       "fixed": [
         {"what": "hung before its first frame: the dump is 10,019,568 bytes and the game reads past its end, where CPU reads were open bus", "fix": "core rel3 f6ce435 (a dump that is no whole number of MB reads as zeros up to the next power of two, as PI DMA already did); title screen 'Press Start'", "evidence": "Odin 2 Portal 2026-11-13, default settings, scratchpad blk7/seven.sh (seven/*.png); 82-game A/B blk82-<dev> on the Duo, Odin 3, Odin 2 Portal and Flip: 82/82 on both builds"}
