@@ -77,6 +77,7 @@ class GameStates(
     /** Goes back to just before the last load by hand: the slot that load was from, or null with nothing to undo. */
     fun undoLoad(): Int? {
         val u = undoLoad ?: return null
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { JLog.w(TAG, "undo load: refused, Hardcore"); return null }
         val ok = NativeBridge.loadState(u.mem, u.achv, TIMEOUT_MS)
         if (!ok) { JLog.e(TAG, "undo load: FAILED"); return null }
         undoLoad = null
@@ -423,6 +424,7 @@ class GameStates(
      * (a load by hand: the hotkey or the pause menu): where the game was first is kept for Undo load state.
      */
     fun load(slot: Int, undoable: Boolean = false): Boolean {
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { JLog.w(TAG, "load: refused, Hardcore"); return false }
         settled()
         val name = StateSlots.fileName(saveName, slot)
         // A staged quit save is the core's own data, not packed ([writeQuit]).
@@ -513,6 +515,7 @@ class GameStates(
     }
 
     fun loadRecovery(): Boolean {
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { JLog.w(TAG, "recovery load: refused, Hardcore"); return false }
         val f = File(recoveryDir, RECOVERY_STATE)
         val bytes = try { f.readBytes() } catch (e: IOException) { return false.also { JLog.e(TAG, "no recovery state") } }
         return loadBytes("recovery state", bytes)

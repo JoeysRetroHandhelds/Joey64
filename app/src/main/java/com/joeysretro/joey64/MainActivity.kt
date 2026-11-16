@@ -1762,6 +1762,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun applyCheats(rom: String, saveName: String, userLines: List<String>) {
         cheatKeys = headerKeys(rom) // "": a 64DD disk with no cartridge, no header
         if (saveName.isEmpty()) return
+        // Hardcore: no cheats (RetroAchievements' rules; the host also refuses them). The widescreen / 60 fps codes are none then.
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { if (userLines.isNotEmpty()) JLog.i(TAG, "cheats: ${userLines.size} left on, not used in Hardcore"); return }
         val lines = userLines + extrasOn.codeLines
         for (l in lines) NativeBridge.addCheat(l)
         cheatsMost = lines.size
@@ -1851,6 +1853,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     /** On [gameIo]: everything before loadGame that reads or writes files. Null: no ROM. */
     private fun prepareGame(): Prepared? {
+        // RetroAchievements Hardcore for this play, before the widescreen / 60 fps codes and cheats are picked: a start
+        // from a state (Continue, a slot, carrying on after a crash) or in a netplay room plays in Casual.
+        com.joeysretro.joey64.achievements.RaHardcore.startPlay(this, fromState = launcherString(EXTRA_LOAD_STATE) != null,
+            netplay = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null)
         var (rom, saveName) = resolveRom() ?: run { JLog.e(TAG, "No ROM. Push one to ${getExternalFilesDir(null)}/test.z64"); return null }
         val disk = RomFiles.isDiskName(rom)
         // A 64DD disk: the IPL BIOS comes from the data folder's bios/ (the core reads its copy in files/system).
@@ -2338,6 +2344,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             // The page's last change written first (code audit 3, M7), then read.
             com.joeysretro.joey64.cheats.GameCheats.awaitWrites()
             // The widescreen / 60 fps codes the game started with stay with the cheats.
+            if (com.joeysretro.joey64.achievements.RaHardcore.on()) { JLog.i(TAG, "cheats: not changed in Hardcore"); return@post }
             val lines = com.joeysretro.joey64.cheats.GameCheats(this@MainActivity, st.saveName).read().codeLines() + extrasOn.codeLines
             NativeBridge.setCheats(lines.toTypedArray())
             JLog.i(TAG, "cheats: ${lines.size} on")
@@ -2352,6 +2359,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private val gameSharkUp = Runnable { gameSharkButton(false) }
     private fun gameSharkButton(down: Boolean) {
         if (down == gameSharkDown) return
+        if (down && com.joeysretro.joey64.achievements.RaHardcore.on()) { popHardcore("GameShark button"); return }
         gameSharkDown = down
         if (down) gameSharkSince = android.os.SystemClock.uptimeMillis()
         NativeBridge.setGameShark(down)
@@ -2481,6 +2489,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         override val quitLabel: String get() = hotkeys.quitTo.menuRow
         override fun pick(save: Boolean, slot: Int) {
             val st = states ?: return
+            if (!save && com.joeysretro.joey64.achievements.RaHardcore.on()) { overlay?.screen = null; closeMenu(); popHardcore("Load state"); return }
             overlay?.screen = null
             stateHandler.post {
                 val savedAt = if (save) null else st.savedAt(slot)
@@ -2686,6 +2695,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     /** Frame advance: running, it pauses (as Pause); paused by a hotkey, one more frame each press. */
     private fun frameAdvance() {
         if (menuOpen) return
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { popHardcore("Frame advance"); return }
         if (!hotkeyPaused) { togglePause(); return }
         NativeBridge.stepFrame()
     }
@@ -2736,6 +2746,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     private fun hotkeyLoad() {
         val st = states ?: return
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { popHardcore("Load state"); return }
         letGoHeld()
         val slot = currentSlot()
         stateHandler.post {
@@ -2755,6 +2766,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     private fun hotkeyUndoLoad() {
         val st = states ?: return
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { popHardcore("Undo load state"); return }
         letGoHeld()
         stateHandler.post {
             val slot = st.undoLoad()
@@ -3618,6 +3630,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     private fun playMacro(p: Int, m: com.joeysretro.joey64.controls.Macro) {
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { popHardcore("Macros"); return } // Joey 2026-11-16: no macros in Hardcore
         val steps = m.steps
         NativeBridge.playMacro(p, IntArray(steps.size) { steps[it].mask() },
             IntArray(steps.size) { PlayerInput.toRetroStick(steps[it].stickXY().first) },
@@ -3887,6 +3900,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         debugLogs?.let { unregisterReceiver(it) }
         debugProblem?.let { unregisterReceiver(it) }
         debugRaEvent?.let { unregisterReceiver(it) }
+        debugHardcore?.let { unregisterReceiver(it) }
         destroyed = true
         stats?.destroy()
         netChip?.remove()
@@ -3900,6 +3914,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // 2026-11-15 night, Odin 2 Portal, a start ended 1 s in (frames drawn, not yet lit) moved ARMSX2 to Gen8.
         if (isFinishing && gameLoaded && trial != null) cancelTrial()
         val stopped = if (owner === this) NativeBridge.stop().also { owner = null } else if (owner == null && !switching) NativeBridge.stop() else true
+        if (owner == null && !switching) com.joeysretro.joey64.achievements.RaHardcore.gameEnded()
         if (!stopped) endStuckProcess()
         // The save RAM and a 64DD disk save written as the core stopped, into a picked data folder: on [gameIo], after
         // any start still copying and before the next one (a disk save is 64.9 MB; code audit 2, finding 1).
@@ -3930,6 +3945,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var debugLogs: BroadcastReceiver? = null
     private var debugProblem: BroadcastReceiver? = null
     private var debugRaEvent: BroadcastReceiver? = null
+    private var debugHardcore: BroadcastReceiver? = null
 
     private fun registerDebugStick() {
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
@@ -4016,9 +4032,20 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 lines.forEachIndexed { n, line -> handler.postDelayed({ Thread { com.joeysretro.joey64.achievements.RaBridge.onEvent(line) }.start() }, n * i.getLongExtra("gap", 1000L)) }
             }
         }
+        // adb shell am broadcast -a com.joeysretro.joey64.HARDCORE --ez on true|false  -> RetroAchievements Hardcore on or off
+        // for the running game (on restarts it; RaHardcore). The Settings row and its pop-ups come with Joey's mockups.
+        debugHardcore = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, i: Intent) {
+                if (owner == null) { JLog.w(TAG, "HARDCORE: no game running"); return }
+                val on = i.getBooleanExtra("on", true)
+                com.joeysretro.joey64.achievements.RaHardcore.setMidGame(on)
+                if (on) for (p in 0 until 4) NativeBridge.stopMacro(p, true)
+                runOnUiThread { applyRewind() }
+            }
+        }
         for ((receiver, action) in listOf(debugStick to "com.joeysretro.joey64.STICK", debugButtons to "com.joeysretro.joey64.BUTTONS", debugDump to "com.joeysretro.joey64.DUMP",
                 debugLogs to "com.joeysretro.joey64.LOGS", debugRaEvent to "com.joeysretro.joey64.RA_EVENT",
-                debugProblem to "com.joeysretro.joey64.PROBLEM")) {
+                debugProblem to "com.joeysretro.joey64.PROBLEM", debugHardcore to "com.joeysretro.joey64.HARDCORE")) {
             val filter = IntentFilter(action)
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
             else registerReceiver(receiver, filter)

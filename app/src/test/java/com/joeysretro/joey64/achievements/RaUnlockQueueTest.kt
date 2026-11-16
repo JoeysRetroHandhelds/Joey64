@@ -43,4 +43,23 @@ class RaUnlockQueueTest {
         assertEquals(0, q.count("Joey"))
         assertEquals(1, q.count("Other"))
     }
+
+    @Test fun keepsTheHardcoreFlag() {
+        val a = RaUnlockQueue.parseAward("r=awardachievement&u=J&t=x&a=5&h=1&m=abc&o=3&v=1")!!
+        assertTrue(a.hardcore)
+        assertFalse(RaUnlockQueue.parseAward("r=awardachievement&u=J&t=x&a=5&h=0&v=1")!!.hardcore)
+        val q = queue()
+        q.add(RaUnlockQueue.Award("J", 5, "abc", 0), nowMs = 100_000)
+        q.add(a, nowMs = 200_000) // the same one earned again in Hardcore: kept once, as Hardcore, from the first time
+        val u = q.all().single()
+        assertTrue(u.hardcore)
+        assertEquals(100_000L, u.atMs)
+        q.add(RaUnlockQueue.Award("J", 6, "abc", 0), nowMs = 100_000)
+        assertFalse(q.all().first { it.id == 6 }.hardcore)
+    }
+
+    @Test fun userAgentNamesAppOsAndCore() {
+        assertEquals("Joey64/0.2.2 (Android 14) mupen64plus_next_libretro/5418b28 rcheevos/12.1.0",
+            agentFor("0.2.2", "14", "5418b28", "rcheevos/12.1.0"))
+    }
 }

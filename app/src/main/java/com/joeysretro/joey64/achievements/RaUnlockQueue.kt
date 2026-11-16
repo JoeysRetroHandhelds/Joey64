@@ -17,10 +17,11 @@ import java.net.URLDecoder
  * whoever is signed in, and only that account's unlocks go). Sign out asks first while any are here.
  */
 class RaUnlockQueue(private val file: File, private val log: (String) -> Unit = { JLog.i(TAG, it) }) {
-    data class Unlock(val user: String, val id: Int, val hash: String, val atMs: Long)
+    /** [hardcore]: earned in a Hardcore play (sent as one; a Casual unlock never goes as Hardcore). */
+    data class Unlock(val user: String, val id: Int, val hash: String, val atMs: Long, val hardcore: Boolean = false)
 
     /** An unlock request's fields, or null when [post] isn't one ("r=awardachievement&u=..&a=..&m=..&o=.."). */
-    data class Award(val user: String, val id: Int, val hash: String, val secondsAgo: Long)
+    data class Award(val user: String, val id: Int, val hash: String, val secondsAgo: Long, val hardcore: Boolean = false)
 
     @Synchronized
     fun all(): List<Unlock> = read()
@@ -32,9 +33,14 @@ class RaUnlockQueue(private val file: File, private val log: (String) -> Unit = 
     @Synchronized
     fun add(a: Award, nowMs: Long) {
         val list = read()
-        if (list.any { it.user.equals(a.user, ignoreCase = true) && it.id == a.id }) return
-        write(list + Unlock(a.user, a.id, a.hash, nowMs - a.secondsAgo * 1000))
-        log("offline queue: achievement ${a.id} kept to send later (${list.size + 1} waiting)")
+        val had = list.firstOrNull { it.user.equals(a.user, ignoreCase = true) && it.id == a.id }
+        if (had != null) {
+            // A Hardcore unlock of one kept as Casual: it goes as Hardcore (which counts as both), from the first time.
+            if (a.hardcore && !had.hardcore) { write(list.map { if (it === had) it.copy(hardcore = true) else it }); log("offline queue: achievement ${a.id} now Hardcore") }
+            return
+        }
+        write(list + Unlock(a.user, a.id, a.hash, nowMs - a.secondsAgo * 1000, a.hardcore))
+        log("offline queue: achievement ${a.id} kept to send later${if (a.hardcore) " (Hardcore)" else ""} (${list.size + 1} waiting)")
     }
 
     /** The server answered for [user]'s [id] (unlocked, already unlocked, or refused for good). */
@@ -57,7 +63,7 @@ class RaUnlockQueue(private val file: File, private val log: (String) -> Unit = 
         return try {
             val a = JSONArray(file.readText())
             (0 until a.length()).mapNotNull { i ->
-                a.optJSONObject(i)?.let { Unlock(it.optString("user"), it.optInt("id"), it.optString("hash"), it.optLong("at")) }
+                a.optJSONObject(i)?.let { Unlock(it.optString("user"), it.optInt("id"), it.optString("hash"), it.optLong("at"), it.optBoolean("hc", false)) }
                     ?.takeIf { it.id > 0 && it.user.isNotEmpty() }
             }
         } catch (e: Exception) {
@@ -70,7 +76,7 @@ class RaUnlockQueue(private val file: File, private val log: (String) -> Unit = 
         try {
             file.parentFile?.mkdirs()
             val a = JSONArray()
-            for (u in list) a.put(JSONObject().put("user", u.user).put("id", u.id).put("hash", u.hash).put("at", u.atMs))
+            for (u in list) a.put(JSONObject().put("user", u.user).put("id", u.id).put("hash", u.hash).put("at", u.atMs).apply { if (u.hardcore) put("hc", true) })
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(a.toString())
             if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
@@ -93,7 +99,7 @@ class RaUnlockQueue(private val file: File, private val log: (String) -> Unit = 
             if (f["r"] != "awardachievement") return null
             val id = f["a"]?.toIntOrNull() ?: return null
             val user = f["u"]?.takeIf { it.isNotEmpty() } ?: return null
-            return Award(user, id, f["m"] ?: "", f["o"]?.toLongOrNull() ?: 0L)
+            return Award(user, id, f["m"] ?: "", f["o"]?.toLongOrNull() ?: 0L, f["h"] == "1")
         }
 
         /**

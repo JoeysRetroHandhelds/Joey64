@@ -22,6 +22,11 @@ void doFrame();
 void idle();
 // After the core's retro_reset (the pause menu's Reset).
 void reset();
+// RetroAchievements Hardcore is on for this play (RaHardcore): no state loads, rewind, slow motion, frame
+// advance or cheats.
+bool hardcore();
+// Hardcore was turned on mid-game: true once, and the host then restarts the game (core reset, then reset()).
+bool takeReset();
 // With a save state (on the emulation thread, after the core's serialize): the achievements'
 // progress, RetroArch's ACHV block. Empty when no set is loaded.
 void captureProgress(std::vector<uint8_t>& out);

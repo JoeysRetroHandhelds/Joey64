@@ -60,6 +60,10 @@ std::atomic<bool> g_loadAgain{false};
 // the set is loaded once ramReady gives it, else rc_client finds every address unreadable and disables
 // every achievement ("Disabled achievement N. Invalid address ...", found on the Thor 2026-11-08).
 std::atomic<bool> g_waitRam{false};
+// RetroAchievements Hardcore for this play (RaHardcore). [g_resetAsked]: rc_client's reset event (Hardcore turned on
+// with a game loaded): the host restarts the game at its next frame, then rc_client_reset.
+std::atomic<bool> g_hardcore{false};
+std::atomic<bool> g_resetAsked{false};
 // A state's achievement progress loaded before the game's set came from the server (Continue loads
 // the auto state at boot): given to rc_client once the set loads.
 std::mutex g_progressMutex;
@@ -248,9 +252,10 @@ void onEvent(const rc_client_event_t* ev, rc_client_t*) {
     if (ev->type == RC_CLIENT_EVENT_ACHIEVEMENT_TRIGGERED || ev->type == RC_CLIENT_EVENT_GAME_COMPLETED)
         j.raw("game", gameJson());
     if (ev->type == RC_CLIENT_EVENT_RESET) {
-        // Only sent when hardcore is turned on mid-game; Joey64 has no hardcore yet. Reset rc_client
-        // so it doesn't wait for one.
-        rc_client_reset(g_client);
+        // Hardcore turned on mid-game: RetroAchievements requires the game to restart. rc_client processes
+        // nothing until rc_client_reset, which the host calls (Cheevos::reset) after restarting the core.
+        g_resetAsked = true;
+        RLOGI("Hardcore on mid-game: the game restarts");
     }
     emit(j.done());
 }
@@ -296,7 +301,7 @@ void ensureClient() {
     g_client = rc_client_create(readMemory, serverCall);
     rc_client_enable_logging(g_client, RC_CLIENT_LOG_LEVEL_INFO, logMessage);
     rc_client_set_event_handler(g_client, onEvent);
-    rc_client_set_hardcore_enabled(g_client, 0); // softcore only until RetroAchievements approves Joey64
+    rc_client_set_hardcore_enabled(g_client, 0); // each play sets its mode (RaHardcore, setHardcore)
     rc_client_set_unofficial_enabled(g_client, 0);
     rc_client_set_encore_mode_enabled(g_client, 0);
 }
@@ -339,6 +344,7 @@ static void startLoad() {
 }
 
 void gameLoaded(const uint8_t* rom, size_t romSize, uint8_t* ram, size_t ramSize) {
+    g_resetAsked = false; // the play's mode was set before it loaded: nothing to restart
     hashRom(rom, romSize, g_hash);
     {
         std::lock_guard<std::mutex> lk(g_ramMutex);
@@ -363,6 +369,7 @@ void ramReady(uint8_t* ram, size_t ramSize) {
 }
 
 void gameUnloaded() {
+    g_resetAsked = false;
     g_waitRam = false;
     g_loadAgain = false;
     { std::lock_guard<std::mutex> lk(g_progressMutex); g_pendingProgress.clear(); }
@@ -374,6 +381,8 @@ void gameUnloaded() {
 void doFrame() { if (g_client) rc_client_do_frame(g_client); }
 void idle() { if (g_client) rc_client_idle(g_client); }
 void reset() { if (g_client) rc_client_reset(g_client); }
+bool hardcore() { return g_hardcore; }
+bool takeReset() { return g_resetAsked.exchange(false); }
 void captureProgress(std::vector<uint8_t>& out) {
     out.clear();
     if (!g_client || !rc_client_is_game_loaded(g_client)) return;
@@ -525,7 +534,17 @@ JNIEXPORT jstring JNICALL RAJNI(achievementList)(JNIEnv* env, jclass) {
 // The offline queue (RaUnlockQueue): an unlock rc_client couldn't send before its game was left,
 // rebuilt for the signed-in account with how long ago it happened (rcheevos' delayed unlock, the
 // "o" field). {"url":..,"post":..}, or "" when nobody is signed in. The queue keeps no sign-in key.
-JNIEXPORT jstring JNICALL RAJNI(awardRequest)(JNIEnv* env, jclass, jint id, jstring hash, jint secondsSince) {
+JNIEXPORT void JNICALL RAJNI(setHardcore)(JNIEnv*, jclass, jboolean on) {
+    ensureClient();
+    // Off to on restarts a running game, signed in or not (rcheevos' reset event asks the same when its set is
+    // loaded); before a game loads, gameLoaded clears the request.
+    const bool was = g_hardcore.exchange(on);
+    g_resetAsked = on && !was;
+    rc_client_set_hardcore_enabled(g_client, on ? 1 : 0);
+    RLOGI("Hardcore %s", on ? "on" : "off");
+}
+
+JNIEXPORT jstring JNICALL RAJNI(awardRequest)(JNIEnv* env, jclass, jint id, jstring hash, jint secondsSince, jboolean hardcore) {
     std::string out;
     const rc_client_user_t* user = g_client ? rc_client_get_user_info(g_client) : nullptr;
     if (user && user->username && user->token && id > 0) {
@@ -534,7 +553,7 @@ JNIEXPORT jstring JNICALL RAJNI(awardRequest)(JNIEnv* env, jclass, jint id, jstr
         params.username = user->username;
         params.api_token = user->token;
         params.achievement_id = (uint32_t)id;
-        params.hardcore = 0; // softcore only
+        params.hardcore = hardcore ? 1 : 0; // the play's mode, kept with the unlock
         params.game_hash = h;
         params.seconds_since_unlock = (uint32_t)std::max(secondsSince, 1);
         std::string hostName;

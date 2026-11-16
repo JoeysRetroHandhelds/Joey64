@@ -92,7 +92,7 @@ object RaBridge {
         queue = RaUnlockQueue.of(app)
         NativeBridge // loads libjoey64host, where the native half lives
         nativeInit()
-        userAgent = "Joey64/${BuildConfig.VERSION_NAME} ${userAgentClause()}".trim()
+        userAgent = agentFor(BuildConfig.VERSION_NAME, android.os.Build.VERSION.RELEASE, coreCommit(app), userAgentClause())
         ready = true
         val p = prefs(app)
         // Until 2026-11-07 a dev build kept the account here unsealed; it lives in SignInStore now.
@@ -420,7 +420,7 @@ object RaBridge {
         var left = 0
         for (u in waiting) {
             val secs = ((System.currentTimeMillis() - u.atMs) / 1000).coerceIn(1, Int.MAX_VALUE.toLong()).toInt()
-            val req = awardRequest(u.id, u.hash, secs).takeIf { it.isNotEmpty() }?.let { JSONObject(it) } ?: return
+            val req = awardRequest(u.id, u.hash, secs, u.hardcore).takeIf { it.isNotEmpty() }?.let { JSONObject(it) } ?: return
             val (status, body) = httpPost(req.optString("url"), req.optString("post"))
             if (RaUnlockQueue.settled(status, body)) {
                 val answer = try { JSONObject(String(body!!)) } catch (e: Exception) { JSONObject() }
@@ -490,6 +490,21 @@ object RaBridge {
     /** Every achievement of the loaded game, in RetroArch's sections (Active challenges, Recently unlocked...), as JSON. */
     @JvmStatic external fun achievementList(): String
     @JvmStatic external fun lastHash(): String
-    @JvmStatic private external fun awardRequest(id: Int, hash: String, secondsSince: Int): String
+    @JvmStatic private external fun awardRequest(id: Int, hash: String, secondsSince: Int, hardcore: Boolean): String
+    /** RaHardcore: rc_client's hardcore mode. Turned on with a game loaded, the host restarts the game at its next frame. */
+    @JvmStatic external fun setHardcore(on: Boolean)
+
+    /** The bundled core's commit (core-version.txt), 7 digits, or "unknown". */
+    private fun coreCommit(ctx: Context): String = try {
+        ctx.assets.open("core-version.txt").bufferedReader().readLines().firstOrNull { it.startsWith("commit:") }
+            ?.substringAfter(':')?.trim()?.substringBefore(' ')?.take(7)?.takeIf { it.isNotEmpty() } ?: "unknown"
+    } catch (e: Exception) { "unknown" }
     @JvmStatic private external fun gameLoaded(): Boolean
 }
+
+/**
+ * The User-Agent RetroAchievements asks emulators for (hardcore compliance: "Name/version (OS) core/version"):
+ * "Joey64/0.2.2 (Android 14) mupen64plus_next_libretro/5418b28 rcheevos/12.1.0".
+ */
+internal fun agentFor(app: String, android: String, core: String, clause: String): String =
+    "Joey64/$app (Android $android) mupen64plus_next_libretro/$core $clause".trim()

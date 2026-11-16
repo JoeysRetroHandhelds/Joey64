@@ -524,6 +524,8 @@ std::string gameSharkHeld(const std::string& line) {
 void applyCheats() {
     std::lock_guard<std::mutex> lk(g_cheatsMutex);
     core.cheat_reset();
+    // RetroAchievements Hardcore: no cheats (and no GameShark button), whatever the list holds.
+    if (Cheevos::hardcore()) { if (!g_cheats.empty()) LOGI("cheats: %zu not used in Hardcore", g_cheats.size()); else LOGI("cheats: none"); return; }
     const bool held = g_gsButton.load();
     for (size_t i = 0; i < g_cheats.size(); ++i) {
         const std::string line = held ? gameSharkHeld(g_cheats[i]) : g_cheats[i];
@@ -1370,6 +1372,10 @@ void serveStateRequest(bool ready, bool failEarly) {
         r->ok = n > 0 && core.serialize(r->data.data(), n);
         if (!r->ok) r->data.clear();
         else Cheevos::captureProgress(r->achv);
+    } else if (Cheevos::hardcore()) {
+        // RetroAchievements Hardcore: no state loads (the app turns them away first; a start from a state plays Casual).
+        r->ok = false;
+        LOGE("state: load refused, Hardcore is on");
     } else if (r->data.size() < 44 || memcmp(r->data.data(), "M64+SAVE", 8) != 0) {
         // Not the core's data. mupen64plus-next must never see it: its libretro load returns on a wrong
         // magic without unlocking savestates_lock, and the emulation thread then hangs (found on the Thor
@@ -1674,7 +1680,7 @@ void runLoop() {
         // Rewind (rewind.h): settings from the UI, and the hotkey held. Going back runs at about normal speed:
         // one moment every [every] frames, each shown by running one frame from it, the picture held between.
         if (g_rewindCfgChanged.exchange(false)) g_rewind.configure(g_rewindOnCfg, g_rewindEveryCfg, g_rewindMaxCfg);
-        const bool rewinding = g_rewindHeld && g_rewind.on() && !g_paused && !g_bench;
+        const bool rewinding = g_rewindHeld && g_rewind.on() && !g_paused && !g_bench && !Cheevos::hardcore();
         if (rewinding != g_rewindActive) {
             g_rewindActive = rewinding;
             if (rewinding) { rewindTick = g_rewind.every(); rewindStepped = false; g_rewindBackFrames = 0; g_rewindAtOldest = false; rewindNext = std::chrono::steady_clock::now(); }
@@ -1700,7 +1706,7 @@ void runLoop() {
             if (!step) continue; // the picture holds until the next moment
         }
         // Slow motion: the speed cap below runs at its speed, with no audio wait (its sound is resampled).
-        const int slowPct = g_slowPct.load();
+        const int slowPct = Cheevos::hardcore() ? 0 : g_slowPct.load();
         // pacing comes from vsync + blocking audio writes (M4 refines); fast-forward swaps
         // both for a sleep that caps the speed
         bool ff = g_fastForward && !rewinding;
@@ -1988,6 +1994,16 @@ void runLoop() {
             Cheevos::ramReady(static_cast<uint8_t*>(core.get_memory_data(RETRO_MEMORY_SYSTEM_RAM)), core.get_memory_size(RETRO_MEMORY_SYSTEM_RAM));
         if (!rewinding) {
             Cheevos::doFrame();
+            if (Cheevos::takeReset()) {
+                // Hardcore turned on mid-game: the game restarts (RetroAchievements' rule), its cheats go, and
+                // rewind starts over.
+                core.reset();
+                Cheevos::reset();
+                g_rewind.clear();
+                g_gsButton = false;
+                applyCheats();
+                LOGI("Hardcore on: game restarted");
+            }
             if (g_framesRun > 60)
                 g_rewind.record([] { return core.serialize_size(); }, [](void* d, size_t n) { return core.serialize(d, n); },
                                 [](std::vector<uint8_t>& p) { Cheevos::captureProgress(p); });
@@ -2683,7 +2699,7 @@ JNIEXPORT jintArray JNICALL JNI(pictureRect)(JNIEnv* env, jobject, jint winW, ji
 
 // Frame advance: while paused, the game runs one more frame and stays paused. Does nothing if not paused.
 JNIEXPORT void JNICALL JNI(stepFrame)(JNIEnv*, jobject) {
-    if (!g_paused || g_netplay) return;
+    if (!g_paused || g_netplay || Cheevos::hardcore()) return;
     { std::lock_guard<std::mutex> pl(g_pauseMutex); if (g_stepFrames < 4) ++g_stepFrames; }
     g_pauseCv.notify_all();
 }
@@ -2740,6 +2756,7 @@ JNIEXPORT void JNICALL JNI(setOptionsLive)(JNIEnv* env, jobject, jobjectArray ke
 // Replaces every cheat; a running game takes them between frames (a paused one when it resumes).
 JNIEXPORT void JNICALL JNI(setCheats)(JNIEnv* env, jobject, jobjectArray codes) {
     if (g_netplay && g_thread.joinable()) { LOGI("netplay: cheat change refused"); return; }
+    if (Cheevos::hardcore()) { LOGI("cheats: change refused, Hardcore is on"); return; }
     std::vector<std::string> next;
     jsize n = env->GetArrayLength(codes);
     for (jsize i = 0; i < n; ++i) {
@@ -2758,7 +2775,7 @@ JNIEXPORT void JNICALL JNI(setCheats)(JNIEnv* env, jobject, jobjectArray codes) 
 
 // The GameShark button down or up; the game takes it between frames.
 JNIEXPORT void JNICALL JNI(setGameShark)(JNIEnv*, jobject, jboolean down) {
-    if (g_netplay) return;
+    if (g_netplay || (down && Cheevos::hardcore())) return;
     if (g_gsButton.exchange(down) == (bool)down) return;
     LOGI("GameShark button %s", down ? "down" : "up");
     g_cheatsChanged = true;
@@ -3040,6 +3057,7 @@ JNIEXPORT void JNICALL JNI(setButtons)(JNIEnv*, jobject, jint port, jint mask) {
 JNIEXPORT void JNICALL JNI(playMacro)(JNIEnv* env, jobject, jint port, jintArray masks, jintArray sx, jintArray sy,
                                       jintArray frames, jboolean repeat) {
     if (port < 0 || port >= kPorts) return;
+    if (Cheevos::hardcore()) { LOGI("macro refused, Hardcore is on"); return; } // Joey 2026-11-16: no macros in Hardcore
     jsize n = env->GetArrayLength(masks);
     if (n <= 0 || env->GetArrayLength(sx) != n || env->GetArrayLength(sy) != n || env->GetArrayLength(frames) != n) return;
     std::vector<jint> m(n), x(n), y(n), f(n);
