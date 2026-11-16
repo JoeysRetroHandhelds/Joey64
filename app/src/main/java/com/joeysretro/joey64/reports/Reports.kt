@@ -41,10 +41,16 @@ object ReportPrefs {
      * mockup 2026-11-15, screen 3c): the game screen records that play and the library sends it once, sessions only.
      */
     fun once(ctx: Context) = p(ctx).getBoolean("once", false)
-    fun setOnce(ctx: Context, once: Boolean) { p(ctx).edit().putBoolean("once", once).apply(); if (once) install(ctx) }
+    fun setOnce(ctx: Context, once: Boolean) {
+        p(ctx).edit().putBoolean("once", once).putInt("once_pid", if (once) android.os.Process.myPid() else 0).apply()
+        if (once) install(ctx)
+    }
 
-    /** The game screen records its session: Send reports on, or a one-off asked for. */
-    fun recording(ctx: Context) = on(ctx) || once(ctx)
+    /**
+     * The game screen records its session: Send reports on, or a one-off asked for in this process (this play only:
+     * review 2026-11-15, the one-off stayed on until a send went and every play meanwhile was recorded).
+     */
+    fun recording(ctx: Context) = on(ctx) || (once(ctx) && p(ctx).getInt("once_pid", 0) == android.os.Process.myPid())
 
     /** The library's question was answered (or Send reports set in Settings): it is never asked again. */
     fun asked(ctx: Context) = p(ctx).getBoolean("asked", testing)

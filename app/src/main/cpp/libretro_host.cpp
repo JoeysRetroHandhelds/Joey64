@@ -432,6 +432,24 @@ static bool ffStepDown() {
     LOGI("fast-forward: can't hold the speed at %s, stepping down to %s", now.c_str(), next);
     return true;
 }
+// One level back up, after a step down that didn't make fast-forward faster (the CPU, not the GPU, held it back):
+// review 2026-11-15, such a game went all the way to 1x for nothing. Back at the chosen resolution, the look comes back too.
+static void ffStepUp() {
+    if (!g_upscaleFfApplied) return;
+    auto it = g_optionOverrides.find(kUpscaleKey);
+    const std::string now = it != g_optionOverrides.end() ? it->second : "1x";
+    const char* up = now == "1x" ? "2x" : now == "2x" ? "4x" : now == "4x" ? "8x" : nullptr;
+    const std::string chosen = g_upscaleBeforeFf.empty() ? "1x" : g_upscaleBeforeFf;
+    if (!up || now == chosen) return;
+    if (chosen == up) {
+        if (g_upscaleBeforeFf.empty()) g_optionOverrides.erase(kUpscaleKey);
+        else g_optionOverrides[kUpscaleKey] = g_upscaleBeforeFf;
+        g_upscaleFfApplied = false;
+        ffSharpOff();
+    } else g_optionOverrides[kUpscaleKey] = up;
+    g_optionsDirty = true;
+    LOGI("fast-forward: %s was no faster, back to %s; no more steps down this time", now.c_str(), up);
+}
 // Debug: RDRAM dump requested from the UI thread, written by the emulation thread between frames.
 std::mutex g_dumpMutex;
 std::string g_dumpPath;
@@ -1585,6 +1603,8 @@ void runLoop() {
     auto ffLastWake = ffNext, ffStepAt = ffNext, ffLogAt = ffNext; // fast-forward's even pacing
     double ffWorkEma = 0, ffPace = 0;
     int ffShort = 0, ffWinFrames = 0;
+    // A step down is judged once its settling second is over: [ffHoldsBefore] what the level before held.
+    double ffHoldsBefore = 0; bool ffJudgeStep = false, ffStepsOff = false;
     int ffLate = 0, ffFrames = 0;
     int rewindTick = 0;
     bool rewindStepped = false;
@@ -1710,6 +1730,7 @@ void runLoop() {
             ffNext = std::chrono::steady_clock::now();
             // each fast-forward starts again from the chosen speed (even pacing, below)
             ffWorkEma = 0; ffPace = 0; ffLate = 0; ffFrames = 0; ffShort = 0; ffWinFrames = 0;
+            ffHoldsBefore = 0; ffJudgeStep = false; ffStepsOff = false;
             ffLastWake = ffStepAt = ffLogAt = ffNext;
         }
         if (ff) {
@@ -1742,7 +1763,14 @@ void runLoop() {
                 // Step the resolution down one level after 1 s that can't hold, or doesn't reach, 90% of the chosen
                 // speed; it goes on down to 1x while that lasts.
                 ffShort = (holds < want * 0.9 || reached < want * 0.9) ? ffShort + 1 : 0;
-                if (ffShort >= 2 && ffStepDown()) {
+                // The last step down, once settled: less than 10% more speed held means the GPU wasn't what held it
+                // back, so it goes back up and stays there for this fast-forward.
+                if (ffJudgeStep && ffShort >= 0) {
+                    ffJudgeStep = false;
+                    if (holds < ffHoldsBefore * 1.1) { ffStepUp(); ffStepsOff = true; ffShort = -2; workEma = 0; pace = want; }
+                }
+                if (!ffStepsOff && ffShort >= 2 && ffStepDown()) {
+                    ffHoldsBefore = holds; ffJudgeStep = true;
                     ffShort = -2; // the renderer rebuilds: give the new level 1 s more before judging it
                     workEma = 0; pace = want; // not 0: this frame's sleep divides by it (review 2026-11-15)
                 }

@@ -14,6 +14,8 @@ object ReleaseNotes {
     private val BOLD = Regex("""(\*\*|__)(.+?)\1""")
     private val ITALIC = Regex("""(?<![\w*])\*(?!\s)([^*]+?)(?<!\s)\*(?![\w*])""")
     private val CODE = Regex("""`([^`]*)`""")
+    /** HTML comments: GitHub's page hides them, its API's body keeps them (review 2026-11-15). */
+    private val COMMENT = Regex("""<!--.*?(-->|$)""", RegexOption.DOT_MATCHES_ALL)
 
     fun plain(markdown: String): String {
         val blocks = ArrayList<StringBuilder>()
@@ -26,7 +28,7 @@ object ReleaseNotes {
             open = if (joinable) blocks.last() else null
         }
         var lastWasItem = false
-        for (raw in markdown.replace("\r\n", "\n").split('\n')) {
+        for (raw in COMMENT.replace(markdown.replace("\r\n", "\n"), "").split('\n')) {
             val line = raw.trimEnd()
             if (line.isBlank()) { open = null; sawBlank = true; continue }
             val heading = HEADING.matchEntire(line)

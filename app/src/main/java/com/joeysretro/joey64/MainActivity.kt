@@ -615,6 +615,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val autoOnly = dev == null && devString("driver") == null && videoDriver == null && devString("renderer") == null &&
             video[com.joeysretro.joey64.video.VideoKey.Renderer] != "gliden64" && video[com.joeysretro.joey64.video.VideoKey.Renderer] != "parallel"
         trialGpuName = system?.name ?: "none"
+        trialTested = GpuRules.tested(systemFamily)
         val trialPick = if (autoOnly) GpuTrial(trialStore(), install, trialGpuName, chain.value.size).also { trial = it }.apply {
             // After an update, start on the driver Auto ran before (review 2026-11-15)
             // (not when that was only Auto's first pick then: a new best first replaces it, GpuRules.carryOver; never on
@@ -649,14 +650,19 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // (past the chain's end: the system driver with GLideN64).
         // A game broken on a tested GPU's pick runs its own driver (GpuRules.gameDriver), only where Auto would run the
         // first one: a trial that stepped down keeps its step.
-        val gameDrv = if (autoOnly && runLevel == 0 && GpuRules.tested(systemFamily)) GpuRules.gameDriver(md5Now, systemFamily) else null
-        gameDrv?.let { JLog.i(TAG, "GPU: game rule: ${it.value.shown} (${it.rule})") }
+        // A rule's driver this build doesn't have is left out (the GPU's pick runs). The trial doesn't judge a start on a
+        // game's own driver: a failure there would step the GPU's pick down for every game (review 2026-11-15).
+        val gameDrv = (if (autoOnly && runLevel == 0 && GpuRules.tested(systemFamily)) GpuRules.gameDriver(md5Now, systemFamily) else null)
+            ?.takeIf { g -> g.value.asset?.let { bundledDriver(it) != null } ?: true }
+        gameDrv?.let { JLog.i(TAG, "GPU: game rule: ${it.value.shown} (${it.rule}); the trial leaves this start out") }
+        if (gameDrv != null) { trial = null; trialInfo = null }
+        val trialOn = trialPick != null && gameDrv == null
         val stepDriver: GpuRules.Driver = autoInstead ?: GpuRules.Driver.byId(devString("driver") ?: videoDriver)
             ?: gameDrv?.value ?: chain.value.getOrNull(runLevel) ?: GpuRules.Driver.SYSTEM
         val lib = dev ?: stepDriver.asset?.let { bundledDriver(it) }
         if (speedTry != null && stepDriver.asset != null && lib == null) { speedFailNow("not in this build"); return "gliden64" }
         // A bundled driver this build doesn't have: the trial moves on (no game start spent on it)
-        if (dev == null && trialPick != null && !trialPick.good && level < chain.value.size && stepDriver.asset != null && lib == null) {
+        if (dev == null && trialOn && !trialPick!!.good && level < chain.value.size && stepDriver.asset != null && lib == null) {
             trialFailNow("not in this build"); return "gliden64"
         }
         var custom: VkGpu? = null
@@ -699,7 +705,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         }
         // The trial's checks before any game start (approved gputry mockup: "checked off quietly"): a driver that
         // doesn't load, or a GPU without what parallel-RDP needs on it, moves to the next level at once.
-        if (trialPick != null && !trialPick.good && level < chain.value.size) {
+        if (trialOn && !trialPick!!.good && level < chain.value.size) {
             val g = if (stepDriver == GpuRules.Driver.SYSTEM) system else custom
             val why = when {
                 stepDriver != GpuRules.Driver.SYSTEM && custom == null -> "doesn't load on this GPU"
@@ -790,6 +796,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var trialInfo: GpuTrial.Pick? = null
     /** The system GPU's name, the trial's key with the install. */
     private var trialGpuName = "none"
+    /** The system GPU is one we test ([GpuRules.tested]): the watch doesn't fail its pick for a black screen. */
+    private var trialTested = false
     /** A trial restart is under way: onCreate stops and onDestroy does nothing (the process is ended for the next start). */
     private var trialRestarting = false
 
@@ -1043,6 +1051,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      * draws frames, all black, so a drawn frame alone doesn't count; 2026-11-15). The frame is read back off the main
      * thread. No frame by [TRIAL_NO_FRAME_MS] of play, or only black ones by [TRIAL_BLACK_MS], is "no picture": the next
      * driver. Time with the menu or another popup up doesn't count; in a netplay room it never fails (the room may wait).
+     * On a GPU we test the pick is never failed for its picture (Joey 2026-11-15 night: it changes only for a broken
+     * game, by a per-game rule): a dark first scene after an update stepped it down (review 2026-11-15). Where nothing
+     * is judged (that, a known-good level) a drawn frame is enough and no frame is read back: reading one every 0.5 s
+     * went on all session in a dark game.
      */
     private var trialRunMs = 0L
     @Volatile private var trialChecking = false
@@ -1057,8 +1069,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             val p = trialInfo
             val net = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null
             val speedWait = speedTry != null && !speedDrew
-            if (((p != null && !p.good && p.level < trialChain.size) || speedWait) && !net && !trialChecking &&
+            // (the debug switch N64_TRIAL_BLACK judges a tested GPU too, so the cards can still be seen on our devices)
+            val blackDebug = BuildConfig.DEBUG && android.system.Os.getenv("N64_TRIAL_BLACK") != null
+            val judged = (p != null && !p.good && p.level < trialChain.size && (!trialTested || blackDebug)) || speedWait
+            if (judged && !net && !trialChecking &&
                 ((!drawn && trialRunMs >= TRIAL_NO_FRAME_MS) || trialRunMs >= TRIAL_BLACK_MS)) { if (speedWait) speedNoPicture() else trialNoPicture(); return }
+            if (drawn && !judged && !blackDebug) { trialDrew(); return }
             if (drawn && !trialChecking) {
                 trialChecking = true
                 trialCheck.execute {

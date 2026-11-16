@@ -79,4 +79,41 @@ class QuitStageTest {
         // Keep 10: Auto 10 is the folder's Auto 9.
         assertEquals(StateSlots.auto(9), GameStates.folderSlotWhileStaged(StateSlots.auto(10), 10))
     }
+
+    @Test fun twoStagedShowFirstThenTheFolder() {
+        // Two quits while the data folder was out of reach, keep 4: Auto and Auto 2 staged, Auto 3-4 the folder's Auto 1-2.
+        assertEquals(GameStates.STAGED, GameStates.folderSlotWhileStaged(StateSlots.AUTO, 4, 2))
+        assertEquals(GameStates.STAGED - 1, GameStates.folderSlotWhileStaged(StateSlots.auto(2), 4, 2))
+        assertEquals(StateSlots.AUTO, GameStates.folderSlotWhileStaged(StateSlots.auto(3), 4, 2))
+        assertEquals(StateSlots.auto(2), GameStates.folderSlotWhileStaged(StateSlots.auto(4), 4, 2))
+        assertEquals(GameStates.NONE, GameStates.folderSlotWhileStaged(StateSlots.auto(5), 4, 2))
+    }
+
+    @Test fun anEarlierStagedSaveIsKeptBehindTheNewOne() {
+        val dir = File(tmp.root, "quitsave/Banjo")
+        val older = File(tmp.root, "quitsave-older/Banjo")
+        QuitStage.write(dir, ByteArray(5) { 1 }, null, null, 1L, 3)
+        assertTrue(QuitStage.pushOlder(dir, older, 2))
+        QuitStage.write(dir, ByteArray(5) { 2 }, null, null, 2L, 3)
+        assertTrue(QuitStage.pushOlder(dir, older, 2))
+        QuitStage.write(dir, ByteArray(5) { 3 }, null, null, 3L, 3)
+        // Newest first: 3, then 2, then 1.
+        assertEquals(listOf(3L, 2L, 1L), QuitStage.all(dir, older).map { it.second.savedAt })
+        // A fourth with keep 3 (two older at most): the oldest goes.
+        assertTrue(QuitStage.pushOlder(dir, older, 2))
+        QuitStage.write(dir, ByteArray(5) { 4 }, null, null, 4L, 3)
+        assertEquals(listOf(4L, 3L, 2L), QuitStage.all(dir, older).map { it.second.savedAt })
+        // Only older ones left (the newest went in): still waiting.
+        QuitStage.clear(dir)
+        assertEquals(listOf("Banjo"), QuitStage.waitingIn(File(tmp.root, "quitsave"), File(tmp.root, "quitsave-older")))
+        assertEquals(listOf(3L, 2L), QuitStage.all(dir, older).map { it.second.savedAt })
+    }
+
+    @Test fun keepOneDropsTheEarlierStagedSave() {
+        val dir = File(tmp.root, "quitsave/Kirby")
+        val older = File(tmp.root, "quitsave-older/Kirby")
+        QuitStage.write(dir, ByteArray(5), null, null, 1L, 1)
+        assertTrue(QuitStage.pushOlder(dir, older, 0))
+        assertTrue(QuitStage.all(dir, older).isEmpty())
+    }
 }

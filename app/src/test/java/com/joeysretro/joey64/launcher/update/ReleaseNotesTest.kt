@@ -54,6 +54,11 @@ class ReleaseNotesTest {
         assertEquals("", ReleaseNotes.plain(""))
     }
 
+    @Test fun htmlCommentsAreLeftOut() {
+        assertEquals("Faster.\n\nNew\n\n• One", ReleaseNotes.plain("<!-- DRAFT\n   notes for us -->\nFaster.\n\n## New\n\n- One <!-- check -->"))
+        assertEquals("Text", ReleaseNotes.plain("Text\n<!-- not closed"))
+    }
+
     @Test fun parseGivesPlainNotes() {
         val json = """{"tag_name":"v0.3.0","body":"## New\n\n- **Fast**","assets":[{"name":"Joey64-0.3.0.apk","size":1,"browser_download_url":"https://example.test/a.apk"}]}"""
         assertEquals("New\n\n• Fast", Releases.parse(org.json.JSONObject(json))!!.notes)
