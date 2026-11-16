@@ -2495,9 +2495,11 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
     // Resident Evil 2 and Cruis'n USA (async: black screen), Yoshi's Story and Spider-Man (async: the intro
     // draws, then every frame renders black from ~25 s; on the Flip's Mali since 2026-11-05, flip-blk-*, and
     // Yoshi's Story on Adreno in fast-forward), Blast Corps (async on the recompiler: freezes on the Rareware logo
-    // ~2 s in on the Flip's Mali, 2026-11-11 bc-flip/bc3-flip; the cached interpreter and sync both play it). An
+    // ~2 s in on the Flip's Mali, 2026-11-11 bc-flip/bc3-flip; the cached interpreter and sync both play it), Tony
+    // Hawk's Pro Skater 2 (async on Mali: stops drawing ~35 s in, the emulation spinning; Pocket Block 2026-11-16:
+    // async 2 of 6 runs as shipped, 6 of 6 with the compile thread off; sync 0 of 6, 59.5 fps, run 9.0 vs 8.6 ms). An
     // explicit option override (--es opts) wins.
-    static const char* const kSyncRdpGames[] = {"NPF", "NRI", "NRE", "NCU", "NYS", "NSL", "NBC"};
+    static const char* const kSyncRdpGames[] = {"NPF", "NRI", "NRE", "NCU", "NYS", "NSL", "NBC", "NTQ"};
     std::string id = romGameId(buf);
     auto idIn = [&](auto& list) { return std::any_of(std::begin(list), std::end(list), [&](const char* g) { return id.compare(0, 3, g) == 0; }); };
     g_ffKeepSync = idIn(kSyncRdpGames);

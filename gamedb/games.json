@@ -87,7 +87,11 @@
     },
     {
       "id": "NTQ", "title": "Tony Hawk's Pro Skater 2",
+      "settings": [
+        {"what": "parallel-RDP sync (smart sync) on every GPU", "where": "libretro_host.cpp kSyncRdpGames", "why": "async parallel-RDP on Mali stopped drawing ~35 s in (VI 0 new frames, the emulation spinning), in most Flip compat runs since 2026-11-06, once on the RG477M, on the Pocket Block in the 0.2.2 release check; never on Adreno, which runs sync"}
+      ],
       "fixed": [
+        {"devices": "Mali (Flip, RG477M, Pocket Block)", "what": "stopped drawing ~35 s in with async parallel-RDP", "fix": "sync for this game (2026-11-16); Pocket Block 1x, 6 runs each: async 2/6 stalls as shipped and 6/6 with the compile thread off, sync 0/6 with the thread off, full speed (results/kb-thps1x, kb-thpsS)"},
         {"devices": "all (upscaled parallel-RDP)", "what": "the picture shook every frame at 2x/4x/8x: Bob deinterlacing moves each 480i field a quarter line x scale (Joey saw it on the Thor, 2026-11-10)", "fix": "Weave is the default deinterlace since 2026-11-10 (Joey); shake.py back-and-forth shifts: Bob 4x 2451, 2x 3220, 1x none, Weave 4x 0 (results/flick)"}
       ]
     },
