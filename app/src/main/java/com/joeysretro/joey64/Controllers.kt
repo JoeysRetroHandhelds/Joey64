@@ -40,6 +40,10 @@ object Controllers {
         (0x2020 shl 16) or 0x0111 to Profile("AYN, Odin position", FaceCodes.NINTENDO_LABELS, 0.75f),
         (0x2020 shl 16) or 0x0112 to Profile("AYN, Xbox position", FaceCodes.NINTENDO_LABELS, 0.75f, xboxPosition = true),
         (0x484b shl 16) or 0x1101 to Profile("Anbernic RG477M", FaceCodes.NINTENDO_LABELS, 0.9f, "abxy_mode" to "1"),
+        // Retroid Pocket (Flip recorded 2026-11-16): Nintendo letters. Nintendo position = "Retroid Pocket Controller",
+        // each button sends its own letter; Xbox position = "X-Box Controller", same ids, positional codes,
+        // Settings.System flip_button_layout=1 (absent until the first flip).
+        (0x2022 shl 16) or 0x3001 to Profile("Retroid Pocket", FaceCodes.NINTENDO_LABELS, 0.9f, "flip_button_layout" to "1"),
     )
 
     fun profile(dev: InputDevice?): Profile =
@@ -75,6 +79,50 @@ object Controllers {
             KeyEvent.KEYCODE_BUTTON_Y -> KeyEvent.KEYCODE_BUTTON_X
             else -> keyCode
         }
+    }
+
+    // For pads not in [KNOWN] yet: what a report needs to add one (Joey 2026-11-16, "start logging this for devices we
+    // don't know"). Each face button's first press per pad is logged with its Linux code, and the pad's first use with
+    // the Settings.System values that look like a layout toggle, so both toggle positions can be read from two logs.
+    private val faceSeen = java.util.Collections.synchronizedSet(HashSet<Long>())
+    private val TOGGLE_LIKE = Regex("abxy|button_layout|layout_mode|swap|xbox|nintendo|gamepad|joypad", RegexOption.IGNORE_CASE)
+    private val KNOWN_TOGGLES = listOf("abxy_mode", "flip_button_layout", "temp_abxy_layout_mode")
+
+    private fun linuxName(scan: Int) = when (scan) {
+        304 -> "BTN_SOUTH"; 305 -> "BTN_EAST"; 307 -> "BTN_NORTH"; 308 -> "BTN_WEST"; else -> "scan $scan"
+    }
+
+    /** A log line for [e] when it is a face button's first press on its pad this session, else null. */
+    fun faceSeenLine(e: KeyEvent): String? {
+        if (e.action != KeyEvent.ACTION_DOWN || e.repeatCount != 0) return null
+        if (e.keyCode !in KeyEvent.KEYCODE_BUTTON_A..KeyEvent.KEYCODE_BUTTON_Y) return null
+        val dev = e.device ?: return null
+        if (!faceSeen.add((dev.id.toLong() shl 32) or e.keyCode.toLong())) return null
+        return "Pad face: ${dev.name} (" + "%04x:%04x".format(dev.vendorId, dev.productId) + ") " +
+            "${KeyEvent.keyCodeToString(e.keyCode).removePrefix("KEYCODE_")} from ${linuxName(e.scanCode)}" +
+            (if (profile(dev) === DEFAULT) ", pad not known" else "")
+    }
+
+    /** The pad's ids and the toggle-like Settings.System values, for its first-use log line. */
+    fun padDetails(dev: InputDevice?): String {
+        if (dev == null) return ""
+        val found = sortedMapOf<String, String?>()
+        val r = resolver
+        if (r != null) {
+            try {
+                r.query(android.provider.Settings.System.CONTENT_URI, arrayOf("name", "value"), null, null, null)?.use { c ->
+                    while (c.moveToNext()) {
+                        val n = c.getString(0) ?: continue
+                        if (TOGGLE_LIKE.containsMatchIn(n)) found[n] = c.getString(1)
+                    }
+                }
+            } catch (e: Exception) { }
+            for (k in KNOWN_TOGGLES) if (k !in found) try {
+                android.provider.Settings.System.getString(r, k)?.let { found[k] = it }
+            } catch (e: Exception) { }
+        }
+        return ", descriptor ${dev.descriptor.take(8)}, " + (if (dev.isExternal) "external" else "built in") +
+            ", settings " + (if (found.isEmpty()) "none" else found.entries.joinToString(" ") { "${it.key}=${it.value}" })
     }
 
     private const val BOTTOM = 0

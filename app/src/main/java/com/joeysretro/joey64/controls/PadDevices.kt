@@ -17,7 +17,9 @@ object PadDevices {
     /** Handhelds' own pads that report external. AYN: Odin 2/3, Thor, Portal ("Odin Controller"). */
     private val BUILT_IN_IDS = setOf(0x2020 shl 16 or 0x0111,
         // The same AYN pad in its Xbox/Odin toggle's Xbox position ("Xbox Wireless Controller", Joey 2026-11-16).
-        0x2020 shl 16 or 0x0112)
+        0x2020 shl 16 or 0x0112,
+        // Retroid Pocket: both toggle positions report external and change descriptor (Flip, 2026-11-16).
+        0x2022 shl 16 or 0x3001)
 
     fun isPad(d: InputDevice): Boolean = !d.isVirtual &&
         (d.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||

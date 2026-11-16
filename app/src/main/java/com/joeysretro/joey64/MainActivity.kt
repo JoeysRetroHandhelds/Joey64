@@ -3465,7 +3465,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         padDeviceId = id
         val profile = Controllers.profile(dev)
         JLog.i(TAG, "Pad: ${dev?.name} (" + "%04x:%04x".format(dev?.vendorId ?: 0, dev?.productId ?: 0) + "), profile ${profile.name}" +
-            (profile.toggle?.let { ", layout toggle " + (if (Controllers.toggleXbox(profile)) "Xbox" else "Nintendo") + " (${it.first})" } ?: ""))
+            (profile.toggle?.let { ", layout toggle " + (if (Controllers.toggleXbox(profile)) "Xbox" else "Nintendo") + " (${it.first})" } ?: "") +
+            Controllers.padDetails(dev))
         return Controllers.StickCal(dev?.descriptor ?: "unknown", profile.stickReach, stickPrefs).also { stickCals[id] = it }
     }
 
@@ -3546,6 +3547,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 event.source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD)) touch?.controllerUsed()
         val inGame = states != null && overlay != null && mine
         // A pad with an Xbox/Nintendo toggle (the RG477M): its Xbox position's codes as its Nintendo position sends them.
+        Controllers.faceSeenLine(event)?.let { JLog.i(TAG, it) }
         val code = Controllers.faceKey(event.device, event.keyCode)
         val down = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
         // The pause menu's button on its own (Back by default) opens it on release (the menu's window would get the release otherwise).
