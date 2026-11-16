@@ -181,6 +181,13 @@ inline void fit(int winW, int winH, int imgW, int imgH, int& x, int& y, int& w, 
             int k = h / imgH;
             if (k >= 1) { h = imgH * k; w = (int)std::lround(h * ratio); }
         }
+        // Fill a sliver (Joey 2026-11-16: "users would want full 16:9 no black bars"): bars under 3% of the screen
+        // on one side get filled, a stretch too small to see. Trim the game's border alone leaves ~1% (Paper Mario's
+        // VI border is wider than it is tall: 10 + 11 px of 1920 at 16:9). Not with integer scaling.
+        if (!o.integer) {
+            if (w < availW && availW - w <= availW * 3 / 100) w = availW;
+            if (h < winH && winH - h <= winH * 3 / 100) h = winH;
+        }
     }
     x = (availW - w) / 2; y = (winH - h) / 2;
     if (panel > 0) return;
