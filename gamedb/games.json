@@ -225,6 +225,9 @@
     },
     {
       "id": "NAL", "crc": "916B8B5B780B85A4", "title": "Super Smash Bros.",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NAL: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.5 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0978 f0978_b9000.png); Joey 2026-11-16 \"51, not menu-only\"; measured on Super Smash Bros. (Australia), and the menu-only Japanese one shares NAL"}
+      ],
       "issues": [
         {"status": "open", "what": "Project64 runs it at counter factor 2, we use CountPerOp 1: check for timing problems", "evidence": "README Project64 compare item"}
       ]
@@ -589,6 +592,300 @@
       "fixed": [
         {"devices": "Flip (Mali)", "what": "black at 0.2 fps after the boot fix, the log repeating Unaligned dword write 80096414; the cached interpreter the same", "fix": "added to kSyncRdpGames (2026-11-16, local)", "evidence": "og2-flip: sync 22-60 fps, title and intro drawn, 0 unaligned writes; async and interpreter 0.2 fps, 222 and 223"},
         {"devices": "all (new_dynarec)", "what": "the app quit about 3 s after start (RG477M; the Odin 3 Portal got through by timing): pass 1 ended a block on a JAL whose delay slot held a jump (code not loaded yet) or at the row before the last, so pass 2 found a branch at the end with no delay slot, and a compile the CPU waits on calls exit(1)", "fix": "core main 56741dd (a jump in a JAL delay slot stops the block like the J/JR case; the MAXBLOCK-2 stop only on a non-branch). The same fault printed in Banjo-Tooie, F-Zero X, Jet Force Gemini, Pokemon Snap and THPS2 at 1x (Pocket Block, Flip), surviving only because those compiles could bail; 0 there on the fix", "evidence": "RG477M 2026-11-16 05:45 (base and with the widescreen code, alive at 7/30/60 s, 58.5-60 fps); 21-game list 21/21 on the RG477M, Odin 3 and Duo; the five games 0 faults on the Pocket Block and Flip vs 12/3/11/1/1 and 13/3/11/1/1 on the old build"}
+      ]
+    },
+    {
+      "id": "NHA", "crc": "DF6FF0F429D14238", "title": "Bomberman 64 (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NHA: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0112 f0112_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NBL", "crc": "D7C762B6F83D9642", "title": "Buck Bumble (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NBL: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0122 f0122_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NP2", "crc": "3A180FF45C8E8AF7", "title": "Chou Kuukan Nighter Pro Yakyuu King 2 (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NP2: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0164 f0164_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NDF", "crc": "7188F44584410A68", "title": "Dance Dance Revolution - Disney Dancing Museum (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NDF: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 4.7 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0194 f0194_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NDE", "crc": "DEE584A20F161187", "title": "Destruction Derby 64 (USA)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NDE: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 4.5 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0205 f0205_b7200.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NKA", "crc": "52F788058B8FCAB7", "title": "Fighters Destiny (USA)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NKA: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0310 f0310_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NSI", "crc": "F774EAEEF0D8B13E", "title": "Fushigi no Dungeon - Fuurai no Shiren 2 - Oni Shuurai! Shiren Jou! (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NSI: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 7.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0331 f0331_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NHT", "crc": "33BB990084E15BF5", "title": "Hydro Thunder (USA) (LodgeNet)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NHT: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 7.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0401 f0401_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NPE", "crc": "B00E382929F232D1", "title": "Jikkyou Powerful Pro Yakyuu - Basic Ban 2001 (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NPE: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0444 f0444_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NPA", "crc": "4264DF23BE28BDF7", "title": "Jikkyou Powerful Pro Yakyuu 2000 (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NPA: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0446 f0446_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "", "crc": "C56BC5F8EB4ED65D", "title": "Jikkyou Powerful Pro Yakyuu 4 (Japan) (Beta) (1996-11-30)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (no game code in its header: this dump, MD5 ada39573b25804610d8fafaff741b088)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0448 f0448_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NJ5", "crc": "1C8CDF74F761051F", "title": "Jikkyou Powerful Pro Yakyuu 5 (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NJ5: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0451 f0451_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NP6", "crc": "3C084040081B060C", "title": "Jikkyou Powerful Pro Yakyuu 6 (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NP6: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0454 f0454_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "", "crc": "D53A590AEBA50C44", "title": "Lunar Assault 64 (World) (v1.0) (N64brew Game Jam 2020) (NTSC) (Aftermarket) (Unl)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (no game code in its header: this dump, MD5 d0da4da6aeaca000e26b86ff7b0f20cd)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0520 f0520_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NME", "crc": "6B70075029D621FE", "title": "Mace - The Dark Age (USA)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NME: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 7.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0532 f0532_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NB2", "crc": "8D1780B657B3B976", "title": "NBA Pro 99 (Europe)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NB2: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.6 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0654 f0654_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NSO", "crc": "3FFE80F4A7C15F7E", "title": "NBA Showtime - NBA on NBC (USA)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NSO: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 7.5 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0655 f0655_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NB2", "crc": "AAE11F012625A045", "title": "NBA in the Zone 2 (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NB2: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.1 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0659 f0659_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NQ8", "crc": "4B629EF499B21D9B", "title": "NFL Quarterback Club 98 (Europe)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NQ8: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.5 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0670 f0670_b7200.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NPW", "crc": "09CC4801E42EE491", "title": "Pilotwings 64 (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NPW: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.5 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0739 f0739_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NR2", "crc": "EDD6E03168136013", "title": "Rush 2 - Extreme Racing USA (USA)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NR2: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 7.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0860 f0860_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NSF", "crc": "AC9F7DA7A8C029D8", "title": "San Francisco Rush - Extreme Racing (USA) (En,Fr,De) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NSF: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 7.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0868 f0868_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NGU", "crc": "B6BC0FB0E3812198", "title": "Tsumi to Batsu - Hoshi no Keishousha (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NGU: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 6.7 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1065 f1065_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NVC", "crc": "7468EACEED32A09F", "title": "Virtual Chess 64 (USA) (En,Fr,Es) (LodgeNet)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NVC: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 5.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1116 f1116_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NW8", "crc": "5A9D385997AAE710", "title": "Wayne Gretzky's 3D Hockey '98 (USA)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NW8: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 7.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1163 f1163_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NWT", "crc": "CEA8B54F7F21D503", "title": "Wetrix (Europe) (En,Fr,De,Es,It,Nl)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NWT: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 4.0 lines, and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1168 f1168_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "N4W", "crc": "5EF4464244D05A25", "title": "40 Winks (USA) (Aftermarket) (Unl)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code N4W: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 9.5 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0012 f0012_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NER", "crc": "1B598BF1ECA29B45", "title": "AeroFighters Assault (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NER: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 10.5 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0026 f0026_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NAY", "crc": "D0E29F11E029063F", "title": "Aidyn Chronicles - The First Mage (Europe) (Beta) (2001-03-02)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NAY: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 8.7 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0031 f0031_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NAB", "crc": "6C45B60CDCE50E30", "title": "Air Boarder 64 (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NAB: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 10.0 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0039 f0039_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NCT", "crc": "A4F2F521F0EB168E", "title": "Chameleon Twist (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NCT: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 11.0 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0150 f0150_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "N2V", "crc": "07A69D019A7D41A1", "title": "Chameleon Twist 2 (Europe)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code N2V: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 11.5 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0153 f0153_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NGP", "crc": "B2C6D27F2DA48CFD", "title": "Goemon - Mononoke Sugoroku (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NGP: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 10.0 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0362 f0362_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NTM", "crc": "BFA526B40691E430", "title": "Mischief Makers (USA) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NTM: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 8.5 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0605 f0605_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NNL", "crc": "5F25B0EE6227C1DB", "title": "NBA Live 2000 (USA) (En,Fr,De,Es)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NNL: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 10.5 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0650 f0650_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NQB", "crc": "E3AB4ED083040DD2", "title": "NFL Quarterback Club 2000 (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NQB: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 10.0 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0669 f0669_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NSU", "crc": "0C5EE085A167DD3E", "title": "Rocket - Robot on Wheels (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NSU: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 10.7 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0849 f0849_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "", "crc": "9A746EBF2802EA99", "title": "Toon Panic (Japan) (Proto)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (no game code in its header: this dump, MD5 b6fd2a048d1f4f324cebc97ba09872bb)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 10.0 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1038 f1038_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NL2", "crc": "CFEF2CD6C9E973E6", "title": "Top Gear Rally 2 (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NL2: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 8.5 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1053 f1053_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NWD", "crc": "C52E0BC656BC6556", "title": "WinBack (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NWD: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 8.0 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1179 f1179_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NWD", "crc": "ED98957E8242DCAC", "title": "WinBack - Covert Operations (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NWD: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 8.0 lines, and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1181 f1181_base.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NBS", "crc": "D9EDD54D6BB8E274", "title": "All-Star Baseball 99 (Europe)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NBS: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 13.0 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0049 f0049_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NDN", "crc": "A273AB56DA33DB9A", "title": "Duke Nukem 64 (USA)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NDN: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 14.0 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0253 f0253_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NPG", "crc": "D3F10E5D052EA579", "title": "Hey You, Pikachu! (USA)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NPG: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 13.0 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0384 f0384_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NJA", "crc": "B6D0CAA0E3F493C8", "title": "NBA Jam 2000 (Europe)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NJA: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 12.0 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0644 f0644_b60.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NB9", "crc": "E600831E59F422A8", "title": "NBA Jam 99 (Europe)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NB9: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 14.5 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0646 f0646_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "", "crc": "AB02E82BBA412FC7", "title": "Pikachuu Genki de Chuu (Japan) (Beta)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (no game code in its header: this dump, MD5 e0901d23a7e24e938fa62975856bd7f0)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 13.0 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0736 f0736_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NCY", "crc": "C00CA9488E60D34B", "title": "South Park - Chef's Luv Shack (Europe)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NCY: every region, revision and hack)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 13.0 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f0911 f0911_b120.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "", "crc": "75FBDE20A3189B31", "title": "Top Gear Hyper-Bike (USA) (Beta)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (no game code in its header: this dump, MD5 b60d26c2c2242bff61f76469fc272d2a)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 14.5 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1041 f1041_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
       ]
     }
   ]

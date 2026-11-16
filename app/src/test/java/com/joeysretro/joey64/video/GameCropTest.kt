@@ -16,6 +16,27 @@ class GameCropTest {
         assertEquals("Normal (this game's default)", GameCrop.label("NDOE", unset))
     }
 
+    @Test fun theCropSheetsSizes() {
+        assertEquals(4, GameCrop.of("NPWJ", unset)) // Pilotwings 64 (Japan): Thin, every region
+        assertEquals(4, GameCrop.of("NPWE", unset))
+        assertEquals(8, GameCrop.of("NTME", unset)) // Mischief Makers: Normal
+        assertEquals(12, GameCrop.of("NDNE", unset)) // Duke Nukem 64: Wide
+        assertEquals(4, GameCrop.of("NB2P", unset)) // NBA Pro 99 and NBA in the Zone 2 share NB2 and its size
+        assertEquals(4, GameCrop.of("NB2J", unset))
+        assertNull("Dual Heroes: no size fits", GameCrop.lines("NDHJ", unset))
+    }
+
+    @Test fun gamesWithNoCodeGoByMd5() {
+        val toonPanic = "b6fd2a048d1f4f324cebc97ba09872bb"
+        assertEquals("md5:$toonPanic", GameCrop.keyOf(null, toonPanic.uppercase()))
+        assertEquals(8, GameCrop.of(GameCrop.keyOf(null, toonPanic), unset))
+        assertEquals(12, GameCrop.of(GameCrop.keyOf(null, "e0901d23a7e24e938fa62975856bd7f0"), unset))
+        assertEquals("NDOE", GameCrop.keyOf("NDOE", "00000000000000000000000000000000"))
+        assertNull(GameCrop.keyOf(null, null))
+        assertNull(GameCrop.lines("md5:00000000000000000000000000000000", unset))
+        assertEquals("Normal (this game's default)", GameCrop.label("md5:$toonPanic", unset))
+    }
+
     @Test fun otherGamesKeepCropOff() {
         assertNull(GameCrop.lines("NSME", unset))
         assertEquals(0, GameCrop.of("NSME", unset))

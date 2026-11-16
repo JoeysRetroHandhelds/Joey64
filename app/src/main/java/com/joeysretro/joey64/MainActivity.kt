@@ -1105,7 +1105,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     /** The widescreen and 60 fps codes this game started with (Settings › Video), from [prepareGame]. */
     private var extrasOn = com.joeysretro.joey64.video.ExtrasOn.NONE
-    /** This play's header game code ("CZLE"), read at start; null before or for a disk alone. */
+    /** This play's [com.joeysretro.joey64.video.GameCrop] key: the header game code ("CZLE"), or "md5:..." for a listed game with none; null before or for a disk alone. */
     private var gameCode: String? = null
 
     /**
@@ -1844,8 +1844,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         savesOpts = p.savesOpts
         // Settings › Emulation: Overclock, CPU core, Expansion Pak (never Off for a game that needs it). --es opts wins.
         val code = romGameCode(if (RomFiles.isDiskName(rom)) ddCart ?: "" else rom)
-        gameCode = code
-        com.joeysretro.joey64.video.GameCrop.lines(code, video)?.let { JLog.i(TAG, "crop edges: this game's default, $it lines"); applyVideoDisplay() }
+        gameCode = com.joeysretro.joey64.video.GameCrop.keyOf(code, gameMd5) // header code, or the MD5 key of a game with none
+        com.joeysretro.joey64.video.GameCrop.lines(gameCode, video)?.let { JLog.i(TAG, "crop edges: this game's default, $it lines"); applyVideoDisplay() }
         val eApply = com.joeysretro.joey64.emulation.EmuApply.of(emuAtStart, com.joeysretro.joey64.emulation.ExpansionPak.needed(code))
         val devOpts = devString("opts").orEmpty()
         for ((k, v) in eApply.coreOptions) if (!devOpts.contains("$k=")) NativeBridge.setOption(k, v)
