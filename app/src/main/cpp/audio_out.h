@@ -26,6 +26,8 @@ public:
     // underruns at full speed, as before), 1 Low (10 ms, never grows), 2 Safe (60 ms, grows to 150).
     void setLatencyMode(int mode) { latencyMode_ = mode; }
     void setPaused(bool p);
+    // Milliseconds of sound queued in the ring now (the resume log line).
+    double fillMs() const { return dstRate_ ? fill() / 2 * 1000.0 / dstRate_ : 0; }
     // Audio sync, called before each emulated frame: blocks until the ring holds at most the target
     // plus one frame, so the wait lands before the frame polls input rather than in the middle of it.
     // Also reopens the stream when the output device went away (see onError).
@@ -79,6 +81,15 @@ private:
     // The game has put sound in the ring since open(). Before that the stream plays silence that isn't an
     // underrun (Paper Mario on the Portal 2026-11-14: 80-210 counted in every start's first 5 s).
     std::atomic<bool> fed_{false};
+    // Resume (queue item "Resume wait"): the ring still holds the sound queued before the pause, and the stream
+    // starts some ms after requestStart, so the first frame's audio wait slept until it had played (Odin 2 Portal
+    // OoT: ~74 ms, the first picture ~190 ms after the last). setPaused(false) sets resumeDrop_; while it's set
+    // waitForRoom doesn't wait (the speed cap paces), and the callback's first run drops the oldest samples down
+    // to keep_ (the target, kept by the game thread) and clears it. N64_RESUME_DROP=0: the old wait.
+    std::atomic<bool> resumeDrop_{false};
+    std::atomic<size_t> keep_{0};
+    bool resumeDropOn_ = true;
+    int resumeFrames_ = 0;   // frames waitForRoom let through since the resume
     std::atomic<long long> srcFrames_{0}, outFrames_{0}; // takeRates
     double fillSum_ = 0; int fillCount_ = 0;
     double baseStep_ = 1.0;  // nominal source frames per output frame

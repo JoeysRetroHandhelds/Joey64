@@ -85,6 +85,9 @@ bool AudioOut::openStream() {
     const int startMs = mode == 1 ? 10 : mode == 2 ? 60 : kTargetMs;
     grow_ = mode != 1;
     target_ = (size_t)dstRate * startMs / 1000 * 2;
+    keep_.store(target_, std::memory_order_relaxed);
+    { const char* rd = getenv("N64_RESUME_DROP"); resumeDropOn_ = !(rd && *rd == '0'); }
+    resumeDrop_.store(false, std::memory_order_relaxed);
     pos_ = 0.0; prev_[0] = prev_[1] = 0;
     cap_ = (size_t)dstRate * 2 * 2 / 5; // ~400 ms stereo: room for a game's 100 ms lump on top of the wait's ceiling
     ring_.assign(cap_, 0);
@@ -118,6 +121,7 @@ void AudioOut::setPaused(bool p) {
     std::lock_guard<std::mutex> lk(streamMutex_);
     paused_ = p;
     if (!stream_) return;
+    if (!p && resumeDropOn_) resumeDrop_.store(true, std::memory_order_release);
     p ? AAudioStream_requestPause(stream_) : AAudioStream_requestStart(stream_);
 }
 
@@ -133,6 +137,14 @@ void AudioOut::setPanelRefreshNs(uint64_t ns) {
 void AudioOut::waitForRoom() {
     reopenIfLost();
     if (!stream_) return;
+    if (resumeDrop_.load(std::memory_order_acquire)) {
+        // Resumed, and the callback hasn't run yet: no wait (see resumeDrop_). Half a second without a callback
+        // (a stream that didn't start): back to the normal wait.
+        lastW_ = w_.load(std::memory_order_relaxed);
+        if (++resumeFrames_ < 30) return;
+        resumeDrop_.store(false, std::memory_order_relaxed);
+    }
+    resumeFrames_ = 0;
     // Waits only above target + one frame of audio: where vsync paces the frames (fill near the
     // target via rate control), audio then never delays a frame past its vsync.
     const size_t frameAudio = (size_t)dstRate_ / 60 * 2;
@@ -217,6 +229,7 @@ void AudioOut::takeStats(bool keepingUp, double& fillMs, double& targetMs, int& 
     size_t step = (size_t)dstRate_ / 100 * 2; // 10 ms
     if (grow_ && underruns && keepingUp && frames_ > 600 && ms((double)(target_ + step)) <= kMaxTargetMs)
         target_ += step;
+    keep_.store(target_, std::memory_order_relaxed);
     targetMs = ms((double)target_);
 }
 
@@ -303,6 +316,14 @@ aaudio_data_callback_result_t AudioOut::cb(AAudioStream*, void* user, void* data
     auto* out = static_cast<float*>(data);
     size_t samples = (size_t)frames * 2;
     self->outFrames_.fetch_add(frames, std::memory_order_relaxed);
+    if (self->resumeDrop_.load(std::memory_order_acquire)) {
+        // First run after a resume: drop the oldest samples down to the target (this thread owns r_), in whole
+        // stereo frames.
+        size_t r = self->r_.load(std::memory_order_relaxed), w = self->w_.load(std::memory_order_acquire);
+        size_t f = (w + self->cap_ - r) % self->cap_, keep = self->keep_.load(std::memory_order_relaxed);
+        if (f > keep) self->r_.store((r + ((f - keep) & ~(size_t)1)) % self->cap_, std::memory_order_release);
+        self->resumeDrop_.store(false, std::memory_order_release);
+    }
     for (size_t i = 0; i < samples; ++i) {
         size_t r = self->r_.load(std::memory_order_relaxed);
         if (r == self->w_.load(std::memory_order_acquire)) { // underrun → silence

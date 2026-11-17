@@ -1629,6 +1629,7 @@ void runLoop() {
     if (probeAt >= 0 && stateWait < 0) probeFrame = 0;
     const int probeLen = getenv("N64_LAG_PROBE_LEN") ? atoi(getenv("N64_LAG_PROBE_LEN")) : 0;
     auto ffNext = std::chrono::steady_clock::now(), ffLastShown = ffNext, ffFrameAt = ffNext, capNext = ffNext, rewindNext = ffNext;
+    bool logResume = false; // set at a resume, logged by the first frame's pacing
     // Fast-forward's shown frames (2026-11-10, "fast forward stutters and looks choppy"): emulated frames since the
     // last one shown, and per 5 s how many were shown, how many frames each moved on, and how evenly they were spaced.
     int ffSinceShown = 0, ffShown = 0, ffPerMin = 99, ffPerMax = 0;
@@ -1694,7 +1695,7 @@ void runLoop() {
             }
         }
         if (!g_running) break;
-        if (wasPaused && !g_paused) hitch::resumed();
+        if (wasPaused && !g_paused) { hitch::resumed(); logResume = true; }
         serveStateRequest(g_framesRun >= (uint32_t)stateReadyFrames(), false);
         if (g_portsChanged.exchange(false)) applyPorts(); // a controller given to a player mid-game
         if (g_cheatsChanged.exchange(false)) applyCheats(); // the Cheats page, from the pause menu
@@ -1884,6 +1885,11 @@ void runLoop() {
             capNext += std::chrono::microseconds((long long)(1e6 / (g_av.timing.fps * (slow ? slowPct / 100.0 : capSpeed))));
             if (capNext > now) { hitch::Span span(hitch::PACE); std::this_thread::sleep_until(capNext); }
             else if (now - capNext > std::chrono::milliseconds(50)) capNext = now; // behind: don't sprint
+            if (logResume) { // the queue item "Resume wait": what the first frame after a pause waited on
+                logResume = false;
+                LOGI("resume: first frame waited %.1f ms for audio, %.1f ms for the speed cap, %.1f ms of sound queued",
+                     aw, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - now).count(), g_audio.fillMs());
+            }
         }
         // One retro_run, shown or not; the frame's time (acquire + run + present), or < 0 when the swapchain was rebuilt.
         auto runOne = [&](bool showIt) -> double {
