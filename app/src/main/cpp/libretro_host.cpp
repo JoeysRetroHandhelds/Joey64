@@ -1563,7 +1563,7 @@ void runLoop() {
     const char* turboEnv = getenv("N64_GPU_TURBO");
     GpuClockPin clockPin;
     if (turboEnv && *turboEnv == '2') LOGI("GPU clock pin %s", clockPin.start() ? "on" : "failed");
-    // DEV (N64_GPU_TURBO=3, Paper Mario 2026-11-14): the pin only while the game makes the CPU wait on the GPU (10+
+    // N64_GPU_TURBO=3 (Paper Mario 2026-11-14; the default on Adreno since 2026-11-17, GpuRules.settings): the pin only while the game makes the CPU wait on the GPU (10+
     // smart-sync waits a second), off after 5 quiet seconds. A wait is short GPU work then idle, so Standard mode's
     // governor keeps the GPU low (Portal: 401 MHz, 12.8 ms a frame; pinned 8.05 ms).
     const bool pinOnWaits = turboEnv && *turboEnv == '3';

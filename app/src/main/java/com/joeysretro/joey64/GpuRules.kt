@@ -330,6 +330,14 @@ object GpuRules {
         // cache) building the saved list first stalled ~0.6 s at start in every game on the Portal (portal-pbfirst),
         // on-demand compiling 63-170 ms; warm launches wait 0 ms either way. Mali keeps it.
         if (adreno) add(Setting("N64_RDP_PREBUILD", "0", false, "Adreno: no pipeline pre-build"))
+        // GPU clock held while the game makes the CPU wait on the GPU (host N64_GPU_TURBO=3: a KGSL power constraint
+        // at 10+ smart-sync waits a second, off after 5 quiet seconds; Joey 2026-11-17 "Yes, default"). The governor
+        // keeps the GPU low through wait-bound frames. Odin 2 Portal in Standard mode at 4x (o2p-turbo3b): Cruis'n USA
+        // 50.4-57.1 -> 58.8-59.6 fps, frames over 33 ms 502-1,518 -> 128-264, game 24 1,299 -> 0-1, game 38 264-497 ->
+        // 222-229; 2x unchanged (already full speed); none worse. Cost (o2p-heat-oot4x, OoT 4x, 10 min each): 3.78-3.89
+        // -> 3.92-3.98 W (+0.1-0.2 W), no GPU or battery temperature difference, 6,002-7,600 -> 0 frames over 33 ms.
+        // Odin 3 4x and Duo 2x: no change either way (their GPU already runs at full clock). KGSL only, so Adreno only.
+        if (adreno) add(Setting("N64_GPU_TURBO", "3", false, "Adreno: GPU clock held while the game waits on it"))
     }
 
     /**
