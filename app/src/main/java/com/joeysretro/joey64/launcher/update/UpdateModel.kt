@@ -59,6 +59,8 @@ class UpdateModel(app: Application) : AndroidViewModel(app) {
 
     /** The automatic check: on start and every 15 minutes in the library; a skipped version isn't offered. */
     fun autoCheck() {
+        // The Google Play build never looks at GitHub: Play updates it.
+        if (com.joeysretro.joey64.BuildConfig.PLAY) return
         if (_prompt.value != null || checking?.isActive == true || !AppUpdates.checkDue(context)) return
         checking = viewModelScope.launch {
             val r = AppUpdates.check(context)
@@ -76,6 +78,7 @@ class UpdateModel(app: Application) : AndroidViewModel(app) {
 
     /** Check for updates in Settings › About: always asks, and offers even a skipped version. */
     fun checkNow() {
+        if (com.joeysretro.joey64.BuildConfig.PLAY) return
         if (checking?.isActive == true && _row.value == RowState.Checking) return
         checking?.cancel()
         _row.value = RowState.Checking
@@ -163,6 +166,7 @@ class UpdateModel(app: Application) : AndroidViewModel(app) {
 
     /** Seven taps on the version. */
     fun toggleTesting() {
+        if (com.joeysretro.joey64.BuildConfig.PLAY) return
         val on = !_testing.value
         AppUpdates.setTesting(context, on)
         _testing.value = on

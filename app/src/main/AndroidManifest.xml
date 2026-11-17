@@ -28,9 +28,12 @@
         android:banner="@drawable/tv_banner"
         android:extractNativeLibs="true"
         android:appCategory="game"
+        android:enableOnBackInvokedCallback="false"
         android:allowBackup="false"
         android:networkSecurityConfig="@xml/network"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <!-- enableOnBackInvokedCallback false (2026-11-16, target 36): targeting Android 16 turns predictive back on, which
+             stops onBackPressed and KEYCODE_BACK reaching the app; Joey64's Back (the pause menu, every page) runs on them. -->
         <!-- No Android backup (Joey 2026-11-08): its scheduled full backup force-stops the app, and on the Thor
              it killed a game mid-play (2026-11-07 23:17, signal 9). Joey64's own Back up Joey64 (Settings ›
              Saves) and a picked data folder are how saves are kept. -->

@@ -23,6 +23,7 @@ cd "$SRC"
 # build scripts' own crates (target rustflags don't), which needs the unstable host-config.
 RUSTC_BOOTSTRAP=1 cargo build -Zhost-config -Ztarget-applies-to-host --config 'target-applies-to-host=false' \
   --config 'host.rustflags=["--cfg","getrandom_backend=\"windows_legacy\""]' \
+  --config 'target.aarch64-linux-android.rustflags=["-C","link-arg=-Wl,-z,max-page-size=16384"]' \
   --release --locked -p librashader-capi --target aarch64-linux-android \
   --no-default-features --features runtime-vulkan,runtime-opengl
 OUT="$HERE/app/src/main/jniLibs/arm64-v8a"
