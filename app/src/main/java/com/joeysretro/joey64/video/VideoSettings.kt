@@ -240,6 +240,9 @@ data class VideoApply(
                 opts["mupen64plus-parallel-rdp-downscaling"] = v[VideoKey.Supersample].takeIf { it in setOf("1/2", "1/4", "1/8") } ?: "disable"
                 opts["mupen64plus-parallel-rdp-native-texture-lod"] = tf(VideoKey.NativeTexLod)
                 opts["mupen64plus-parallel-rdp-native-tex-rect"] = tf(VideoKey.NativeTexRect)
+                // Upscaled, skip the extra 1x pass: game memory gets the upscaled picture averaged down
+                // (deep dive idea 1: +17-21% uncapped at 2x, +8.6% at 4x). No effect at 1x.
+                opts["mupen64plus-parallel-rdp-super-sampled-read-back"] = "True"
             } else {
                 opts["mupen64plus-EnableNativeResFactor"] = v.int(VideoKey.Resolution).toString()
             }
