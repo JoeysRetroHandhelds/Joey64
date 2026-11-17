@@ -225,6 +225,8 @@ std::string g_ddCart; // a 64DD disk's cartridge (NativeBridge.setDdCart), "" = 
 static void (*g_viTrim)(int*) = nullptr;
 // The core's smart-sync CPU waits on the GPU so far (joey64_rdp_waits; null on an older core).
 static unsigned (*g_rdpWaits)() = nullptr;
+// Nanoseconds the core has waited for the GPU so far (joey64_rdp_wait_ns; null on an older core), for the stats line.
+static uint64_t (*g_rdpWaitNs)() = nullptr;
 static void readViTrim() {
     static const bool off = getenv("N64_VI_TRIM") && *getenv("N64_VI_TRIM") == '0';
     int t[4] = {0, 0, 0, 0};
@@ -550,6 +552,8 @@ void applyPorts() {
 unsigned g_lastW = 0, g_lastH = 0;
 int g_statRuns = 0, g_statPresents = 0, g_statDupes = 0; // emulation thread only
 double g_statRunMs = 0, g_statWaitMs = 0;                 // time in retro_run / beginFrame
+// run split (report idea 2, 2026-11-16): retro_run (emulation), endFrame (present), and the core's GPU waits inside it
+double g_statEmuMs = 0, g_statPresentMs = 0;
 double g_statAudioWaitMs = 0;                             // audio sync before each frame
 // Hitches: the slowest frame (beginFrame + retro_run + endFrame; no speed cap, audio wait or pause) and the
 // frames over 33 ms, which skip a frame even at normal speed: what averages hide, such as a shader compile.
@@ -1095,11 +1099,21 @@ void logStats() {
         g_sessGovernorDrops = Thermal::governorDrops();
     }
     double audioIn, audioOut; g_audio.takeRates(secs, audioIn, audioOut);
-    LOGI("stats: %.1f emu fps, %.1f presented, %.1f dupes (%ux%u), run %.2f ms, wait %.2f ms, "
+    char split[96] = "";
+    {
+        static uint64_t gpuNsBefore = 0;
+        if (g_vulkan && g_statRuns > 0) {
+            double gpuMs = -1;
+            if (g_rdpWaitNs) { const uint64_t n = g_rdpWaitNs(); gpuMs = (n - gpuNsBefore) / 1e6 / g_statRuns; gpuNsBefore = n; }
+            if (gpuMs >= 0) snprintf(split, sizeof split, " (emulation %.2f of it GPU %.2f, present %.2f)", g_statEmuMs / g_statRuns, gpuMs, g_statPresentMs / g_statRuns);
+            else snprintf(split, sizeof split, " (emulation %.2f, present %.2f)", g_statEmuMs / g_statRuns, g_statPresentMs / g_statRuns);
+        }
+    }
+    LOGI("stats: %.1f emu fps, %.1f presented, %.1f dupes (%ux%u), run %.2f ms%s, wait %.2f ms, "
          "audio wait %.2f ms, fill %.0f/%.0f ms, %d underruns, device %.0f ms%s, slowest frame %.1f ms, %d over 33 ms%s%s, "
          "audio in %.0f Hz, out %.0f Hz",
          g_statRuns / secs, g_statPresents / secs, g_statDupes / secs, g_lastW, g_lastH,
-         g_statRunMs / g_statRuns, g_statWaitMs / g_statRuns, g_statAudioWaitMs / g_statRuns, fillMs,
+         g_statRunMs / g_statRuns, split, g_statWaitMs / g_statRuns, g_statAudioWaitMs / g_statRuns, fillMs,
          targetMs, underruns, g_audio.outputLatencyMs(), lat, g_statSlowestMs, g_statSlowFrames,
          gpuClockText().c_str(), Thermal::text().c_str(), audioIn, audioOut);
     if (g_statSlowFrames > 0) {
@@ -1117,6 +1131,7 @@ void logStats() {
     }
     g_statRuns = g_statPresents = g_statDupes = 0;
     g_statRunMs = g_statWaitMs = g_statAudioWaitMs = g_statSlowestMs = 0;
+    g_statEmuMs = g_statPresentMs = 0;
     g_statSlowFrames = 0;
     start = clock::now();
 }
@@ -1887,6 +1902,11 @@ void runLoop() {
                     ffLastShown = ffFrameAt; ffSinceShown = 0;
                 }
                 g_vk.endFrame();
+                {
+                    auto t4 = std::chrono::steady_clock::now();
+                    g_statEmuMs += std::chrono::duration<double, std::milli>(t3 - t1).count();
+                    g_statPresentMs += std::chrono::duration<double, std::milli>(t4 - t3).count();
+                }
                 g_statWaitMs += std::chrono::duration<double, std::milli>(t1 - t0).count();
                 auto t2 = std::chrono::steady_clock::now();
                 g_statRunMs += std::chrono::duration<double, std::milli>(t2 - t1).count();
@@ -2217,6 +2237,7 @@ JNIEXPORT jboolean JNICALL JNI(loadCore)(JNIEnv* env, jobject, jstring path, jst
     core.load_game_special = reinterpret_cast<decltype(core.load_game_special)>(dlsym(core.handle, "retro_load_game_special"));
     g_viTrim = reinterpret_cast<void (*)(int*)>(dlsym(core.handle, "joey64_vi_trim"));
     g_rdpWaits = reinterpret_cast<unsigned (*)()>(dlsym(core.handle, "joey64_rdp_waits"));
+    g_rdpWaitNs = reinterpret_cast<uint64_t (*)()>(dlsym(core.handle, "joey64_rdp_wait_ns"));
     { std::atomic<int>* v = Display::viTrim(); for (int i = 0; i < 4; ++i) v[i] = 0; }
 
     core.set_environment(environment);
