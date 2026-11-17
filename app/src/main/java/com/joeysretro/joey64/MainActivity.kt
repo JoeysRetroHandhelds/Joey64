@@ -2125,6 +2125,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             if (android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null)
                 fpsHandler.postDelayed(netWatch, NET_POLL_MS)
             getSystemService(android.hardware.input.InputManager::class.java)?.registerInputDeviceListener(padListener, fpsHandler)
+            fpsHandler.post { connectAtStart() }
             reportGameState(loading = false)
         } else {
             cancelTrial()
@@ -2521,6 +2522,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (hotkeyPaused) { sessionMark(); hotkeyPaused = false; overlay?.hide("paused", waiting = true) }
         if (resumed && !quitting) NativeBridge.pause(false)
         touch?.setActive(touchActive())
+        // The next controller card waiting (approved newpad3 mockup): never over another card, so after this one.
+        if (missingAtStart.isNotEmpty() || newPadQueue.isNotEmpty()) fpsHandler.post { showNextCard() }
     }
 
     /** The picker's cells: each slot's date and its picture, shrunk for a 100 x 75 dp cell. */
@@ -2635,6 +2638,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             closeMenu()
         }
         override fun disconnectChoice(choice: com.joeysretro.joey64.launcher.ingame.DisconnectChoice) = disconnected(choice)
+        override fun newPadPick(player: Int) = newPadAnswer(player)
+        override fun newPadSettings(settings: com.joeysretro.joey64.controls.ConnectSettings) = controlsStore.saveConnecting(settings)
         override fun closeNoSpace() { closeMenu() }
         override val inRoom: Boolean get() = net.inRoom
         override val netLine: String? get() = if (!net.inRoom) null
@@ -3546,13 +3551,16 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         playerOfDevice[id]?.let { return it }
         // Keyboards and adb's virtual keys play as player 1 (a key nobody binds still goes on to Android).
         if (dev == null || !PadDevices.isPad(dev)) return 0
+        // Not now on the new controller card for one seen before: unused until it connects again.
+        if (dev.descriptor in notNowThisPlay) { playerOfDevice[id] = -1; return -1 }
         var p = controls.players.indexOfFirst { it.device is DeviceChoice.Pad && PadDevices.matches(it.device, dev) }
         val builtIn = PadDevices.isBuiltIn(dev)
         // This device's own controls play only as the player set to Built-in controls: with none, they play as no one.
         if (p < 0 && builtIn) p = controls.players.indexOfFirst { it.device == DeviceChoice.BuiltIn }
         else if (p < 0) p = claimFreePlayer(dev)
         playerOfDevice[id] = p
-        if (!builtIn) { padNames[id] = dev.name; controlsStore.markPadSeen(dev.descriptor) }
+        // One waiting for the new controller card is marked seen by its answer.
+        if (!builtIn) { padNames[id] = dev.name; if (!newPadPending(id)) controlsStore.markPadSeen(dev.descriptor) }
         val ids = "%04x:%04x".format(dev.vendorId, dev.productId)
         if (p >= 0) JLog.i(TAG, "controls: ${dev.name} ($ids) is player ${p + 1}")
         else JLog.i(TAG, "controls: ${dev.name} ($ids) is no player's" + if (builtIn) " (no player has Built-in controls)" else "")
@@ -3569,6 +3577,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (builtInPlayer >= 0 && PadDevices.builtIn() == null &&
             playerOfDevice.values.none { it == builtInPlayer }) return builtInPlayer
         if (controlsStore.padSeen(dev.descriptor)) return -1
+        // Ask once / Ask every time (approved newpad3 mockup 2026-11-17): the card asks which player it is.
+        if (gameLoaded && overlay != null && controlsStore.connecting().ask != com.joeysretro.joey64.controls.AskWhen.Never) {
+            offerNewPad(dev.id, event = false); fpsHandler.post { showNextCard() }
+            return -1
+        }
         val free = controls.players.indexOfFirst { it.device == DeviceChoice.None }
         if (free < 0) return -1
         val choice = PadDevices.choiceFor(dev)
@@ -3635,12 +3648,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private val unplugged = HashSet<Int>()
 
     private val padListener = object : android.hardware.input.InputManager.InputDeviceListener {
-        override fun onInputDeviceAdded(id: Int) { padBack(id) }
+        override fun onInputDeviceAdded(id: Int) { padConnected(id) }
         override fun onInputDeviceRemoved(id: Int) { padGone(id) }
         override fun onInputDeviceChanged(id: Int) {}
     }
 
     private fun padGone(id: Int) {
+        newPadQueue.removeAll { it.first == id }
+        if (newPadShown?.first == id) {
+            JLog.i(TAG, "controls: ${newPadShown?.second?.pad?.name} went while its card was up")
+            newPadShown = null
+            if (overlay?.screen is com.joeysretro.joey64.launcher.ingame.PauseScreen.NewPad) closeMenu()
+        }
         val p = playerOfDevice.remove(id) ?: return
         val name = padNames.remove(id) ?: return
         if (p < 0 || playerOfDevice.values.any { it == p }) { JLog.i(TAG, "controls: $name went, player ${p + 1} still has a controller"); return }
@@ -3665,14 +3684,113 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         return if (b >= 0 && PadDevices.builtIn() == null && (b == waitingPlayer || b in onBuiltIn || b in leftOut)) b else -1
     }
 
-    private fun padBack(id: Int) {
-        val dev = InputDevice.getDevice(id) ?: return
-        if (!PadDevices.isPad(dev) || PadDevices.isBuiltIn(dev)) return
+    /** True when [id] is a player's own controller coming back (Controller disconnected, or one they're without for now). */
+    private fun padBack(id: Int): Boolean {
+        val dev = InputDevice.getDevice(id) ?: return false
+        if (!PadDevices.isPad(dev) || PadDevices.isBuiltIn(dev)) return false
         val p = ownerOf(dev)
-        if (p < 0 || (p != waitingPlayer && p !in onBuiltIn && p !in leftOut)) return
+        if (p < 0 || (p != waitingPlayer && p !in onBuiltIn && p !in leftOut)) return false
         JLog.i(TAG, "controls: ${dev.name} is back, player ${p + 1} plays on it again")
         playerOfDevice[id] = p; padNames[id] = dev.name
         playerBack(p, id)
+        return true
+    }
+
+    // ---- New controller (approved newpad3 mockup 2026-11-17, joey64-notes docs/img/newpad3.png, "Approve as drawn") ----
+    // A controller that connects during a game: the new controller card over the paused game (screen 4), as Controls ›
+    // Connecting says; one seen before with Ask once or Don't ask gets the pop-up (screen 7). A player's controller that
+    // isn't there when the game starts: Controller disconnected's card, "<name> isn't connected" (screen 8).
+    /** Controllers waiting for the card, with whether each connected during the game. */
+    private val newPadQueue = ArrayList<Pair<Int, Boolean>>()
+    /** The card up now: its device id and card. */
+    private var newPadShown: Pair<Int, com.joeysretro.joey64.controls.NewPadCard>? = null
+    /** Descriptors left unused this time (Not now on a controller seen before), until they connect again. */
+    private val notNowThisPlay = HashSet<String>()
+    /** Players whose controller wasn't connected at the start, still to ask about. */
+    private val missingAtStart = ArrayList<Int>()
+
+    private fun newPadPending(id: Int) = newPadShown?.first == id || newPadQueue.any { it.first == id }
+
+    private fun offerNewPad(id: Int, event: Boolean) {
+        if (!newPadPending(id)) newPadQueue += id to event
+    }
+
+    private fun padConnected(id: Int) {
+        if (padBack(id)) return
+        if (!gameLoaded || quitting || destroyed || overlay == null) return
+        val d = InputDevice.getDevice(id) ?: return
+        if (!PadDevices.isPad(d) || PadDevices.isBuiltIn(d)) return
+        notNowThisPlay.remove(d.descriptor)
+        if (com.joeysretro.joey64.controls.NewPads.cardFor(controlsStore, d, event = true) != null) {
+            offerNewPad(id, event = true); showNextCard(); return
+        }
+        playerOfDevice.remove(id)
+        val p = playerFor(d, id)
+        if (newPadPending(id)) return
+        pop("pad", InGamePopup.Kind.PadConnected, "Controller connected", d.name ?: "Controller",
+            if (p >= 0) "Player ${p + 1}" else "Not playing · set it in Controls")
+    }
+
+    /** The game is up: players whose controller isn't connected, and new controllers already connected. Not for dev starts. */
+    private fun connectAtStart() {
+        if (!gameLoaded || quitting || destroyed || overlay == null) return
+        val dev = listOf("env", "opts", "renderer", "driver").any { intent?.hasExtra(it) == true }
+        val net = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null
+        if (dev || net) return
+        val pads = PadDevices.pads()
+        for (p in 0..3) {
+            val d = controls.players[p].device
+            if (d is DeviceChoice.Pad && pads.none { PadDevices.matches(d, it) }) missingAtStart += p
+        }
+        for (d in pads) if (!PadDevices.isBuiltIn(d) && playerOfDevice[d.id] == null) offerNewPad(d.id, event = false)
+        showNextCard()
+    }
+
+    /** The next card waiting (a missing controller first, then a new one), when no other card or menu is up. */
+    private fun showNextCard(): Boolean {
+        val o = overlay ?: return false
+        if (!gameLoaded || quitting || destroyed || newPadShown != null || waitingPlayer >= 0 || menuOpen || o.screen != null) return false
+        while (missingAtStart.isNotEmpty()) {
+            val p = missingAtStart.removeAt(0)
+            val d = controls.players[p].device as? DeviceChoice.Pad ?: continue
+            if (PadDevices.pads().any { PadDevices.matches(d, it) }) continue
+            JLog.i(TAG, "controls: ${d.name} (player ${p + 1}) isn't connected at the start, the game waits for it")
+            players[p].release(); push(p)
+            waitingPlayer = p
+            openMenu(force = true)
+            val builtIn = PadDevices.builtIn() != null
+            o.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Disconnected(p, d.name, builtIn,
+                touch = !builtIn && p == 0 && touch != null && touchSettings.show != com.joeysretro.joey64.touch.TouchShow.Never, atStart = true)
+            return true
+        }
+        while (newPadQueue.isNotEmpty()) {
+            val (id, event) = newPadQueue.removeAt(0)
+            val d = InputDevice.getDevice(id) ?: continue
+            if (d.descriptor in notNowThisPlay) continue
+            val card = com.joeysretro.joey64.controls.NewPads.cardFor(controlsStore, d, event) ?: continue
+            JLog.i(TAG, "controls: ${card.title}, asking which player (focus Player ${card.focus + 1})")
+            newPadShown = id to card
+            openMenu(force = true)
+            o.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.NewPad(card)
+            return true
+        }
+        return false
+    }
+
+    /** The card's answer: a player (0-3), or -1 for Not now (B too). */
+    private fun newPadAnswer(player: Int) {
+        val (id, card) = newPadShown ?: return
+        newPadShown = null
+        com.joeysretro.joey64.controls.NewPads.answer(controlsStore, card, InputDevice.getDevice(id), player)
+        if (player < 0) {
+            if (card.seen) notNowThisPlay += card.pad.descriptor
+            playerOfDevice.remove(id)
+            JLog.i(TAG, "controls: ${card.pad.name} not now")
+        } else {
+            JLog.i(TAG, "controls: ${card.pad.name} is player ${player + 1}")
+            reloadControls()
+        }
+        closeMenu()
     }
 
     /** [p]'s own controller ([id]; null from the debug broadcast) is back: they play on it again. */

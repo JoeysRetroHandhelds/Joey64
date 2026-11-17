@@ -94,7 +94,9 @@ data class InGamePopup(
         /** Leaderboards (approved 2026-11-04, toast2.html): started (flag), the result (trophy). */
         Leaderboard, LeaderboardResult,
         /** The tried driver wasn't faster, or didn't start: back to the one in use (screen 2b). */
-        GpuBack }
+        GpuBack,
+        /** A controller seen before connected (approved newpad3 mockup 2026-11-17, screen 7): its player, or not playing. */
+        PadConnected }
 }
 
 /**
@@ -174,6 +176,7 @@ fun InGamePopupCard(p: InGamePopup) {
         InGamePopup.Kind.PlayNote -> R.drawable.ic_history
         InGamePopup.Kind.NoSticks -> R.drawable.ic_rail_controls
         InGamePopup.Kind.DPadSwap -> R.drawable.ic_rail_controls
+        InGamePopup.Kind.PadConnected -> R.drawable.ic_rail_controls
         InGamePopup.Kind.GpuOk -> R.drawable.ic_circle_check
         InGamePopup.Kind.GpuNote -> R.drawable.ic_alert
         InGamePopup.Kind.GpuFaster -> R.drawable.ic_bolt

@@ -487,6 +487,8 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
             }, end = tileEnd.takeIf { home && setupShown == null && !importAgain && !fzAgain && !onRail && !onPage && heldPage == null })
             if (home) updates.prompt.collectAsStateWithLifecycle().value?.let { UpdatePopup(it, updates) }
             com.joeysretro.joey64.launcher.screens.NeedsControllerPopup(model)
+            // A controller that connects: which player it is (approved newpad3 mockup 2026-11-17).
+            com.joeysretro.joey64.launcher.screens.NewControllerHost(enabled = home && s?.setupDone == true && place != RailPlace.Controls)
             // Netplay: a game's options › Netplay, and the room screens wherever a room was opened or joined.
             if (home) com.joeysretro.joey64.launcher.screens.NetplayGamePopup(model)
             if (home) com.joeysretro.joey64.launcher.screens.NetplayRoomPopups(model)

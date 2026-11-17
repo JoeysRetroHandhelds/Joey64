@@ -78,7 +78,11 @@ sealed interface PauseScreen {
      * Controller disconnected (approved problem screens 2026-11-08, screen 4): [name]'s controller, [player]'s (0-3), went
      * and the game is paused until it comes back. [builtIn]: this device has built-in controls to play on instead.
      */
-    data class Disconnected(val player: Int, val name: String, val builtIn: Boolean, /** No built-in controls: Use touch controls (player 1). */ val touch: Boolean = false) : PauseScreen
+    data class Disconnected(val player: Int, val name: String, val builtIn: Boolean, /** No built-in controls: Use touch controls (player 1). */ val touch: Boolean = false,
+        /** The controller wasn't there when the game started (approved newpad3 mockup 2026-11-17, screen 8): "<name> isn't connected". */
+        val atStart: Boolean = false) : PauseScreen
+    /** A controller connected (approved newpad3 mockup 2026-11-17, screens 2-5): which player it is. */
+    data class NewPad(val card: com.joeysretro.joey64.controls.NewPadCard) : PauseScreen
     /** Not enough space to save (screen 5): [text] says what wasn't saved and how much room there is. OK goes back to the game. */
     data class NoSpace(val text: String) : PauseScreen
     /**
@@ -174,6 +178,10 @@ interface PauseActions {
     fun closeSignIn()
     /** A row of the Controller disconnected popup. */
     fun disconnectChoice(choice: DisconnectChoice) {}
+    /** The new controller card: a player (0-3), or -1 for Not now. */
+    fun newPadPick(player: Int) {}
+    /** The new controller card's Connecting rows changed (saved for the device). */
+    fun newPadSettings(settings: com.joeysretro.joey64.controls.ConnectSettings) {}
     /** Not enough space to save: OK or B, back to the game. */
     fun closeNoSpace() {}
     /** In a netplay room: the menu greys Save state, Load state, Cheats and Reset, and Quit is Leave the room. */
@@ -246,6 +254,12 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
         return
     }
     if (screen is PauseScreen.Disconnected) { DisconnectedPopup(screen, actions); return }
+    if (screen is PauseScreen.NewPad) {
+        androidx.compose.runtime.key(screen.card) {
+            com.joeysretro.joey64.launcher.screens.NewControllerCard(screen.card, { actions.newPadSettings(it) }) { actions.newPadPick(it) }
+        }
+        return
+    }
     if (screen is PauseScreen.NetPaused || screen is PauseScreen.NetOutOfStep || screen is PauseScreen.NetLeft) { NetplayPopup(screen, actions); return }
     if (screen is PauseScreen.GpuTry || screen is PauseScreen.GpuNone) { GpuTrialPopup(screen, actions); return }
     if (screen is PauseScreen.HardcoreOn) {
@@ -367,7 +381,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
                 com.joeysretro.joey64.launcher.components.JoeyRow("Later", detail = "Keep playing as it is") { actions.restartLater() }
             }
             is PauseScreen.Controls, is PauseScreen.Cheats, is PauseScreen.Achievements, is PauseScreen.GameSettings, PauseScreen.SignIn,
-            is PauseScreen.Disconnected, is PauseScreen.NoSpace, is PauseScreen.NetPaused, is PauseScreen.NetOutOfStep, is PauseScreen.NetLeft,
+            is PauseScreen.Disconnected, is PauseScreen.NewPad, is PauseScreen.NoSpace, is PauseScreen.NetPaused, is PauseScreen.NetOutOfStep, is PauseScreen.NetLeft,
             is PauseScreen.GpuTry, is PauseScreen.GpuNone, PauseScreen.HardcoreOn -> {}
         }
     }
@@ -470,6 +484,22 @@ private fun SlotCell(s: SlotView, off: Boolean, now: Long, initial: Boolean, onF
 private fun DisconnectedPopup(screen: PauseScreen.Disconnected, actions: PauseActions) {
     JoeyDialog(onDismiss = {}, hints = listOf(Hint("A", "Select")), width = 470.dp) {
         Column {
+            var first = true
+            fun firstFocus(): Modifier = if (first) { first = false; Modifier.initialFocus() } else Modifier
+            if (screen.atStart) {
+                // Approved newpad3 mockup 2026-11-17, screen 8: the same card when the controller wasn't there at the start.
+                PopupTitle("${screen.name} isn't connected", "Player ${screen.player + 1}'s controller. Connect it and the game starts, or:")
+                val now = "for this play · nothing saved"
+                if (screen.builtIn) com.joeysretro.joey64.launcher.components.JoeyRow("Use built-in controls", firstFocus(),
+                    detail = "Player ${screen.player + 1} plays on them $now") { actions.disconnectChoice(DisconnectChoice.BuiltIn) }
+                else if (screen.touch) com.joeysretro.joey64.launcher.components.JoeyRow("Use touch controls", firstFocus(),
+                    detail = "Player 1 plays on them $now") { actions.disconnectChoice(DisconnectChoice.Touch) }
+                if (screen.player > 0) com.joeysretro.joey64.launcher.components.JoeyRow("Carry on without them", firstFocus(),
+                    detail = "Player ${screen.player + 1} sits out $now") { actions.disconnectChoice(DisconnectChoice.WithoutThem) }
+                com.joeysretro.joey64.launcher.components.JoeyRow(actions.quitLabel, firstFocus(), detail = "Back to the library") {
+                    actions.disconnectChoice(DisconnectChoice.Quit) }
+                return@Column
+            }
             val text = androidx.compose.ui.text.buildAnnotatedString {
                 pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = JoeyTheme.colors.text))
                 append(screen.name); pop()
@@ -477,8 +507,6 @@ private fun DisconnectedPopup(screen: PauseScreen.Disconnected, actions: PauseAc
             }
             PopupTitle("Controller disconnected")
             com.joeysretro.joey64.launcher.components.PromptText(text)
-            var first = true
-            fun firstFocus(): Modifier = if (first) { first = false; Modifier.initialFocus() } else Modifier
             if (screen.builtIn) JoeyOption("Use built-in controls", firstFocus()) { actions.disconnectChoice(DisconnectChoice.BuiltIn) }
             else if (screen.touch) JoeyOption("Use touch controls", firstFocus()) { actions.disconnectChoice(DisconnectChoice.Touch) }
             if (screen.player > 0) JoeyOption("Carry on without them", firstFocus()) { actions.disconnectChoice(DisconnectChoice.WithoutThem) }

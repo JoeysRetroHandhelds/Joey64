@@ -101,6 +101,11 @@ class ControlsStore(private val dir: File) {
         return true
     }
 
+    /** Controls › Connecting (approved newpad3 mockup 2026-11-17): `connecting.json`, the same for every game. */
+    private val connectingFile = File(dir, "connecting.json")
+    fun connecting(): ConnectSettings = read(connectingFile)?.let { ConnectSettings.fromJson(it) } ?: ConnectSettings()
+    fun saveConnecting(c: ConnectSettings) = write(connectingFile, c.toJson())
+
     fun hotkeys(): Hotkeys = read(hotkeysFile)?.let { Hotkeys.fromJson(it) } ?: Hotkeys()
     fun saveHotkeys(h: Hotkeys) = write(hotkeysFile, h.toJson())
 

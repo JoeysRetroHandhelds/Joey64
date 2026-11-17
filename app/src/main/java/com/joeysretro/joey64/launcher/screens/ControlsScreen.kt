@@ -199,6 +199,8 @@ private sealed interface Popup {
     data object TouchResetPage : Popup
     data object TouchGames : Popup
     data object TouchPickGame : Popup
+    /** Start: Reset tab on Connecting. */
+    data object ResetConnecting : Popup
 }
 
 /** What a remap popup sets. */
@@ -236,6 +238,10 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
     fun edit(block: () -> Unit) { block(); version++ }
     var player by remember { mutableIntStateOf(startPlayer) }
     var hotkeysOpen by remember { mutableStateOf(false) }
+    // Connecting, the tab after Hotkeys (approved newpad3 mockup 2026-11-17): the same for every game and player.
+    var connectingOpen by remember { mutableStateOf(false) }
+    /** The tab in use: Player 1-4, Hotkeys, Connecting. */
+    fun tabNow() = if (connectingOpen) CONNECTING_TAB else if (hotkeysOpen) HOTKEYS_TAB else player
     // Controls › Touch controls (approved mockup 2026-11-09): a page of its own from Player 1's chip, and its layout editor.
     var touchOpen by remember { mutableStateOf(false) }
     var touchEdit by remember { mutableStateOf<Boolean?>(null) }
@@ -261,7 +267,9 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
     }
     var popup by remember { mutableStateOf<Popup?>(null) }
     var focused by remember { mutableStateOf("Controller") }
+    var connectVer by remember { mutableIntStateOf(0) }
     var open by remember { mutableStateOf(setOf<String>()) }
+    fun openTab(n: Int) { hotkeysOpen = n == HOTKEYS_TAB; connectingOpen = n == CONNECTING_TAB; if (n < HOTKEYS_TAB) player = n; open = emptySet() }
     // Devices change while the page is open (a pad connects): read again whenever a popup closes.
     val pads = remember(popup, version) { PadDevices.pads() }
 
@@ -314,10 +322,17 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             }
             Control.Options -> { popup = Popup.TouchResetPage; true }
             else -> false
+        } else if (connectingOpen) when (control) {
+            Control.TabPrev, Control.PagePrev -> { if (row != "tabs") tabLanding?.arm(); openTab((tabNow() + TAB_COUNT - 1) % TAB_COUNT); true }
+            Control.TabNext, Control.PageNext -> { if (row != "tabs") tabLanding?.arm(); openTab((tabNow() + 1) % TAB_COUNT); true }
+            // Its two rows have nothing to clear or reset one by one; Start resets the tab.
+            Control.Extra, Control.Search -> true
+            Control.Options -> { popup = Popup.ResetConnecting; true }
+            else -> false
         } else when (control) {
-            // L2 / R2 too (Joey 2026-11-13): Player 1-4 and Hotkeys; in the launcher L1 / R1 move along the top bar.
-            Control.TabPrev, Control.PagePrev -> { if (row != "tabs") tabLanding?.arm(); val n = ((if (hk) HOTKEYS_TAB else p) + 4) % 5; hotkeysOpen = n == HOTKEYS_TAB; if (n != HOTKEYS_TAB) player = n; open = emptySet(); true }
-            Control.TabNext, Control.PageNext -> { if (row != "tabs") tabLanding?.arm(); val n = ((if (hk) HOTKEYS_TAB else p) + 1) % 5; hotkeysOpen = n == HOTKEYS_TAB; if (n != HOTKEYS_TAB) player = n; open = emptySet(); true }
+            // L2 / R2 too (Joey 2026-11-13): Player 1-4, Hotkeys and Connecting; in the launcher L1 / R1 move along the top bar.
+            Control.TabPrev, Control.PagePrev -> { if (row != "tabs") tabLanding?.arm(); openTab((tabNow() + TAB_COUNT - 1) % TAB_COUNT); true }
+            Control.TabNext, Control.PageNext -> { if (row != "tabs") tabLanding?.arm(); openTab((tabNow() + 1) % TAB_COUNT); true }
             Control.Extra -> { edit { if (hk) clearHotkey(editor, row) else clearRow(editor, p, row) }; true }
             // Tap to hold and Macros: Y is Use All games on a game; on All games they have no default but none.
             Control.Search -> { if (!(row in EXTRA_ROWS && target == null)) edit { if (hk) resetHotkey(editor, row) else resetRow(editor, p, row) }; true }
@@ -335,6 +350,8 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
     val ctlHints = (when {
             focused == "chipTouch" -> listOf(Hint("A", "Open"), Hint("B", backLabel))
             focused == "tabs" -> listOf(Hint("A", "Open"), Hint("B", backLabel))
+            // The list panel adds "▶ Choices" after A.
+            connectingOpen -> listOf(Hint("A", "Change"), Hint("Start", "Reset tab"), Hint("B", backLabel))
             hotkeysOpen -> listOf(Hint("A", if (focused == "hkFastForward" || focused == "hkQuit") "Open" else "Change"), Hint("X", "Clear"),
                 Hint("Y", "Reset to default"), Hint("B", "Back"))
             focused.startsWith("chip") -> listOf(Hint("A", "Select"), Hint("B", backLabel))
@@ -351,7 +368,7 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                 Hint("B", backLabel))
             else -> listOf(Hint("A", "Change"), Hint("X", "Clear"), Hint("Y", if (target == null) "Reset to default" else "Use All games"),
                 Hint("B", backLabel))
-        }).let { if (hotkeysOpen || off) it else withResetHint(it) }
+        }).let { if (hotkeysOpen || connectingOpen || off) it else withResetHint(it) }
 
     val landing = LocalFocusLanding.current
     LaunchedEffect(touchOpen) { landing?.arm() }
@@ -379,18 +396,18 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                     onFocused = { if (it) focused = "chipGame" }) { popup = Popup.Games }
             }
             // No title under the top bar; the chips are the first thing on the page (approved top bar, 2026-11-11).
-            com.joeysretro.joey64.launcher.components.PageHeader(null) { headerChips() }
+            // Connecting is for the device, every game alike: no All games chip (approved newpad3 mockup, screen 1).
+            if (!connectingOpen) com.joeysretro.joey64.launcher.components.PageHeader(null) { headerChips() }
             // Scrolls sideways on a narrow screen rather than wrapping "Player 4".
             // A focus stop too (Joey 2026-11-09): Up from the chips, ◀ ▶, A picks the player.
             // Hotkeys is the fifth tab, after Player 4 (Joey 2026-11-11): the same for every game and player.
-            com.joeysretro.joey64.launcher.components.TabRow(5, if (hotkeysOpen) HOTKEYS_TAB else player, Modifier.padding(top = 6.dp).tabScroll(rememberScrollState()),
-                onFocused = { if (it) focused = "tabs" }, entry = tabsEntry, onPick = { i ->
-                    if (i == HOTKEYS_TAB) hotkeysOpen = true
-                    else if (i != player || hotkeysOpen) { hotkeysOpen = false; player = i; open = emptySet() }
-                }) { i, m ->
-                TabChip(if (i == HOTKEYS_TAB) "Hotkeys" else "Player ${i + 1}", if (i == HOTKEYS_TAB) hotkeysOpen else (i == player && !hotkeysOpen), m)
+            com.joeysretro.joey64.launcher.components.TabRow(TAB_COUNT, tabNow(), Modifier.padding(top = 6.dp).tabScroll(rememberScrollState()),
+                onFocused = { if (it) focused = "tabs" }, entry = tabsEntry, onPick = { i -> if (i != tabNow()) openTab(i) }) { i, m ->
+                TabChip(when (i) { HOTKEYS_TAB -> "Hotkeys"; CONNECTING_TAB -> "Connecting"; else -> "Player ${i + 1}" }, i == tabNow(), m)
             }
-            if (hotkeysOpen) {
+            if (connectingOpen) {
+                ConnectingPage(store, focused, ctlHints, onHints, connectVer) { focused = it }
+            } else if (hotkeysOpen) {
                 HotkeysPage(editor, version, focused, ctlHints, onHints, onFocused = { focused = it }, onOpen = { popup = it }) { popup = Popup.Remap(it) }
             } else {
             // C3: 12 dp apart and 12 under the tabs, so a focused chip's or tab's outline stays off its neighbours.
@@ -517,6 +534,9 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
     val close = { popup = null }
     when (val p = popup) {
         null -> {}
+        Popup.ResetConnecting -> ResetTabPopup("Reset Connecting?", "When a controller connects and Built-in controls go back to " +
+            "Ask once and Move to the next free player. Players keep their controllers.", "Keep my settings", "Reset to defaults", close) {
+            store.saveConnecting(com.joeysretro.joey64.controls.ConnectSettings()); connectVer++; close() }
         Popup.Controller -> ControllerPopup(player, shown.players.map { it.device }, pads, close) { choice, d ->
             edit { editor.setDevice(player, choice, PadDevices.autoSetup(d, choice, keep = setup)) }
             close()
@@ -904,8 +924,39 @@ fun hotkeyKey(code: Int) = when (code) {
     else -> InputNames.key(code, null)
 }
 
-/** The Controls tab row's Hotkeys tab (after Player 1-4). */
+/** The Controls tab row's Hotkeys tab (after Player 1-4), and Connecting after it (approved newpad3 mockup 2026-11-17). */
 private const val HOTKEYS_TAB = 4
+private const val CONNECTING_TAB = 5
+private const val TAB_COUNT = 6
+
+/**
+ * Controls › Connecting (approved newpad3 mockup 2026-11-17, screens 1-2): what happens when a controller connects, the same
+ * for every game and player, one list with the panel. The new controller card has the same two rows at its foot.
+ */
+@Composable
+private fun ConnectingPage(store: ControlsStore, focused: String, hints: List<Hint>, onHints: (List<Hint>) -> Unit, version: Int,
+                           onFocused: (String) -> Unit) {
+    var c by remember(version) { mutableStateOf(store.connecting()) }
+    fun set(n: com.joeysretro.joey64.controls.ConnectSettings) { c = n; store.saveConnecting(n) }
+    val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
+    val info = when (focused) {
+        "cnAsk" -> com.joeysretro.joey64.launcher.components.PanelInfo("When a controller connects", com.joeysretro.joey64.controls.ConnectSettings.ASK_HELP,
+            com.joeysretro.joey64.controls.AskWhen.entries.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it == c.ask) }) { i ->
+            set(c.copy(ask = com.joeysretro.joey64.controls.AskWhen.entries[i])) }
+        "cnBuiltIn" -> com.joeysretro.joey64.launcher.components.PanelInfo("Built-in controls", com.joeysretro.joey64.controls.ConnectSettings.BUILT_IN_HELP,
+            com.joeysretro.joey64.controls.BuiltInTaken.entries.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it == c.builtIn) }) { i ->
+            set(c.copy(builtIn = com.joeysretro.joey64.controls.BuiltInTaken.entries[i])) }
+        "tabs" -> com.joeysretro.joey64.launcher.components.PanelInfo("Players", TABS_HELP)
+        else -> com.joeysretro.joey64.launcher.components.PanelInfo("Connecting", com.joeysretro.joey64.controls.ConnectSettings.TAB_HELP)
+    }
+    com.joeysretro.joey64.launcher.components.ListPanel(panel, info, hints, onHints, Modifier.fillMaxSize()) {
+        SectionLabel("Controllers")
+        JoeyRow("When a controller connects", Modifier.initialFocus(), value = c.ask.label + "  ›", sideways = true,
+            onFocused = { if (it) onFocused("cnAsk") }) { panel.enter() }
+        JoeyRow("Built-in controls", value = c.builtIn.label + "  ›", sideways = true,
+            onFocused = { if (it) onFocused("cnBuiltIn") }) { panel.enter() }
+    }
+}
 
 @Composable
 private fun HotkeysPage(editor: ControlsEditor, version: Int, focused: String, hints: List<Hint>, onHints: (List<Hint>) -> Unit,
@@ -957,7 +1008,7 @@ private fun HotkeysPage(editor: ControlsEditor, version: Int, focused: String, h
 
 /** A hotkey's value on the page and in its popup: "Select + R1", just "Back" on its own, or Not set. */
 /** The tab row's help, on a player's tab and on Hotkeys (it was a bare "Hotkeys" there, Thor 2026-11-12). */
-private const val TABS_HELP = "Each player's controller and buttons, then the hotkeys. ◀ ▶ and A pick one."
+private const val TABS_HELP = "Each player's controller and buttons, then the hotkeys and what happens when a controller connects. ◀ ▶ and A pick one."
 
 internal fun hotkeyValue(h: Hotkeys, a: HotkeyAction): String {
     val k = h.keys[a] ?: return InputNames.NOT_SET
