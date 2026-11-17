@@ -28,8 +28,23 @@ class ResNoteTest {
         assertEquals("2 GB wins over the GPU", ResNote.RAM, ResNote.text(1934 * mb, "mali52"))
         assertEquals(ResNote.RAM, ResNote.text(2200 * mb, null))
         assertEquals("Duo", ResNote.GPU, ResNote.text(7600 * mb, "adreno722"))
-        assertNull("Odin 2 Portal", ResNote.text(11_000 * mb, "adreno740"))
+        assertEquals("Odin 2 Portal / Thor", ResNote.GPU4X, ResNote.text(11_000 * mb, "adreno740"))
+        assertEquals("8 Gen 1", ResNote.GPU4X, ResNote.text(8_000 * mb, "adreno730"))
+        assertNull("8 Gen 3 not measured", ResNote.text(12_000 * mb, "adreno750"))
+        assertNull("Odin 3", ResNote.text(12_000 * mb, "adreno830"))
+        assertEquals("2 GB wins over the 740", ResNote.RAM, ResNote.text(1934 * mb, "adreno740"))
         assertNull(ResNote.text(2201 * mb, null))
         assertNull("memory not known", ResNote.text(0, null))
+    }
+
+    @Test fun sharpLine() {
+        assertTrue(ResNote.midGpu("adreno740"))
+        assertFalse(ResNote.midGpu("adreno722"))
+        assertFalse(ResNote.midGpu("mali52"))
+        assertTrue("4x, Original", ResNote.sharpLink(ResNote.GPU4X, "4", "original"))
+        assertTrue("2x, Original", ResNote.sharpLink(ResNote.GPU4X, "2", "original"))
+        assertFalse("already 2x + Sharp", ResNote.sharpLink(ResNote.GPU4X, "2", "sharp"))
+        assertFalse("Duo's note has none", ResNote.sharpLink(ResNote.GPU, "1", "original"))
+        assertFalse(ResNote.sharpLink(null, "4", "original"))
     }
 }

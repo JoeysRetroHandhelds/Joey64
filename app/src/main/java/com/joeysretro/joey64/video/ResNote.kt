@@ -12,7 +12,12 @@ import java.io.File
  *   game below 60 fps at 2x, and 4x died at start twice.
  * - A GPU in the lower tier: an Adreno below 730 (the Duo's 722: GoldenEye's mission folder 53.8 fps at 2x) or a
  *   Mali-G31/G51/G52/G57 (the Flip's G52: every bench game below 60 at 2x): [GPU].
- * - Both: the 2 GB text, the stronger one. Neither: no note.
+ * - Both: the 2 GB text, the stronger one.
+ * - A GPU in the middle tier: an Adreno 730-749 (8 Gen 1, 8 Gen 2; Joey 2026-11-17 "If 8 Gen 2 can't run 4x we
+ *   should have the same warning ... 2x+sharp as it looks just as good as 4x"; Thor reports 53-57 4x: Mario Tennis
+ *   51.3 fps with 320 slow frames in 72 s, Smash 50.8): [GPU4X], with "Use 2x and the Sharp look" in the box
+ *   (approved resnote2 mockup A). The 750 isn't measured, so it has none; the Odin 3's 830 holds 4x.
+ * - None of these: no note.
  *
  * The launcher doesn't open Vulkan, so the GPU comes from what the game screen found at its last start ([remember],
  * "gpu_family" in the "device" prefs), else from kgsl's gpu_model (Adreno only); a Mali shows its note after the
@@ -21,6 +26,17 @@ import java.io.File
 object ResNote {
     const val GPU = "On this device 2x and higher can run below full speed in heavier games."
     const val RAM = "This device has 2 GB of memory: 4x and 8x may not start, and 2x runs below full speed in most games."
+    const val GPU4X = "On this device 4x and higher can run below full speed in heavier games. 2x with the Sharp look is almost as crisp."
+    const val SHARP_LINK = "Use 2x and the Sharp look"
+
+    /** Whether the GPU of [familyKey] is in the middle tier (8 Gen 1 / 8 Gen 2: 4x slows in heavier games). */
+    fun midGpu(familyKey: String?): Boolean {
+        val k = familyKey ?: return false
+        return k.startsWith("adreno") && (k.removePrefix("adreno").toIntOrNull() ?: return false) in 730..749
+    }
+
+    /** Whether [note] gets the "Use 2x and the Sharp look" line, shown while the setting isn't already 2x + Sharp. */
+    fun sharpLink(note: String?, resolution: String, look: String) = note == GPU4X && !(resolution == "2" && look == "sharp")
 
     /** 2.2 GB, in bytes, as ActivityManager's totalMem counts them. */
     const val RAM_LIMIT = 2_200L * 1024 * 1024
@@ -42,6 +58,7 @@ object ResNote {
     fun text(totalMem: Long, familyKey: String?): String? = when {
         totalMem in 1..RAM_LIMIT -> RAM
         lowGpu(familyKey) -> GPU
+        midGpu(familyKey) -> GPU4X
         else -> null
     }
 

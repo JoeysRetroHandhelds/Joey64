@@ -594,7 +594,9 @@ fun PopupInfoNote(text: String) {
  * mockup A 2026-11-16): the same box in the settings panel and in the choice popup.
  */
 @Composable
-fun DeviceNote(text: String, modifier: Modifier = Modifier) {
+fun DeviceNote(text: String, modifier: Modifier = Modifier,
+               /** One row inside the box under the text (8 Gen 2's "Use 2x and the Sharp look", approved resnote2 A 2026-11-17). */
+               action: (@Composable () -> Unit)? = null) {
     val c = JoeyTheme.colors
     androidx.compose.foundation.layout.Row(
         modifier.padding(horizontal = 6.dp).padding(top = 2.dp, bottom = 6.dp).fillMaxWidth()
@@ -603,7 +605,10 @@ fun DeviceNote(text: String, modifier: Modifier = Modifier) {
     ) {
         androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(com.joeysretro.joey64.R.drawable.ic_alert), contentDescription = null,
             tint = c.tagMissable, modifier = Modifier.padding(end = 8.dp, top = 2.dp).size(18.dp))
-        Text(text, style = JoeyTheme.type.note, color = c.text)
+        androidx.compose.foundation.layout.Column {
+            Text(text, style = JoeyTheme.type.note, color = c.text)
+            action?.invoke()
+        }
     }
 }
 

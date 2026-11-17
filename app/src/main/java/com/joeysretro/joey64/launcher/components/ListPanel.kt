@@ -59,6 +59,8 @@ class PanelInfo(val title: String, val help: String, val choices: List<PanelChoi
                 val top: (@Composable () -> Unit)? = null,
                 /** Drawn after the lines (a texture pack's conversion bar, approved mockup texpacks4 screen 2). */
                 val bottom: (@Composable () -> Unit)? = null,
+                /** A row inside the [note]'s box, above the choices (8 Gen 2's "Use 2x and the Sharp look", resnote2 A). */
+                val noteAction: Pair<String, () -> Unit>? = null,
                 val onPick: ((Int) -> Unit)? = null) {
     val pickable get() = choices.isNotEmpty() && onPick != null
 }
@@ -215,7 +217,13 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
             modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH))
         if (info.help.isNotEmpty()) Text(info.help, style = JoeyTheme.type.note, color = c.textDim,
             modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH).padding(top = 2.dp, bottom = 8.dp))
-        info.note?.let { DeviceNote(it) }
+        val noteAction = info.noteAction.takeIf { info.note != null }
+        info.note?.let { n ->
+            DeviceNote(n, action = noteAction?.let { (label, act) -> {
+                JoeyRow(label, Modifier.focusProperties { canFocus = inside; up = FocusRequester.Cancel },
+                    trailing = { _ -> Text("›", style = JoeyTheme.type.row, color = c.textDim) }) { act(); state.leave() }
+            } })
+        }
         info.top?.invoke()
         val firstAt = shown.indexOfFirst { it.on && it.enabled }.takeIf { it >= 0 } ?: shown.indexOfFirst { it.enabled }.coerceAtLeast(0)
         shown.forEachIndexed { i, ch ->
@@ -226,7 +234,7 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
                     .landFocus(state.landing, enabled = inside && i == firstAt)
                     .focusProperties {
                         canFocus = inside
-                        if (i == 0) up = FocusRequester.Cancel
+                        if (i == 0 && noteAction == null) up = FocusRequester.Cancel
                         if (i == shown.lastIndex) down = FocusRequester.Cancel
                     },
                 detail = ch.detail, detailWarn = ch.detailWarn, enabled = ch.enabled, experimental = ch.experimental,
