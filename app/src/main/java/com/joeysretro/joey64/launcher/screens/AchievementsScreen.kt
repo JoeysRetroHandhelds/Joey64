@@ -9,6 +9,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -131,9 +133,18 @@ fun GameAchievementsScreen(game: AchievementsGame, onHints: (List<Hint>) -> Unit
 
 /** The pause menu's Achievements: the same page as a panel over the paused game, rc_client's live list. */
 @Composable
-fun InGameAchievements(title: String, focusId: Int? = null, backLabel: String = "Back to pause menu", onClose: () -> Unit) {
+fun InGameAchievements(title: String, focusId: Int? = null, focusBoard: Int? = null, backLabel: String = "Back to pause menu", onClose: () -> Unit) {
     var hints by remember { mutableStateOf(emptyList<Hint>()) }
     var showing by remember { mutableStateOf(false) }
+    // The Leaderboards tab (approved 2026-11-04, after the sets): only Hardcore plays have leaderboards (made-up ones
+    // with RA_FAKE). A on a board opens its Top scores in the panel's place; B comes back to that board.
+    val boards = remember { if (com.joeysretro.joey64.achievements.RaHardcore.on() || RaBridge.debugCache != null)
+        com.joeysretro.joey64.achievements.RaLeaderboards.list() else emptyList() }
+    var detail by remember { mutableStateOf<com.joeysretro.joey64.achievements.RaBoard?>(null) }
+    var backTo by remember { mutableStateOf(focusBoard) }
+    // The panel's focus landing, armed as the list and Top scores swap, so focus lands on the new content (it was left
+    // on nothing, and then L1/R1 went nowhere: Odin 2 Portal 2026-11-16).
+    val landing = remember { arrayOfNulls<com.joeysretro.joey64.launcher.components.FocusLanding>(1) }
     val data = remember {
         val info = RaBridge.gameInfo().takeIf { it != "null" }
         val fake = if (info == null) RaBridge.debugCache?.values?.firstOrNull() else null
@@ -141,8 +152,8 @@ fun InGameAchievements(title: String, focusId: Int? = null, backLabel: String = 
         GameData(g, RaAchievement.parseList(if (fake != null) fake.second else RaBridge.achievementList()), System.currentTimeMillis())
     }
     val tabs = remember { SetTabStep() }
-    JoeyDialog(onDismiss = onClose, hints = hints, width = 780.dp, onPadButton = { key ->
-        when (key) {
+    JoeyDialog(onDismiss = { if (detail != null) { landing[0]?.arm(); detail = null } else onClose() }, hints = hints, width = 780.dp, onPadButton = { key ->
+        if (detail == null) when (key) {
             android.view.KeyEvent.KEYCODE_BUTTON_L1 -> tabs.step(-1)
             android.view.KeyEvent.KEYCODE_BUTTON_R1 -> tabs.step(1)
             android.view.KeyEvent.KEYCODE_BUTTON_L2 -> tabs.page(-1)
@@ -150,8 +161,12 @@ fun InGameAchievements(title: String, focusId: Int? = null, backLabel: String = 
         }
     }) {
         Box(Modifier.heightIn(max = 520.dp)) {
-            GameAchievementsContent(title, data, live = true, onHints = { hints = it.map { h -> if (h.key == "B") Hint("B", backLabel) else h } },
-                showing = showing, onShow = { showing = it }, focusId = focusId, inPanel = true, tabs = tabs, tabHint = "Tab")
+            landing[0] = LocalFocusLanding.current
+            val d = detail
+            if (d != null) LeaderboardDetail(d, data.game?.title?.ifEmpty { null } ?: title) { hints = it }
+            else GameAchievementsContent(title, data, live = true, onHints = { hints = it.map { h -> if (h.key == "B") Hint("B", backLabel) else h } },
+                showing = showing, onShow = { showing = it }, focusId = focusId, inPanel = true, tabs = tabs, tabHint = "Tab",
+                boards = boards, focusBoard = backTo) { b -> backTo = b.id; landing[0]?.arm(); detail = b }
         }
     }
 }
@@ -255,6 +270,8 @@ private fun GameAchievementsContent(
     title: String, data: GameData?, live: Boolean, onHints: (List<Hint>) -> Unit,
     showing: Boolean, onShow: (Boolean) -> Unit, focusId: Int? = null, inPanel: Boolean = false,
     tabs: SetTabStep? = null, tabHint: String = "Set",
+    boards: List<com.joeysretro.joey64.achievements.RaBoard> = emptyList(), focusBoard: Int? = null,
+    onBoard: (com.joeysretro.joey64.achievements.RaBoard) -> Unit = {},
 ) {
     val c = JoeyTheme.colors
     var filter by remember { mutableStateOf(AchFilter.All) }
@@ -266,9 +283,17 @@ private fun GameAchievementsContent(
     // and sort stay when the tab changes; in game, the panel opens on the tab of [focusId]'s set.
     val sets = data?.game?.sets.orEmpty()
     val tabbed = sets.size > 1
+    // Leaderboards is the last tab (approved 2026-11-04); a game with one set then gets an Achievements tab before it.
+    val lbTab = boards.isNotEmpty()
+    val tabCount = (if (tabbed) sets.size else 1) + (if (lbTab) 1 else 0)
+    val showTabs = tabCount > 1
+    val lbIdx = if (lbTab) tabCount - 1 else -1
     var setPicked by remember { mutableStateOf(-1) }
-    val setIdx = if (setPicked in sets.indices) setPicked
+    val tabIdx = if (setPicked in 0 until tabCount) setPicked
+        else if (lbTab && focusBoard != null) lbIdx
         else focusId?.let { id -> data?.list?.firstOrNull { it.id == id } }?.let { a -> sets.indexOfFirst { it.id == a.set } }?.takeIf { it >= 0 } ?: 0
+    val onLb = tabIdx == lbIdx
+    val setIdx = if (onLb) 0 else tabIdx
     val landing = LocalFocusLanding.current
     // The set tabs have focus (Joey 2026-11-09, D-pad tabs): a set opened there keeps focus on the row.
     var onTabs by remember { mutableStateOf(false) }
@@ -276,16 +301,24 @@ private fun GameAchievementsContent(
     // (JoeyOS docs/input-rewrite.md): it was armed from an effect a frame later, and for that frame the old rows were
     // gone and focus fell out of the page to the rail (Joey 2026-11-11: "l1/r1 on achievements page jumps to the rail").
     fun pickSet(i: Int) { setPicked = i; if (!onTabs) landing?.arm() }
-    tabs?.onStep = { delta -> if (tabbed) pickSet((setIdx + delta + sets.size) % sets.size) }
-    LaunchedEffect(onChip, onSortChip, tabbed, onTabs) {
-        // L/R changes the set only in game: in the launcher L1/R1 move along the top bar (Joey 2026-11-11, option 1),
-        // so the hint said "L/R Set" while R1 opened Search (Thor 2026-11-12); the sets are D-pad tabs there.
-        onHints(listOfNotNull(if (onSortChip) Hint("A", "Change") else if (onChip) Hint("A", "Show") else if (onTabs) Hint("A", "Open") else null,
-            if (tabbed && live) Hint("L/R", tabHint) else null, Hint("B", "Back")))
+    tabs?.onStep = { delta -> if (showTabs) pickSet((tabIdx + delta + tabCount) % tabCount) }
+    // L/R changes the set only in game: in the launcher L1/R1 move along the top bar (Joey 2026-11-11, option 1),
+    // so the hint said "L/R Set" while R1 opened Search (Thor 2026-11-12); the sets are D-pad tabs there.
+    // Read through snapshotFlow, not effect keys: R1 from the Leaderboards tab gives the tab row focus for a frame and
+    // its "false" came after the keyed effect had run, so "A Open" stayed over achievement rows (Portal 2026-11-16).
+    val showTabsNow = androidx.compose.runtime.rememberUpdatedState(showTabs)
+    val onLbNow = androidx.compose.runtime.rememberUpdatedState(onLb)
+    val hintsTo = androidx.compose.runtime.rememberUpdatedState(onHints)
+    LaunchedEffect(Unit) {
+        androidx.compose.runtime.snapshotFlow {
+            listOfNotNull(if (onSortChip) Hint("A", "Change") else if (onChip) Hint("A", "Show") else if (onTabs) Hint("A", "Open")
+                else if (onLbNow.value) Hint("A", "Top scores") else null,
+                if (showTabsNow.value && live) Hint("L/R", tabHint) else null, Hint("B", "Back"))
+        }.collect { hintsTo.value(it) }
     }
     val d = data ?: return
     val g = d.game
-    val set = sets.getOrNull(setIdx)?.takeIf { tabbed }
+    val set = sets.getOrNull(setIdx)?.takeIf { tabbed && !onLb }
     val inSet = remember(d, set) { RaLists.inSet(d.list, set?.id) }
     val shown = remember(inSet, filter, sort) { RaLists.achievements(inSet, filter, sort, live) }
     val now = System.currentTimeMillis()
@@ -299,18 +332,26 @@ private fun GameAchievementsContent(
     Column((if (inPanel) Modifier.fillMaxWidth() else Modifier.fillMaxSize().padding(horizontal = JoeyTheme.spacing.margin).padding(top = 14.dp, bottom = 6.dp))) {
         Header(
             title = g?.title?.ifEmpty { null } ?: title,
-            line = g?.let { if (set != null) RaLists.setSummary(RaLists.setLabel(setIdx, set), set, filter, RaLists.counted(shown)) else RaLists.gameSummary(it, filter, RaLists.counted(shown)) } ?: "",
+            line = if (onLb) lbSummary(boards) else g?.let { if (set != null) RaLists.setSummary(RaLists.setLabel(setIdx, set), set, filter, RaLists.counted(shown)) else RaLists.gameSummary(it, filter, RaLists.counted(shown)) } ?: "",
             picture = { Picture(g?.let { badgeFile(it.badge) }, 34.dp) },
-            chip = filter.label, chipOn = filter != AchFilter.All, onChip = { onShow(true) }, chipShown = g != null, onChipFocused = { onChip = it },
-            chipFirst = g != null && shown.isEmpty(),
+            chip = filter.label, chipOn = filter != AchFilter.All, onChip = { onShow(true) }, chipShown = g != null && !onLb, onChipFocused = { onChip = it },
+            chipFirst = g != null && !onLb && shown.isEmpty(),
             sortChip = sort.label, onSort = { sorting = true }, onSortFocused = { onSortChip = it }, chipsEntry = chips,
         )
-        if (g != null) ThinBar(set?.fraction ?: g.fraction, Modifier.fillMaxWidth().padding(top = 10.dp))
-        if (tabbed) SettingsTabs(sets.mapIndexed { i, s -> RaLists.setLabel(i, s) }, setIdx, counts = sets.map { it.achievements },
-            // In game, a dot on a set with an active challenge, so it isn't missed on another tab.
-            dots = if (!live) emptySet() else sets.indices.filter { i -> d.list.any { it.set == sets[i].id && it.section == RaAchievement.ACTIVE_CHALLENGE } }.toSet(),
-            onFocused = { onTabs = it }, entry = setTab, up = if (g != null) chips else null,
+        if (g != null && !onLb) ThinBar(set?.fraction ?: g.fraction, Modifier.fillMaxWidth().padding(top = 10.dp))
+        if (showTabs) SettingsTabs(
+            (if (tabbed) sets.mapIndexed { i, s -> RaLists.setLabel(i, s) } else listOf("Achievements")) + (if (lbTab) listOf("Leaderboards") else emptyList()),
+            tabIdx, counts = (if (tabbed) sets.map { it.achievements } else listOf(g?.achievements)) + (if (lbTab) listOf(boards.size) else emptyList()),
+            // In game, a dot on a set with an active challenge, so it isn't missed on another tab; on Leaderboards while one runs.
+            dots = if (!live) emptySet() else (if (tabbed) sets.indices.filter { i -> d.list.any { it.set == sets[i].id && it.section == RaAchievement.ACTIVE_CHALLENGE } }.toSet() else emptySet()) +
+                (if (lbTab && boards.any { it.running }) setOf(lbIdx) else emptySet()),
+            onFocused = { onTabs = it }, entry = setTab, up = if (g != null && !onLb) chips else null,
         ) { pickSet(it) }
+        if (onLb) {
+            // Focus in the list clears the tab row's (it stayed on after R1 onto this tab: "A Open" over a board, Portal 2026-11-16).
+            LeaderboardRows(boards, focusBoard, setTab, Modifier.onFocusChanged { if (it.hasFocus) onTabs = false }, onBoard)
+            return@Column
+        }
         if (g == null) Empty(if (live) "This game has no RetroAchievements set, or it wasn't found." else "Play this game once, and its achievements show here.", holdFocus = true)
         else if (!live && d.list.any { !it.isUnlocked && it.progress.isNotEmpty() })
             Text("Progress from the last time you played, ${SlotDates.label(d.keptAt, now)}", style = JoeyTheme.type.small, color = c.textDim,
@@ -320,10 +361,11 @@ private fun GameAchievementsContent(
             val i = focusId?.let { id -> shown.indexOfFirst { it.id == id } } ?: -1
             if (i > 0) listState.scrollToItem(maxOf(0, i - 2))
         }
-        LazyColumn(Modifier.then(if (inPanel) Modifier.fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()).padding(top = 6.dp), state = listState) {
+        LazyColumn(Modifier.then(if (inPanel) Modifier.fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()).padding(top = 6.dp)
+            .onFocusChanged { if (it.hasFocus) onTabs = false }, state = listState) {
             itemsIndexed(shown, key = { _, a -> a.id }) { i, a ->
                 val first = if (focusId != null && shown.any { it.id == focusId }) a.id == focusId else a === shown.first()
-                AchievementRow(a, now, live, Modifier.upTo(i == 0 && (tabbed || g != null), if (tabbed) setTab else chips)
+                AchievementRow(a, now, live, Modifier.upTo(i == 0 && (showTabs || g != null), if (showTabs) setTab else chips)
                     .initialFocus(first).pagedItem(pager, i))
             }
         }
@@ -483,4 +525,131 @@ private fun AchPickPopup(title: String, labels: List<String>, counts: List<Int?>
             }
         }
     }
+}
+
+// --- Leaderboards (approved 2026-11-04: ach3.html's Leaderboards tab, build_ach3.py s6 the detail) ------------------
+
+/** The Leaderboards tab's line: "4 leaderboards · 1 running". */
+private fun lbSummary(boards: List<com.joeysretro.joey64.achievements.RaBoard>): String {
+    val running = boards.count { it.running }
+    return (if (boards.size == 1) "1 leaderboard" else "${boards.size} leaderboards") + (if (running > 0) " · $running running" else "")
+}
+
+/** "Rank 12 of 340" for [e] on a board of [total]. */
+private fun rankLine(e: com.joeysretro.joey64.achievements.RaEntry, total: Int) = "Rank ${e.rank} of $total"
+
+/**
+ * The Leaderboards tab's rows: the board, what it asks; at the right "Running · 1:23.45" while it runs, else your best
+ * and rank (asked of the server as each row shows, once per panel), "No entry yet", or nothing offline. A opens its Top scores.
+ */
+@Composable
+private fun LeaderboardRows(boards: List<com.joeysretro.joey64.achievements.RaBoard>, focusBoard: Int?, up: FocusRequester, modifier: Modifier,
+                            onOpen: (com.joeysretro.joey64.achievements.RaBoard) -> Unit) {
+    val c = JoeyTheme.colors
+    val yours = remember { androidx.compose.runtime.mutableStateMapOf<Int, com.joeysretro.joey64.achievements.RaEntries?>() }
+    val state = rememberLazyListState()
+    LaunchedEffect(boards, focusBoard) {
+        val i = focusBoard?.let { b -> if (b == com.joeysretro.joey64.launcher.ingame.PauseScreen.RUNNING_BOARD) boards.indexOfFirst { it.running } else boards.indexOfFirst { it.id == b } } ?: -1
+        if (i > 0) state.scrollToItem(maxOf(0, i - 2))
+    }
+    val landOn = focusBoard?.let { b -> if (b == com.joeysretro.joey64.launcher.ingame.PauseScreen.RUNNING_BOARD) boards.firstOrNull { it.running }?.id else b }
+        ?.takeIf { id -> boards.any { it.id == id } } ?: boards.first().id
+    LazyColumn(modifier.fillMaxWidth().padding(top = 6.dp), state = state) {
+        itemsIndexed(boards, key = { _, b -> b.id }) { i, b ->
+            if (!b.running && b.id !in yours) LaunchedEffect(b.id) {
+                yours[b.id] = com.joeysretro.joey64.achievements.RaLeaderboards.entries(b.id, around = true, count = 1)
+            }
+            val got = yours[b.id]
+            val right: AnnotatedString? = when {
+                b.running -> buildAnnotatedString {
+                    withStyle(SpanStyle(color = c.gold, fontWeight = FontWeight.Bold)) { append("Running") }
+                    append(" · " + b.value)
+                }
+                got?.you != null -> buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(got.you!!.display) }
+                }
+                got != null -> AnnotatedString("No entry yet")
+                else -> null
+            }
+            IconRow(b.title, b.description, Modifier.upTo(i == 0, up).initialFocus(b.id == landOn), rightText = right,
+                rightNote = got?.you?.let { rankLine(it, got.total) },
+                picture = { BoardTile(b.running) }) { onOpen(b) }
+        }
+    }
+}
+
+/** A board's square: the stopwatch, gold while it runs. */
+@Composable
+private fun BoardTile(running: Boolean) {
+    val c = JoeyTheme.colors
+    Box(Modifier.size(40.dp).background(c.chip, RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
+        Icon(painterResource(R.drawable.ic_stopwatch), contentDescription = null, tint = if (running) c.gold else c.textDim, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * A board's Top scores (approved 2026-11-04, build_ach3.py s6): the board's name, "<game> · Lowest time wins · 340 entries"
+ * and a Running chip while it runs; left the Top 10 (rank, picture, name, score), right Around you (your row marked) and
+ * Your entry (best, Hardcore, when). Needs a connection: offline it says so.
+ */
+@Composable
+private fun LeaderboardDetail(board: com.joeysretro.joey64.achievements.RaBoard, game: String, onHints: (List<Hint>) -> Unit) {
+    val c = JoeyTheme.colors
+    var top by remember { mutableStateOf<com.joeysretro.joey64.achievements.RaEntries?>(null) }
+    var around by remember { mutableStateOf<com.joeysretro.joey64.achievements.RaEntries?>(null) }
+    var done by remember { mutableStateOf(false) }
+    LaunchedEffect(board.id) {
+        onHints(listOf(Hint("B", "Back")))
+        top = com.joeysretro.joey64.achievements.RaLeaderboards.entries(board.id, around = false, first = 1, count = 10)
+        around = com.joeysretro.joey64.achievements.RaLeaderboards.entries(board.id, around = true, count = 5)
+        done = true
+    }
+    val total = top?.total ?: around?.total
+    val now = System.currentTimeMillis()
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BoardTile(board.running)
+            Column(Modifier.weight(1f)) {
+                Text(board.title, style = JoeyTheme.type.pageTitle, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(listOfNotNull(game, board.rule, total?.let { if (it == 1) "1 entry" else "$it entries" }).joinToString(" · "),
+                    style = JoeyTheme.type.small, color = c.textDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (board.running) RowTag("Running · ${board.value}", c.gold, c.chip, R.drawable.ic_stopwatch)
+        }
+        if (done && top == null && around == null) {
+            Empty("Top scores need a connection. Try again when you're online.", holdFocus = true)
+            return@Column
+        }
+        if (!done) { Empty("Getting the scores…", holdFocus = true); return@Column }
+        com.joeysretro.joey64.launcher.components.TwoColumns(Modifier.fillMaxWidth().padding(top = 10.dp), left = {
+            com.joeysretro.joey64.launcher.components.SectionLabel("Top 10")
+            val t = top?.entries.orEmpty()
+            if (t.isEmpty()) Empty("No entries yet")
+            t.forEachIndexed { i, e -> EntryRow(e, you = top?.userIndex == i, now = now, first = i == 0) }
+        }, right = {
+            com.joeysretro.joey64.launcher.components.SectionLabel("Around you")
+            val a = around
+            val you = a?.you
+            if (a == null || you == null) Empty("You have no entry on this board yet")
+            else {
+                a.entries.forEachIndexed { i, e -> EntryRow(e, you = a.userIndex == i, now = now, first = top?.entries.isNullOrEmpty() && i == 0) }
+                com.joeysretro.joey64.launcher.components.SectionLabel("Your entry")
+                JoeyRow("Best · ${you.display}", detail = "Hardcore · ${SlotDates.label(you.submitted * 1000, now)}", value = rankLine(you, a.total))
+            }
+        })
+    }
+}
+
+/** One entry: rank, the player's picture, name; the score at the right. Yours has its rank in gold and "You". */
+@Composable
+private fun EntryRow(e: com.joeysretro.joey64.achievements.RaEntry, you: Boolean, now: Long, first: Boolean) {
+    val c = JoeyTheme.colors
+    JoeyRow(e.user, Modifier.initialFocus(first), value = e.display,
+        detail = if (you) "You · ${SlotDates.label(e.submitted * 1000, now)}" else null,
+        leading = {
+            Text("${e.rank}", style = JoeyTheme.type.rowBold, color = if (you) c.gold else c.textDim,
+                modifier = Modifier.padding(end = 8.dp).widthIn(min = 28.dp))
+            Picture(if (e.avatar.isEmpty()) null else badgeFile(e.avatar), 24.dp)
+            androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+        })
 }

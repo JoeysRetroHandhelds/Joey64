@@ -146,6 +146,7 @@ class GameOverlay(private val activity: Activity, private val actions: PauseActi
     private var popupSpot by mutableStateOf<PopupSpot?>(null)
 
     private var badgeFiles by mutableStateOf<List<File?>>(emptyList())
+    private var badgeTimers by mutableStateOf<List<String>>(emptyList())
     private val badgeView = ComposeView(activity).apply {
         setViewTreeLifecycleOwner(owner)
         setViewTreeSavedStateRegistryOwner(owner)
@@ -154,8 +155,9 @@ class GameOverlay(private val activity: Activity, private val actions: PauseActi
             val store = remember { SettingsStore(context) }
             val settings by store.settings.collectAsState(initial = null)
             val b = badgeFiles
-            if (b.isNotEmpty()) JoeyTheme(popupTheme(settings)) {
-                Across(badgeSpot) { Box(Modifier.onGloballyPositioned { badgeBox = it.boundsInWindow() }) { ChallengeBadges(b) } }
+            val t = badgeTimers
+            if (b.isNotEmpty() || t.isNotEmpty()) JoeyTheme(popupTheme(settings)) {
+                Across(badgeSpot) { Box(Modifier.onGloballyPositioned { badgeBox = it.boundsInWindow() }) { ChallengeBadges(b, t) { r -> timerBox = r } } }
             }
         }
     }
@@ -167,9 +169,12 @@ class GameOverlay(private val activity: Activity, private val actions: PauseActi
     // touched, so the game's window gets every touch and asks [tapAt]).
     private var popupBox: Rect? = null
     private var badgeBox: Rect? = null
+    private var timerBox: Rect? = null
 
     /** What a tap opens (plan: tap to open). */
-    sealed interface Tap { data class Popup(val popup: InGamePopup) : Tap; data class Badges(val newest: Int?) : Tap }
+    sealed interface Tap { data class Popup(val popup: InGamePopup) : Tap; data class Badges(val newest: Int?) : Tap
+        /** The leaderboard timer: the Leaderboards tab (approved tap-to-open, 2026-11-04). */
+        data object Timer : Tap }
 
     /** The pop-up or the badge box under a tap at screen [x], [y], or null. Main thread. */
     fun tapAt(x: Float, y: Float): Tap? {
@@ -180,7 +185,9 @@ class GameOverlay(private val activity: Activity, private val actions: PauseActi
         }
         val p = popup
         if (p != null && hit(popupView, popupBox)) return Tap.Popup(p)
+        if (badgeTimers.isNotEmpty() && hit(badgeView, timerBox)) return Tap.Timer
         if (badgeFiles.isNotEmpty() && hit(badgeView, badgeBox)) return Tap.Badges(badgeIds.lastOrNull())
+        if (badgeTimers.isNotEmpty() && hit(badgeView, badgeBox)) return Tap.Timer
         return null
     }
 
@@ -252,15 +259,17 @@ class GameOverlay(private val activity: Activity, private val actions: PauseActi
         activity.window?.decorView?.announceForAccessibility(words)
     }
 
-    /** The challenge badges at Badge place, newest last; an empty list takes them away. Main thread. */
-    fun setChallengeBadges(ids: List<Int>, files: List<File?>) {
+    /** The challenge badges at Badge place, newest last, and the leaderboard timers under them; empty lists take them away. Main thread. */
+    fun setChallengeBadges(ids: List<Int>, files: List<File?>, timers: List<String> = emptyList()) {
         badgeIds = ids
-        if (files.isNotEmpty()) {
+        if (files.isNotEmpty() || timers.isNotEmpty()) {
             val spot = RaSettings.current(activity).badgePlace
             placeWindow(badgeView, badgeAdded, badgeSpot, spot)?.let { badgeAdded = it; if (it) badgeSpot = spot }
         }
         badgeFiles = files
-        badgeView.visibility = if (files.isEmpty()) View.INVISIBLE else View.VISIBLE
+        badgeTimers = timers
+        if (timers.isEmpty()) timerBox = null
+        badgeView.visibility = if (files.isEmpty() && timers.isEmpty()) View.INVISIBLE else View.VISIBLE
     }
 
     private fun advancePopups() {
@@ -324,6 +333,7 @@ class GameOverlay(private val activity: Activity, private val actions: PauseActi
         if (popupAdded) try { activity.windowManager.removeViewImmediate(popupView) } catch (e: Exception) {}
         popupAdded = false
         badgeFiles = emptyList()
+        badgeTimers = emptyList()
         badgeIds = emptyList()
         if (badgeAdded) try { activity.windowManager.removeViewImmediate(badgeView) } catch (e: Exception) {}
         badgeAdded = false

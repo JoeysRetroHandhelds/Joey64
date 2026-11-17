@@ -18,7 +18,8 @@ enum class PopupSpot(val label: String) {
 /**
  * Settings › RetroAchievements (approved tab, 2026-11-05: scratchpad build_ratab.py and
  * build_rapop.py). Defaults as approved. [hardcore] is the Hardcore row's (part B, 2026-11-16): On for a new
- * sign-in, the row locked until RetroAchievements approves Joey64 (`RaHardcore.APPROVED`). Leaderboards aren't here.
+ * sign-in, the row locked until RetroAchievements approves Joey64 (`RaHardcore.APPROVED`). [popLeaderboards]: the
+ * leaderboard pop-ups and timer (approved 2026-11-04, built 2026-11-16), locked with Hardcore.
  */
 data class RaOptions(
     val achievements: Boolean = true,
@@ -28,6 +29,8 @@ data class RaOptions(
     val popUnlocks: Boolean = true,
     val popProgress: Boolean = true,
     val popChallenges: Boolean = true,
+    /** Leaderboard started / result pop-ups and the live timer at Badge place (only Hardcore plays have leaderboards). */
+    val popLeaderboards: Boolean = true,
     val popSummary: Boolean = true,
     val popPlace: PopupSpot = PopupSpot.TopLeft,
     val badgePlace: PopupSpot = PopupSpot.BottomRight,
@@ -90,6 +93,7 @@ object RaSettings {
             popUnlocks = p.getBoolean("popUnlocks", d.popUnlocks),
             popProgress = p.getBoolean("popProgress", d.popProgress),
             popChallenges = p.getBoolean("popChallenges", d.popChallenges),
+            popLeaderboards = p.getBoolean("popLeaderboards", d.popLeaderboards),
             popSummary = p.getBoolean("popSummary", d.popSummary),
             popPlace = PopupSpot.of(p.getString("popPlace", null), d.popPlace),
             badgePlace = PopupSpot.of(p.getString("badgePlace", null), d.badgePlace),
@@ -133,6 +137,7 @@ object RaSettings {
             .putBoolean("popUnlocks", o.popUnlocks)
             .putBoolean("popProgress", o.popProgress)
             .putBoolean("popChallenges", o.popChallenges)
+            .putBoolean("popLeaderboards", o.popLeaderboards)
             .putBoolean("popSummary", o.popSummary)
             .putString("popPlace", o.popPlace.name)
             .putString("badgePlace", o.badgePlace.name)

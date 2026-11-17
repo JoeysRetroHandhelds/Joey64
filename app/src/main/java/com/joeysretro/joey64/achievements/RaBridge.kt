@@ -492,6 +492,10 @@ object RaBridge {
     /** Every achievement of the loaded game, in RetroArch's sections (Active challenges, Recently unlocked...), as JSON. */
     @JvmStatic external fun achievementList(): String
     @JvmStatic external fun lastHash(): String
+    /** The loaded game's leaderboards as JSON ([RaBoard.parseList]); "[]" with none or no game. */
+    @JvmStatic external fun leaderboardList(): String
+    /** Asks the server for a board's entries; the answer is an "lbEntries" event with [req] ([RaLeaderboards.entries]). */
+    @JvmStatic external fun fetchEntries(id: Int, around: Boolean, first: Int, count: Int, req: Int)
     @JvmStatic private external fun awardRequest(id: Int, hash: String, secondsSince: Int, hardcore: Boolean): String
     /** RaHardcore: rc_client's hardcore mode. Turned on with a game loaded, the host restarts the game at its next frame. */
     @JvmStatic external fun setHardcore(on: Boolean)

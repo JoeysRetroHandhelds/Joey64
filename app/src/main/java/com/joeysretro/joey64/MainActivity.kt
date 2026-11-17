@@ -2177,7 +2177,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         raPopups = com.joeysretro.joey64.achievements.RaPopups(this,
             show = { p -> runOnUiThread { if (!destroyed) overlay?.show(p) } },
             hide = { key -> runOnUiThread { if (!destroyed) overlay?.hide(key) } },
-            badges = { ids, files -> runOnUiThread { if (!destroyed) overlay?.setChallengeBadges(ids, files) } },
+            badges = { ids, files, timers -> runOnUiThread { if (!destroyed) overlay?.setChallengeBadges(ids, files, timers) } },
             screenshot = { stateHandler.post { if (st.screenshot() == null) JLog.w(TAG, "screenshot on unlock: not saved") } },
         ).also { com.joeysretro.joey64.achievements.RaBridge.listeners += it }
         // Offline unlocks: RAOfflineProxy picked and not running, so no achievements this game (in place of the summary).
@@ -2391,8 +2391,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     private fun opensAchievements(t: GameOverlay.Tap) = when (t) {
-        is GameOverlay.Tap.Badges -> true
+        is GameOverlay.Tap.Badges, GameOverlay.Tap.Timer -> true
         is GameOverlay.Tap.Popup -> t.popup.kind in setOf(InGamePopup.Kind.Achievement, InGamePopup.Kind.Progress,
+            InGamePopup.Kind.Leaderboard, InGamePopup.Kind.LeaderboardResult,
             InGamePopup.Kind.ChallengeFailed, InGamePopup.Kind.Game) || signsIn(t)
     }
 
@@ -2405,12 +2406,20 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.SignIn
             return
         }
+        // A leaderboard pop-up opens the Leaderboards tab on its board, the timer on the board running (approved 2026-11-04).
+        val board = when {
+            t is GameOverlay.Tap.Timer -> com.joeysretro.joey64.launcher.ingame.PauseScreen.RUNNING_BOARD
+            t is GameOverlay.Tap.Popup && t.popup.kind in setOf(InGamePopup.Kind.Leaderboard, InGamePopup.Kind.LeaderboardResult) ->
+                t.popup.key.substringAfter('-', "").toIntOrNull()
+            else -> null
+        }
         val id = when (t) {
             is GameOverlay.Tap.Badges -> t.newest
-            is GameOverlay.Tap.Popup -> t.popup.key.substringAfter('-', "").toIntOrNull()
+            is GameOverlay.Tap.Popup -> if (board != null) null else t.popup.key.substringAfter('-', "").toIntOrNull()
+            GameOverlay.Tap.Timer -> null
         }
         if (!openMenu(retry = { openAchievementsAt(t) })) return
-        overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Achievements(id)
+        overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Achievements(id, board = board)
     }
 
     /** The menu is done: the game carries on (unless the screen is in the background). */
@@ -4135,6 +4144,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         debugRaEvent = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, i: Intent) {
                 if (i.hasExtra("expired")) { com.joeysretro.joey64.achievements.RaBridge.debugExpired(i.getBooleanExtra("expired", true)); return }
+                // --ez fake true|false: RA_FAKE's made-up account and sets (and leaderboards) in the game's process, whose
+                // launcher (RA_FAKE's receiver) may be gone.
+                if (i.hasExtra("fake")) { com.joeysretro.joey64.achievements.RaBridge.debugFakeAccount(i.getBooleanExtra("fake", true)); return }
                 val f = File(getExternalFilesDir(null), i.getStringExtra("file") ?: "ra_event.json")
                 val text = try { f.readText() } catch (e: Exception) { JLog.e(TAG, "RA_EVENT: can't read $f: $e"); return }
                 // One event per line, sent a second apart (an unlock, then what follows it).

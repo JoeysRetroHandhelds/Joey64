@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.joeysretro.joey64.R
@@ -89,6 +91,8 @@ data class InGamePopup(
         TexPack, TexPackNote,
         /** RetroAchievements Hardcore (approved part B mockup 2026-11-16): what it keeps off (gold), and Hardcore off for this play (grey). */
         Hardcore, HardcoreOff,
+        /** Leaderboards (approved 2026-11-04, toast2.html): started (flag), the result (trophy). */
+        Leaderboard, LeaderboardResult,
         /** The tried driver wasn't faster, or didn't start: back to the one in use (screen 2b). */
         GpuBack }
 }
@@ -178,12 +182,15 @@ fun InGamePopupCard(p: InGamePopup) {
         InGamePopup.Kind.TexPackNote -> R.drawable.ic_alert
         InGamePopup.Kind.Hardcore -> R.drawable.ic_alert
         InGamePopup.Kind.HardcoreOff -> R.drawable.ic_trophy_off
+        InGamePopup.Kind.Leaderboard -> R.drawable.ic_flag
+        InGamePopup.Kind.LeaderboardResult -> R.drawable.ic_trophy
     }
     JoeyToast(icon, p.label, p.name, p.line, iconTint = when (p.kind) {
         InGamePopup.Kind.Problem, InGamePopup.Kind.ChallengeFailed -> JoeyTheme.colors.error
         InGamePopup.Kind.Account, InGamePopup.Kind.Achievement, InGamePopup.Kind.Progress, InGamePopup.Kind.Game,
         InGamePopup.Kind.NoAchievements, InGamePopup.Kind.AchievementsOff, InGamePopup.Kind.GpuFaster,
-        InGamePopup.Kind.Turbo, InGamePopup.Kind.TurboOff, InGamePopup.Kind.NetBlocked, InGamePopup.Kind.Hardcore -> JoeyTheme.colors.gold
+        InGamePopup.Kind.Turbo, InGamePopup.Kind.TurboOff, InGamePopup.Kind.NetBlocked, InGamePopup.Kind.Hardcore,
+        InGamePopup.Kind.Leaderboard, InGamePopup.Kind.LeaderboardResult -> JoeyTheme.colors.gold
         InGamePopup.Kind.NetWait, InGamePopup.Kind.GpuNote, InGamePopup.Kind.TexPackNote -> JoeyTheme.colors.tagMissable
         InGamePopup.Kind.TexPack -> JoeyTheme.colors.accent
         InGamePopup.Kind.GpuOk -> JoeyTheme.colors.good
@@ -193,24 +200,38 @@ fun InGamePopupCard(p: InGamePopup) {
 }
 
 /**
- * The challenge badges (approved toast2.html): the achievements whose challenge is running right
- * now, 30 dp each in one box at Settings › Badge place, newest on the right. A badge that hasn't
- * come yet shows the trophy.
+ * The bottom-right stack (approved toast2.html and ach3.html, 2026-11-04): the challenge badges, the achievements whose
+ * challenge is running right now, 30 dp each, newest on the right (a badge that hasn't come yet shows the trophy);
+ * under them the leaderboard timer, a stopwatch and the live time or score, one line per board running. One box at
+ * Settings › Badge place; the whole box is the tap area. [onTimer] gets where the timer part is, for taps.
  */
 @Composable
-fun ChallengeBadges(files: List<File?>) {
+fun ChallengeBadges(files: List<File?>, timers: List<String> = emptyList(), onTimer: (androidx.compose.ui.geometry.Rect) -> Unit = {}) {
     val c = JoeyTheme.colors
     val shape = RoundedCornerShape(8.dp)
-    Row(
+    androidx.compose.foundation.layout.Column(
         Modifier.padding(12.dp).background(c.surface, shape).border(1.dp, c.border, shape).padding(5.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp), horizontalAlignment = Alignment.End,
     ) {
-        for (f in files) {
-            val picture = rememberBadge(f)
-            val badgeShape = RoundedCornerShape(5.dp)
-            if (picture != null) Image(picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(30.dp).clip(badgeShape))
-            else Box(Modifier.size(30.dp).background(c.chip, badgeShape), contentAlignment = Alignment.Center) {
-                Icon(painterResource(R.drawable.ic_trophy), contentDescription = null, tint = c.gold, modifier = Modifier.size(17.dp))
+        if (files.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            for (f in files) {
+                val picture = rememberBadge(f)
+                val badgeShape = RoundedCornerShape(5.dp)
+                if (picture != null) Image(picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(30.dp).clip(badgeShape))
+                else Box(Modifier.size(30.dp).background(c.chip, badgeShape), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_trophy), contentDescription = null, tint = c.gold, modifier = Modifier.size(17.dp))
+                }
+            }
+        }
+        if (timers.isNotEmpty()) androidx.compose.foundation.layout.Column(
+            Modifier.onGloballyPositioned { onTimer(it.boundsInWindow()) },
+            verticalArrangement = Arrangement.spacedBy(2.dp), horizontalAlignment = Alignment.End,
+        ) {
+            for (t in timers) Row(Modifier.padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(painterResource(R.drawable.ic_stopwatch), contentDescription = null, tint = c.gold, modifier = Modifier.size(16.dp))
+                androidx.compose.material3.Text(t, style = JoeyTheme.type.small.copy(fontFeatureSettings = "tnum"),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = c.text)
             }
         }
     }

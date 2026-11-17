@@ -52,6 +52,27 @@ object RaPopupText {
             if (full) line else "", badge = badge)
     }
 
+    /**
+     * Leaderboard pop-ups (approved 2026-11-04, toast2.html: the small card, top left with the unlocks). Started: the
+     * flag, "Leaderboard started" and its name. Keyed by board ("lb-<id>"), so the result takes the started one's place.
+     */
+    fun lbStarted(lb: JSONObject) = InGamePopup("lb-${lb.optInt("id")}", InGamePopup.Kind.Leaderboard,
+        "*Leaderboard started*", lb.optString("title"), "", compact = true, stayMs = SHORT_MS)
+
+    /**
+     * The result: "Mario Raceway · *1:23.45*" over "Rank 12 of 340" (the scoreboard, once the server answers), adding
+     * the best when this one isn't it. Until then the score is being sent, or waits for a connection.
+     */
+    fun lbResult(lb: JSONObject, score: String, board: JSONObject?, offline: Boolean): InGamePopup {
+        val line = when {
+            board != null && board.optInt("rank") > 0 -> "Rank ${board.optInt("rank")} of ${board.optInt("entries")}" +
+                board.optString("best").takeIf { it.isNotEmpty() && it != board.optString("submitted") }.let { if (it != null) " · your best $it" else "" }
+            offline -> "Offline · sends when you're back online"
+            else -> "Sending your score"
+        }
+        return InGamePopup("lb-${lb.optInt("id")}", InGamePopup.Kind.LeaderboardResult, "${lb.optString("title")} · *$score*", line, "", compact = true)
+    }
+
     /** The play's mode: the start banner has Hardcore in yellow (approved part B mockup 2026-11-16, screen 4), these in words. */
     fun mode(hardcore: Boolean = RaHardcore.on()) = if (hardcore) "Hardcore" else "Softcore"
 
@@ -79,21 +100,24 @@ object RaPopupText {
 /**
  * The game screen's achievement pop-ups: rcheevos' events (on the emulation thread or an HTTP
  * thread) are handled one at a time on a thread of their own, which waits a moment for a badge
- * picture that isn't kept yet, then hands the pop-up to [show]. Challenge badges go to [badges]
- * (the bottom-right stack). Every callback is called on that thread: the caller posts to the main
+ * picture that isn't kept yet, then hands the pop-up to [show]. Challenge badges and the leaderboard timers go to
+ * [badges] (the bottom-right stack: badges above the timer, approved 2026-11-04). Every callback is called on that thread: the caller posts to the main
  * thread. Settings › RetroAchievements is read at each event, so a change applies at once.
  */
 class RaPopups(
     context: Context,
     private val show: (InGamePopup) -> Unit,
     private val hide: (key: String) -> Unit,
-    private val badges: (ids: List<Int>, files: List<File?>) -> Unit,
+    private val badges: (ids: List<Int>, files: List<File?>, timers: List<String>) -> Unit,
     private val screenshot: () -> Unit,
 ) : RaBridge.Listener {
     private val app = context.applicationContext
     private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "ra-popups").apply { isDaemon = true } }
     private val challenges = LinkedHashMap<Int, File?>()
     private val unlocked = HashSet<Int>()
+    /** rcheevos' leaderboard trackers showing (tracker id -> its value), and the boards sent and waiting for a rank. */
+    private val trackers = LinkedHashMap<Int, String>()
+    private val sent = HashMap<Int, Pair<JSONObject, String>>()
     private var offline = false
     /** Whether the game was beaten when it was loaded (or by an unlock since): Beaten shows once, when that changes. */
     private var beaten = true
@@ -141,22 +165,47 @@ class RaPopups(
             "progressHide" -> hide("progress")
             "challengeShow" -> if (a != null) {
                 challenges[a.optInt("id")] = badge(a.optString("badge"))
-                if (o.popChallenges) badges(challenges.keys.toList(), challenges.values.toList())
+                stack(o)
             }
             "challengeHide" -> if (a != null) {
                 val id = a.optInt("id")
                 challenges.remove(id)
-                if (o.popChallenges) badges(challenges.keys.toList(), challenges.values.toList()) else badges(emptyList(), emptyList())
+                stack(o)
                 // rcheevos hides the badge both when the challenge is won and when it's lost; an unlock
                 // comes in the same frame when it's won, so it's lost if none came by now.
                 worker.schedule({
                     if (id !in unlocked && RaSettings.current(app).popChallenges) show(RaPopupText.challengeFailed(a, RaBadges.kept(app, a.optString("badge"))))
                 }, FAILED_WAIT_MS, TimeUnit.MILLISECONDS)
             }
+            // Leaderboards (approved 2026-11-04): only Hardcore plays have them, rcheevos runs them only then.
+            "leaderboardStarted" -> ev.optJSONObject("leaderboard")?.let { if (o.popLeaderboards) show(RaPopupText.lbStarted(it)) }
+            "leaderboardSubmitted" -> ev.optJSONObject("leaderboard")?.let { lb ->
+                val score = lb.optString("value")
+                sent[lb.optInt("id")] = lb to score
+                if (o.popLeaderboards) show(RaPopupText.lbResult(lb, score, null, offline))
+            }
+            "scoreboard" -> ev.optJSONObject("scoreboard")?.let { b ->
+                val (lb, score) = sent.remove(b.optInt("id")) ?: (ev.optJSONObject("leaderboard") ?: return) to b.optString("submitted")
+                if (o.popLeaderboards) show(RaPopupText.lbResult(lb, b.optString("submitted").ifEmpty { score }, b, offline))
+            }
+            // A failed attempt has no pop-up of its own in the approved drawing: its timer goes.
+            "leaderboardFailed" -> ev.optJSONObject("leaderboard")?.let { JLog.i(TAG, "leaderboard failed: ${it.optString("title")}") }
+            "trackerShow", "trackerUpdate" -> ev.optJSONObject("tracker")?.let { t ->
+                val changed = trackers.put(t.optInt("id"), t.optString("display")) != t.optString("display")
+                if (changed) stack(o)
+            }
+            "trackerHide" -> ev.optJSONObject("tracker")?.let { t -> if (trackers.remove(t.optInt("id")) != null) stack(o) }
             "disconnected" -> offline = true
             "reconnected" -> offline = false
-            "reset" -> { challenges.clear(); badges(emptyList(), emptyList()) }
+            "reset" -> { challenges.clear(); trackers.clear(); sent.clear(); stack(o) }
         }
+    }
+
+    /** The bottom-right stack as it is now, each part as its row in Settings › RetroAchievements says. */
+    private fun stack(o: RaOptions) {
+        val ids = if (o.popChallenges) challenges.keys.toList() else emptyList()
+        val files = if (o.popChallenges) challenges.values.toList() else emptyList()
+        badges(ids, files, if (o.popLeaderboards) trackers.values.toList() else emptyList())
     }
 
     private companion object {

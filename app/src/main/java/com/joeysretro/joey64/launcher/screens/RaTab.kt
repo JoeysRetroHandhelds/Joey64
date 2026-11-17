@@ -342,7 +342,7 @@ private fun SignedIn(account: RaBridge.Account, onHints: (List<Hint>) -> Unit, m
     // then debug builds with files/dev_hardcore), else locked "Not approved yet" as before.
     val hcAvailable = remember { com.joeysretro.joey64.achievements.RaHardcore.available(context) }
     val hints = when (focused) {
-        "lb" -> tabHints
+        "lb" -> if (hcAvailable) listOf(Hint("A", "Change")) + tabHints else tabHints
         "hc" -> if (hcAvailable) listOf(Hint("A", "Change")) + tabHints else tabHints
         "out" -> listOf(Hint("A", "Sign out")) + tabHints
         else -> listOf(Hint("A", "Change")) + tabHints
@@ -359,7 +359,7 @@ private fun SignedIn(account: RaBridge.Account, onHints: (List<Hint>) -> Unit, m
     // unlocks) have pictures or previews of their own, so A opens them; the panel shows what's set.
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
     val (title, text) = if (focused == "off") "Offline unlocks" to OfflineRoute.describe(o.offlineBy, proxyRunning, waiting)
-        else describe(focused, account)
+        else describe(focused, account, hcAvailable)
     val now = when (focused) {
         "place" -> o.popPlace.label; "bplace" -> o.badgePlace.label; "dur" -> "${o.popSeconds} seconds"
         "snd" -> o.unlockSound.label; "off" -> OfflineRoute.rowValue(o.offlineBy, proxyRunning, waiting); else -> null
@@ -394,7 +394,8 @@ private fun SignedIn(account: RaBridge.Account, onHints: (List<Hint>) -> Unit, m
                 Toggle("pun", "Unlocks", o.popUnlocks) { x, v -> x.copy(popUnlocks = v) }
                 Toggle("ppr", "Progress", o.popProgress) { x, v -> x.copy(popProgress = v) }
                 Toggle("pch", "Challenge badges", o.popChallenges) { x, v -> x.copy(popChallenges = v) }
-                JoeyRow("Leaderboards", sideways = true, value = "Needs Hardcore", enabled = false, lock = true, onFocused = { if (it) focused = "lb" })
+                if (hcAvailable) Toggle("lb", "Leaderboards", o.popLeaderboards) { x, v -> x.copy(popLeaderboards = v) }
+                else JoeyRow("Leaderboards", sideways = true, value = "Needs Hardcore", enabled = false, lock = true, onFocused = { if (it) focused = "lb" })
                 Toggle("psum", "Game start summary", o.popSummary) { x, v -> x.copy(popSummary = v) }
                 JoeyRow("Pop-up place", sideways = true, value = o.popPlace.label, onFocused = { if (it) focused = "place" }) { picker = "place" }
                 JoeyRow("Badge place", sideways = true, value = o.badgePlace.label, onFocused = { if (it) focused = "bplace" }) { picker = "bplace" }
@@ -487,7 +488,7 @@ private fun SignOutPrompt(count: Int, onDismiss: () -> Unit, onSignOut: () -> Un
 private const val HARDCORE_TEXT = "Achievements and leaderboards count fully. While it's on: no loading states, rewind, slow motion, " +
     "frame advance, cheats or macros. Saving states, fast-forward and pausing still work."
 
-private fun describe(key: String, account: RaBridge.Account): Pair<String, String> = when (key) {
+private fun describe(key: String, account: RaBridge.Account, lbOpen: Boolean): Pair<String, String> = when (key) {
     "ach" -> "Achievements" to "Off: games start without RetroAchievements. Applies from the next game."
     "out" -> "Sign out" to "Signs ${account.display} out of Joey64 on this device. Joey64 forgets its sign-in key."
     "hc" -> "Hardcore" to "RetroAchievements hasn't approved Joey64 yet, so unlocks count as softcore and leaderboard scores aren't saved."
@@ -500,7 +501,9 @@ private fun describe(key: String, account: RaBridge.Account): Pair<String, Strin
     "pun" -> "Unlocks" to "A pop-up for each achievement you unlock."
     "ppr" -> "Progress" to "A small pop-up as you get closer to an achievement that counts up, like 3 / 16."
     "pch" -> "Challenge badges" to "A badge in the corner while a challenge is on, gone when you win or fail it."
-    "lb" -> "Leaderboards" to "Leaderboard pop-ups need Hardcore, which waits for RetroAchievements to approve Joey64."
+    "lb" -> "Leaderboards" to if (lbOpen)
+        "When a leaderboard starts, its time or score as you play, and your result and rank. Only Hardcore plays have leaderboards."
+        else "Leaderboard pop-ups need Hardcore, which waits for RetroAchievements to approve Joey64."
     "psum" -> "Game start summary" to "When a game starts: its achievement set and how much of it you have."
     "place" -> "Pop-up place" to "Where unlock, progress and game-start pop-ups show over the game. Challenge badges and the leaderboard timer have their own place."
     "bplace" -> "Badge place" to "Where challenge badges and the leaderboard timer show over the game."

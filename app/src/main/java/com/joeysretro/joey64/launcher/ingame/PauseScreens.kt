@@ -52,6 +52,10 @@ import com.joeysretro.joey64.launcher.theme.JoeyTheme
 
 /** What the game screen shows over the paused game (plan, Phase 3). */
 sealed interface PauseScreen {
+    companion object {
+        /** [Achievements.board] for the leaderboard timer: the board that's running. */
+        const val RUNNING_BOARD = -1
+    }
     /** The menu; [from] is the row focus goes back to (the one that opened the picker). */
     data class Menu(val from: MenuRow = MenuRow.Resume) : PauseScreen
     /** The slot picker, for Save state ([save]) or Load state, over [slots] (Auto first, then Slots 1-10). */
@@ -61,7 +65,8 @@ sealed interface PauseScreen {
     /** Cheats over the paused game (Phase 6) for [game]. B goes back to the menu; the game takes the changes on resume. */
     /** The game's achievements over the paused game (Phase 7), on the row with [focusId] when a tap opened it. B goes back to the menu. */
     /** [toGame]: opened by the Achievements hotkey, so B goes back to the game. */
-    data class Achievements(val focusId: Int? = null, val toGame: Boolean = false) : PauseScreen
+    /** [board]: opened on the Leaderboards tab at that board ([RUNNING_BOARD]: the one running), from a leaderboard pop-up or the timer. */
+    data class Achievements(val focusId: Int? = null, val toGame: Boolean = false, val board: Int? = null) : PauseScreen
     data class Cheats(val game: com.joeysretro.joey64.launcher.screens.CheatsGame, /** "Select + L3", or null with no hotkey for it. */ val gameSharkKeys: String? = null) : PauseScreen
     /** Game settings over the paused game (approved mockup 2026-11-07, screen 9) for [saveName]. B goes back to the menu. */
     data class GameSettings(val saveName: String) : PauseScreen
@@ -236,7 +241,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
         return
     }
     if (screen is PauseScreen.Achievements) {
-        com.joeysretro.joey64.launcher.screens.InGameAchievements(title, screen.focusId,
+        com.joeysretro.joey64.launcher.screens.InGameAchievements(title, screen.focusId, focusBoard = screen.board,
             backLabel = if (screen.toGame) "Back to the game" else "Back to pause menu") { actions.closeAchievements() }
         return
     }

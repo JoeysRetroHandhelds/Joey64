@@ -96,7 +96,13 @@ struct Json {
         s += '"';
         return *this;
     }
-    Json& num(const char* k, double v) { sep(); char b[64]; snprintf(b, sizeof b, "\"%s\":%.6g", k, v); s += b; return *this; }
+    // Whole numbers go out exactly: %.6g sent unlock times (Unix seconds) as 1.7317e+09, up to half a day off.
+    Json& num(const char* k, double v) {
+        sep(); char b[64];
+        if (v == (double)(long long)v && v > -9e15 && v < 9e15) snprintf(b, sizeof b, "\"%s\":%lld", k, (long long)v);
+        else snprintf(b, sizeof b, "\"%s\":%.6g", k, v);
+        s += b; return *this;
+    }
     Json& boolean(const char* k, bool v) { sep(); s += '"'; s += k; s += "\":"; s += v ? "true" : "false"; return *this; }
     Json& raw(const char* k, const std::string& v) { sep(); s += '"'; s += k; s += "\":"; s += v; return *this; }
     std::string done() { return s + "}"; }
@@ -243,7 +249,7 @@ void onEvent(const rc_client_event_t* ev, rc_client_t*) {
     }
     if (ev->leaderboard_scoreboard) {
         Json s;
-        s.str("submitted", ev->leaderboard_scoreboard->submitted_score).str("best", ev->leaderboard_scoreboard->best_score)
+        s.num("id", ev->leaderboard_scoreboard->leaderboard_id).str("submitted", ev->leaderboard_scoreboard->submitted_score).str("best", ev->leaderboard_scoreboard->best_score)
             .num("rank", ev->leaderboard_scoreboard->new_rank).num("entries", ev->leaderboard_scoreboard->num_entries);
         j.raw("scoreboard", s.done());
     }
@@ -575,6 +581,65 @@ JNIEXPORT jstring JNICALL RAJNI(awardRequest)(JNIEnv* env, jclass, jint id, jstr
         if (h) env->ReleaseStringUTFChars(hash, h);
     }
     return jstr(env, out.c_str());
+}
+
+// The loaded game's leaderboards (approved Leaderboards tab, 2026-11-04): id, title, description, the live value while
+// it's tracking, state (rc_client's: 0 inactive, 1 active, 2 tracking, 3 disabled), format and lowerIsBetter.
+JNIEXPORT jstring JNICALL RAJNI(leaderboardList)(JNIEnv* env, jclass) {
+    std::string out = "[";
+    if (g_client && rc_client_is_game_loaded(g_client)) {
+        if (rc_client_leaderboard_list_t* list = rc_client_create_leaderboard_list(g_client, RC_CLIENT_LEADERBOARD_LIST_GROUPING_NONE)) {
+            for (uint32_t b = 0; b < list->num_buckets; b++) {
+                const auto& bucket = list->buckets[b];
+                for (uint32_t i = 0; i < bucket.num_leaderboards; i++) {
+                    const rc_client_leaderboard_t* l = bucket.leaderboards[i];
+                    if (out.size() > 1) out += ',';
+                    Json j;
+                    j.num("id", l->id).str("title", l->title).str("description", l->description).str("value", l->tracker_value)
+                        .num("state", l->state).num("format", l->format).boolean("lowerIsBetter", l->lower_is_better != 0)
+                        .num("set", bucket.subset_id);
+                    out += j.done();
+                }
+            }
+            rc_client_destroy_leaderboard_list(list);
+        }
+    }
+    out += "]";
+    return jstr(env, out.c_str());
+}
+
+namespace {
+void entriesDone(int result, const char* error, rc_client_leaderboard_entry_list_t* list, rc_client_t*, void* data) {
+    Json j;
+    j.str("event", "lbEntries").num("req", (double)(intptr_t)data).num("result", result)
+        .str("error", result == RC_OK ? "" : (error ? error : rc_error_str(result)));
+    if (list) {
+        std::string arr = "[";
+        for (uint32_t i = 0; i < list->num_entries; i++) {
+            const rc_client_leaderboard_entry_t& e = list->entries[i];
+            char url[256] = {0};
+            rc_client_leaderboard_entry_get_user_image_url(&e, url, sizeof url);
+            Json x;
+            x.str("user", e.user).str("display", e.display).num("submitted", (double)e.submitted).num("rank", e.rank)
+                .num("index", e.index).str("avatar", url);
+            if (arr.size() > 1) arr += ',';
+            arr += x.done();
+        }
+        arr += "]";
+        j.num("total", list->total_entries).num("userIndex", list->user_index).raw("entries", arr);
+        rc_client_destroy_leaderboard_entry_list(list);
+    }
+    emit(j.done());
+}
+} // namespace
+
+// A leaderboard's entries from the server: [around] the signed-in user's place, else [count] from [first] (1 = the top).
+// The answer comes as an "lbEntries" event with [req].
+JNIEXPORT void JNICALL RAJNI(fetchEntries)(JNIEnv*, jclass, jint id, jboolean around, jint first, jint count, jint req) {
+    void* data = (void*)(intptr_t)req;
+    if (!g_client || !rc_client_is_game_loaded(g_client)) { entriesDone(RC_NO_GAME_LOADED, "no game", nullptr, g_client, data); return; }
+    if (around) rc_client_begin_fetch_leaderboard_entries_around_user(g_client, (uint32_t)id, (uint32_t)count, entriesDone, data);
+    else rc_client_begin_fetch_leaderboard_entries(g_client, (uint32_t)id, (uint32_t)first, (uint32_t)count, entriesDone, data);
 }
 
 // Whether rc_client has a game loaded (it then retries its own unlocks).
