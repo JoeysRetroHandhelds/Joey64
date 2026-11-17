@@ -338,7 +338,24 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
                 }
             }
             is PauseScreen.Picker -> SlotGrid(screen, now, onFocus = { pickerAt = it }) { actions.pick(screen.save, it) }
-            is PauseScreen.Restart -> Column {
+            // In Hardcore (approved mockup A 2026-11-16, joey64-notes hardcore-restart.png): the line says a restart goes
+            // Casual, Later is focused and keeps the change for the next start.
+            is PauseScreen.Restart -> if (hardcore == true) Column {
+                // PopupTitle's layout, with the Casual part brighter as drawn.
+                Column(Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH).padding(bottom = 6.dp)) {
+                    Text("Restart to use the new settings?", style = JoeyTheme.type.popupTitle, color = JoeyTheme.colors.text)
+                    Text(buildAnnotatedString {
+                        append(screen.subtitle + " Hardcore can't go on from where you are: ")
+                        withStyle(SpanStyle(color = JoeyTheme.colors.text, fontWeight = FontWeight.SemiBold)) {
+                            append("restarting here plays the rest in Casual.")
+                        }
+                    }, style = JoeyTheme.type.note, color = JoeyTheme.colors.textDim)
+                }
+                com.joeysretro.joey64.launcher.components.JoeyRow("Later", Modifier.initialFocus(),
+                    detail = "Stay in Hardcore · the new settings start next time") { actions.restartLater() }
+                com.joeysretro.joey64.launcher.components.JoeyRow("Restart in Casual",
+                    detail = "Keeps where you are · unlocks count as softcore for this play") { actions.restartNow() }
+            } else Column {
                 PopupTitle("Restart to use the new settings?", screen.subtitle)
                 com.joeysretro.joey64.launcher.components.JoeyRow("Restart now", Modifier.initialFocus(),
                     detail = "Keeps where you are, then starts again from there") { actions.restartNow() }
