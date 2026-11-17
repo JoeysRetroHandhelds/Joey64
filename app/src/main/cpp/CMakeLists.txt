@@ -20,7 +20,8 @@ add_library(joey64host SHARED
     achievements.cpp
     netplay_server.cpp
     upnp.cpp
-    texpack_build.cpp)
+    texpack_build.cpp
+    hitch_monitor.cpp)
 
 add_subdirectory(third_party/libadrenotools)
 

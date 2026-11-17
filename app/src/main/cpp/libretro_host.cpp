@@ -47,6 +47,7 @@
 #include "netplay_server.h"
 #include "upnp.h"
 #include <sys/system_properties.h>
+#include "hitch_monitor.h"
 
 // In a netplay room every player's game must take the same inputs at the same input count, so anything that
 // runs, skips or repeats frames on one side only is refused while one is on: loading a state, Reset, rewind,
@@ -1116,6 +1117,7 @@ void logStats() {
          g_statRunMs / g_statRuns, split, g_statWaitMs / g_statRuns, g_statAudioWaitMs / g_statRuns, fillMs,
          targetMs, underruns, g_audio.outputLatencyMs(), lat, g_statSlowestMs, g_statSlowFrames,
          gpuClockText().c_str(), Thermal::text().c_str(), audioIn, audioOut);
+    hitch::logStatus();
     if (g_statSlowFrames > 0) {
         std::string list;
         char one[40];
@@ -1230,6 +1232,7 @@ void loadSave() {
 }
 
 void flushSave() {
+    hitch::Span span(hitch::SAVE);
     auto* mem = static_cast<uint8_t*>(core.get_memory_data(RETRO_MEMORY_SAVE_RAM));
     size_t size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
     if (!mem || !size || g_savePath.empty()) return;
@@ -1367,6 +1370,7 @@ int stateReadyFrames() {
 // Serves a waiting request. [ready]: the core has run long enough. Too early, a request waits for a
 // later frame, unless [failEarly] (paused: no frame is coming), when it fails.
 void serveStateRequest(bool ready, bool failEarly) {
+    hitch::Span span(hitch::STATE);
     if (!g_statePending) return;
     std::lock_guard<std::mutex> lk(g_stateMutex);
     StateRequest* r = g_stateReq;
@@ -1551,6 +1555,8 @@ void runLoop() {
     const bool pin = !(pinEnv && *pinEnv == '0');
     if (pin) pinToBigCores(); else LOGI("emu thread not pinned (N64_PIN=0)");
     setEmuThreadPriority();
+    // Stutter and hang monitor (hitch_monitor.h, hakuX's): on unless N64_HITCH=0.
+    hitch::emuThread(g_rdpWaitNs, g_rdpWaits);
     // DEV (N64_GPU_TURBO=2): Adreno GPU clock pinned by a KGSL power constraint held by a keep-alive context
     // (DroidDeck's way, gpu_clock_pin.cpp); kept for the Portal slow-mode check (GPU stuck at 220 MHz). Mode 1
     // (adrenotools max clocks) was removed 2026-11-05 (Joey): no fps gain on the Odin 3 or Duo, more heat.
@@ -1854,10 +1860,14 @@ void runLoop() {
                 ffLastShown = now; ffSinceShown = 0;
             }
         }
+        // The monitor's frame window: from here (pacing) to the next frame's pacing. Not measured: fast-forward, a
+        // benchmark, paused (a frame advance step), rewind, slow motion.
+        hitch::rates(g_av.timing.fps);
+        hitch::frame(ff || g_bench || g_paused || rewinding || slow);
         if (!ff && !g_bench && !g_paused && !rewinding) { // paused: a frame advance step, no audio to wait for
             auto t0 = std::chrono::steady_clock::now();
             g_audio.setPanelRefreshNs(g_vulkan ? g_vk.refreshNs() : 0);
-            if (!slow) g_audio.waitForRoom();
+            if (!slow) { hitch::Span span(hitch::PACE); g_audio.waitForRoom(); }
             double aw = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             g_statAudioWaitMs += aw;
             traceFrame(aw);
@@ -1868,14 +1878,14 @@ void runLoop() {
             // Dev: N64_SLOW_PCT=<n> caps the game at n% of full speed, as a device that can't keep up (time stretch test).
             static const double capSpeed = getenv("N64_SLOW_PCT") ? std::clamp(atoi(getenv("N64_SLOW_PCT")), 10, 100) / 100.0 : 1.02;
             capNext += std::chrono::microseconds((long long)(1e6 / (g_av.timing.fps * (slow ? slowPct / 100.0 : capSpeed))));
-            if (capNext > now) std::this_thread::sleep_until(capNext);
+            if (capNext > now) { hitch::Span span(hitch::PACE); std::this_thread::sleep_until(capNext); }
             else if (now - capNext > std::chrono::milliseconds(50)) capNext = now; // behind: don't sprint
         }
         // One retro_run, shown or not; the frame's time (acquire + run + present), or < 0 when the swapchain was rebuilt.
         auto runOne = [&](bool showIt) -> double {
             if (g_vulkan) {
                 auto t0 = std::chrono::steady_clock::now();
-                if (!g_vk.beginFrame(showIt)) return -1;   // swapchain recreated, try again
+                if (!g_vk.beginFrame(showIt)) { hitch::unmeasured(); return -1; }   // swapchain recreated, try again
                 auto t1 = std::chrono::steady_clock::now();
                 const int presentsBefore = g_statPresents;
                 runCoreFrame();
@@ -1911,14 +1921,6 @@ void runLoop() {
                 auto t2 = std::chrono::steady_clock::now();
                 g_statRunMs += std::chrono::duration<double, std::milli>(t2 - t1).count();
                 double frameMs = std::chrono::duration<double, std::milli>(t2 - t0).count();
-                // Dev: N64_HITCH_LOG=1 logs every frame over 33 ms split into acquire (beginFrame), emulation
-                // (retro_run, which includes parallel-RDP's scanout) and present (endFrame), to find what a hitch is.
-                static const bool hitchLog = getenv("N64_HITCH_LOG") && *getenv("N64_HITCH_LOG") == '1';
-                if (hitchLog && frameMs > 33.0)
-                    LOGI("hitch: %.1f ms frame: acquire %.1f, emulation %.1f, present %.1f ms (frame %u)", frameMs,
-                         std::chrono::duration<double, std::milli>(t1 - t0).count(),
-                         std::chrono::duration<double, std::milli>(t3 - t1).count(),
-                         std::chrono::duration<double, std::milli>(t2 - t3).count(), g_framesRun.load());
                 return frameMs;
             }
             auto t0 = std::chrono::steady_clock::now();
@@ -2030,13 +2032,16 @@ void runLoop() {
                 applyCheats();
                 LOGI("Hardcore on: game restarted");
             }
-            if (g_framesRun > 60)
+            if (g_framesRun > 60) {
+                hitch::Span span(hitch::STATE);
                 g_rewind.record([] { return core.serialize_size(); }, [](void* d, size_t n) { return core.serialize(d, n); },
                                 [](std::vector<uint8_t>& p) { Cheevos::captureProgress(p); });
+            }
         }
         // State-request ring: normal play only (not fast-forward, rewind, a benchmark, or before a dev state loads).
+        { hitch::Span span(hitch::STATE);
         g_stateRing.frame(!rewinding && !ff && !g_bench && !g_paused && stateWait <= 0, g_av.timing.fps,
-                          [] { return core.serialize_size(); }, [](void* d, size_t n) { return core.serialize(d, n); });
+                          [] { return core.serialize_size(); }, [](void* d, size_t n) { return core.serialize(d, n); }); }
         logStats();
         if (stateWait > 0 && --stateWait == 0) {
             std::vector<char> s;

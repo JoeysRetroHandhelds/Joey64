@@ -1,5 +1,6 @@
 #include "joeylog.h"
 #include "audio_out.h"
+#include "hitch_monitor.h"
 #include <android/log.h>
 #include <algorithm>
 #include <cstdlib>
@@ -220,6 +221,7 @@ void AudioOut::takeStats(bool keepingUp, double& fillMs, double& targetMs, int& 
 }
 
 // Returns false if the ring stayed full (paused / stalled consumer).
+
 bool AudioOut::push(float s) {
     size_t w = w_.load(std::memory_order_relaxed);
     size_t next = (w + 1) % cap_;
@@ -228,6 +230,7 @@ bool AudioOut::push(float s) {
         // Once a wait gave up, drop samples without waiting until the consumer moves again: a stream that stalls
         // without reporting an error cost ~0.5 s on every write, so the game crawled.
         if (lost_ || stalled_ || ++spins > 2000) { stalled_ = true; return false; } // ~give up, avoid deadlock on pause
+        hitch::Span span(hitch::AUDIO);
         std::this_thread::sleep_for(std::chrono::microseconds(250));
     }
     stalled_ = false;

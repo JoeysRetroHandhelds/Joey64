@@ -2,6 +2,7 @@
 #include "joeylog.h"
 #include "vk_context.h"
 #include "display_opts.h"
+#include "hitch_monitor.h"
 #include <android/log.h>
 #include <algorithm>
 #include <cmath>
@@ -512,7 +513,11 @@ void VkContext::markLost(const char* what, VkResult r) {
 // A frame's fence: 5 s at most, far past any frame's GPU work (Odin 3 at 8x: under 20 ms).
 bool VkContext::waitFrameFence(uint32_t i) {
     if (lost_) return false;
-    VkResult r = vkWaitForFences(device_, 1, &frameFences_[i], VK_TRUE, 5000000000ull);
+    VkResult r;
+    {
+        hitch::Span span(hitch::FENCE);
+        r = vkWaitForFences(device_, 1, &frameFences_[i], VK_TRUE, 5000000000ull);
+    }
     if (r == VK_SUCCESS) return true;
     markLost(r == VK_TIMEOUT ? "a frame's GPU work wasn't done in 5 s" : "vkWaitForFences", r);
     return false;
@@ -562,7 +567,11 @@ bool VkContext::beginFrame(bool show) {
 bool VkContext::acquireImage() {
     currentAcquire_ = acquireSems_[acquireSlot_];
     acquireSlot_ = (acquireSlot_ + 1) % (uint32_t)acquireSems_.size();
-    VkResult r = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, currentAcquire_, VK_NULL_HANDLE, &index_);
+    VkResult r;
+    {
+        hitch::Span span(hitch::ACQUIRE);
+        r = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, currentAcquire_, VK_NULL_HANDLE, &index_);
+    }
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
         vkDeviceWaitIdle(device_); destroySwapchain(); createSwapchain();
         return false;
@@ -609,7 +618,7 @@ void VkContext::paceFrame() {
     lastTargetNs_ = target;
     desiredNs_ = target - refreshNs_ / 2; // half a refresh early: the compositor rounds up to the slot
     struct timespec ts{(time_t)((target - budget) / 1000000000ull), (long)((target - budget) % 1000000000ull)};
-    if ((int64_t)(target - budget) > now) clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, nullptr);
+    if ((int64_t)(target - budget) > now) { hitch::Span span(hitch::PACE); clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, nullptr); }
     frameStartNs_ = -1; // set once the image is acquired: work excludes swapchain waits
 }
 
@@ -912,12 +921,14 @@ void VkContext::present(bool newImage) {
     }
     VkResult r;
     {
+        hitch::Span span(hitch::PRESENT);
         std::lock_guard<std::mutex> lk(queueMutex_);
         // A failed submit signals neither the fence nor the semaphore the present would wait for.
         VkResult s = vkQueueSubmit(queue_, 1, &si, frameFences_[sync_]);
         if (s != VK_SUCCESS) { markLost("vkQueueSubmit", s); r = s; }
         else r = vkQueuePresentKHR(queue_, &pi);
     }
+    if (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR) hitch::presented(when.presentID, newImage, monoNs(), (int64_t)when.desiredPresentTime);
     if (r == VK_ERROR_DEVICE_LOST && !lost_) markLost("vkQueuePresentKHR", r);
     waitSems_.clear(); coreCmds_.clear(); signalSem_ = VK_NULL_HANDLE;
     presented_ = true;
@@ -951,6 +962,7 @@ void VkContext::collectTiming() {
     uint32_t n = 8;
     if (getPastTiming_(device_, swapchain_, &n, past) < 0) return;
     for (uint32_t i = 0; i < n; ++i) {
+        hitch::shown(past[i].presentID, (int64_t)past[i].actualPresentTime, (int64_t)past[i].earliestPresentTime, refreshNs_);
         if (presentId_ - past[i].presentID >= kTimingRing) continue; // too old for the ring
         int64_t poll = presentPollNs_[past[i].presentID % kTimingRing];
         if (!poll || !past[i].actualPresentTime) continue;
