@@ -15,25 +15,31 @@ when a new one is out.
 ## What's special
 
 - **It sets itself up for your device.** Joey64 looks at the GPU and its driver and picks the renderer
-  (parallel-RDP on Vulkan, or GLideN64), the driver (a bundled Turnip build on Adreno, the system driver on
-  Mali) and the tuning that measured best on that kind of chip. There is nothing to configure before the first
-  game, and every choice can still be changed.
+  (parallel-RDP on Vulkan, or GLideN64), the driver (Joey64 bundles a dozen Vulkan drivers, mostly Turnip
+  builds, and uses the one that measured fastest on that GPU, or the system driver where that is best) and the
+  tuning that measured best on that kind of chip. On a GPU we haven't tested, a driver that won't start a game
+  is set aside and the next one is tried by itself, and Auto keeps looking for a faster one while you play.
+  There is nothing to configure before the first game, and every choice can still be changed.
 - **Fixes for each game, built in.** A game that needs a setting, a cheat-style patch or a different renderer
   gets it automatically, matched by its ROM, with the reason written down in `gamedb/games.json`. That includes
   ROM hacks, prototypes, homebrew and 64DD disk dumps that don't run as dumped.
 - **Lower lag.** Each frame is shown about one frame (~16 ms) sooner than mupen64plus normally does. Audio
   uses an exclusive low-latency stream where the device allows it, and the audio buffer grows only when a device
-  needs it. A frame pacing setting trades a little lag for steadier motion on 120 Hz screens.
+  needs it. On 120 Hz screens the Steady frame pacing setting gives even motion, and switches to timed pacing
+  by itself when a game would otherwise build up lag. Run-ahead (1-4 frames, off unless you turn it on) takes
+  off more.
 - **Faster parallel-RDP.** Joey64 skips refreshes that would show the same picture again, and uses a "smart
   sync" that waits for the GPU only when the game reads back what it drew. Games that need exact framebuffer
   reads (Pokémon Snap's photos, Resident Evil 2) keep them without paying for full synchronous mode everywhere.
+  On Adreno, the GPU clock is kept up while a game runs, so frames that wait for the GPU don't run long.
 - **Netplay built for handhelds.** Host a room on your own device and share an 8-character room code. Rooms on
   the same Wi-Fi show up by themselves, and public rooms are listed worldwide. The router's port is opened for
   you (NAT-PMP or UPnP) and input delay adjusts to the connection while you play. No relay server sits in the
   middle. It supports up to 4 players, and checks that everyone has the same ROM.
 - **Works with RetroArch.** Joey64 reads and writes RetroArch's Mupen64Plus-Next saves and save states as they
   are, imports a RetroArch setup on first run, and uses your RetroArch shader presets (.slangp, through
-  librashader) and overlay packs straight from their folders.
+  librashader) and overlay packs straight from their folders. Saves and states from M64Plus FZ can be imported
+  too.
 - **Transfer Pak for every player.** Each player can have their own Game Boy game and save (Pokémon Stadium 1
   and 2), read from your Game Boy folders, including RetroArch's Gambatte or mGBA saves.
 - **64DD.** Disk games run with your own IPL BIOS, alone or with their cartridge (F-Zero X Expansion Kit,
@@ -61,12 +67,16 @@ when a new one is out.
   Zelda, The").
 - Per-game Saves page (back up, restore or delete the game's save, play from any state) and Screenshots page
   (view, share, delete).
-- Continue where you quit, or pick where to start from a list of quit saves and slots with their pictures.
+- Continue where you quit, or pick where to start from a list of auto save states and slots with their
+  pictures.
 
 ### Video
 - Renderers: parallel-RDP (Vulkan, accurate) and GLideN64 (OpenGL ES), chosen per device and per game, or by
   hand.
-- Resolution: native by default, upscaling up to 4x or 8x where the GPU allows it.
+- Resolution: native by default, upscaling up to 4x or 8x where the GPU allows it. On devices where the higher
+  sizes run slow, the setting says so.
+- Texture packs: GLideN64 .hts packs, read where they are, and PNG packs, converted once in the background,
+  matched to each game (on parallel-RDP).
 - Picture shape: Auto, 4:3, 16:9, stretch, integer scaling. Widescreen and 60 fps: switch them on and each game
   that has a code for it gets one (or pick a game's version yourself); games with their own 16:9 mode get the
   16:9 picture for it.
@@ -83,13 +93,15 @@ when a new one is out.
 
 ### Controls
 - Up to 4 players, each with any controller, the built-in controls or touch controls. Common controllers are
-  mapped to the N64 layout automatically.
+  mapped to the N64 layout automatically. On handhelds with an Xbox/Nintendo layout switch (AYN Odin, Retroid
+  Pocket, Anbernic RG477M), each N64 button stays on the same physical button either way. Handhelds without
+  sticks get the stick on the D-pad and a hold button for the C buttons.
 - Remap every button, per player and per game. Profiles to save and load a mapping.
 - Stick feel: range, response curve, octagon gate like a real N64 stick, invert, swap, dead zone and
   anti-dead zone, trigger threshold, with a live preview.
 - Tap to hold, turbo (5-20 presses a second) and button macros.
 - Paks per player: Controller Pak, Rumble Pak (with strength, on the controller or the device), Transfer Pak,
-  chosen automatically for each game.
+  chosen automatically for each game (games that only use the Controller Pak never get a Rumble Pak).
 - Touch controls with a layout editor (move, resize, add a D-pad, fast-forward, save or load state, screenshot
   and macro buttons). They hide when a controller is used and come back on a touch.
 - Hotkeys (a hotkey button plus another button, or any button on its own): save and load state, change slot,
@@ -98,14 +110,14 @@ when a new one is out.
 - A controller that disconnects pauses the game until it comes back (or another player takes over).
 
 ### Playing
-- Save states: 10 slots with pictures, plus the quit save and up to 10 older quit saves, all in RetroArch's
-  format. Undo the last load or save.
+- Save states: 10 slots with pictures, plus an auto save state when you quit and up to 10 older ones, all in
+  RetroArch's format. Undo the last load or save.
 - Rewind (up to 5 minutes back), fast-forward (125-400%, toggle, hold or by trigger pressure), slow motion, frame
   advance.
 - Cheats: GameShark lists downloaded for each game, with notes, and a GameShark button for codes that need one.
 - RetroAchievements: sign in, unlock pop-ups and sounds, progress, subsets as tabs. Unlocks made offline are
   sent later, or through RAOfflineProxy. Softcore only for now.
-- Emulation settings per game: overclock, CPU core, Expansion Pak, thermal fallback.
+- Emulation settings per game: overclock, CPU core, Expansion Pak, thermal fallback, run-ahead.
 - Audio settings: volume, latency, mono, fast-forward sound, playing alongside music from other apps.
 - On-screen stats: frame rate, speed, a frame-time graph, CPU, GPU, battery, temperature, RAM, driver and
   renderer, in a corner or down the side of the picture. Also pop-ups for states, screenshots and hotkeys.
@@ -117,7 +129,7 @@ when a new one is out.
   moved over for you.
 - Save backups on every start or daily, and a full Joey64 backup (everything, saves only or settings only) to a
   .zip you can restore.
-- First run: ROM folder, where saves go, import from RetroArch, RetroAchievements sign-in.
+- First run: ROM folder, where saves go, import from RetroArch or M64Plus FZ, RetroAchievements sign-in.
 - Updates: the app checks this repo's releases and installs a new version when you say so.
 - Optional, off unless you turn it on: anonymous reports (sessions per GPU and driver, crashes, missing covers),
   and an occasional request to send a save state for a game we're working on. Settings › About › Share logs
@@ -137,6 +149,8 @@ Android 10 or newer, 64-bit ARM (arm64-v8a).
 | AYN Odin 3 Portal | Snapdragon 8 Elite, Adreno 830 |
 | Retroid Pocket Duo | Adreno 722 |
 | Retroid Pocket Flip | Unisoc T618, Mali-G52 |
+| Anbernic RG477M | Dimensity 8300, Mali-G615 |
+| KONKR Pocket Block | MediaTek MT8786, Mali-G52 |
 
 Joey64 may install and run on other Android devices, but nothing has been checked on them yet, and the
 per-device choices (driver, renderer, tuning) have only been measured on these. Reports from other devices
