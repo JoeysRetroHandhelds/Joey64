@@ -28,6 +28,14 @@ object ResNote {
     const val RAM = "This device has 2 GB of memory: 4x and 8x may not start, and 2x runs below full speed in most games."
     const val GPU4X = "On this device 4x and higher can run below full speed in heavier games. 2x with the Sharp look is almost as crisp."
     const val SHARP_LINK = "Use 2x and the Sharp look"
+    /**
+     * Settings › Emulation › Run-ahead's note (approved runahead mockup screen 2, Joey 2026-11-17 "Yes, show it"): the
+     * same lower tier as [GPU] and [RAM] (Flip 2 frames 27-34 fps uncapped, Duo 4 frames 54-65); not the middle tier.
+     */
+    const val RUN_AHEAD = "On this device run-ahead can run below full speed."
+
+    /** Run-ahead's note for this device's Resolution [note], or null. */
+    fun runAhead(note: String?): String? = if (note == GPU || note == RAM) RUN_AHEAD else null
 
     /** Whether the GPU of [familyKey] is in the middle tier (8 Gen 1 / 8 Gen 2: 4x slows in heavier games). */
     fun midGpu(familyKey: String?): Boolean {

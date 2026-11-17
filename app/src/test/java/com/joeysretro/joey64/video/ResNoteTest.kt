@@ -47,4 +47,12 @@ class ResNoteTest {
         assertFalse("Duo's note has none", ResNote.sharpLink(ResNote.GPU, "1", "original"))
         assertFalse(ResNote.sharpLink(null, "4", "original"))
     }
+
+    // Run-ahead's note: the lower tier and 2 GB only (approved runahead mockup screen 2).
+    @Test fun runAheadNote() {
+        assertEquals(ResNote.RUN_AHEAD, ResNote.runAhead(ResNote.GPU))
+        assertEquals(ResNote.RUN_AHEAD, ResNote.runAhead(ResNote.RAM))
+        assertNull(ResNote.runAhead(ResNote.GPU4X))
+        assertNull(ResNote.runAhead(null))
+    }
 }

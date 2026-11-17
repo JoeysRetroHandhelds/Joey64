@@ -132,6 +132,8 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
     val allE = EmuSettings.resolve(all, null)
     val fk = keyOf(focused)
     val sameForAll = "The same for every game. Pick All games in the chip above to change it."
+    // Run-ahead's device note (approved runahead mockup screen 2): the Resolution note's lower tier.
+    val runAheadNote = remember { com.joeysretro.joey64.video.ResNote.runAhead(com.joeysretro.joey64.video.ResNote.of(context)) }
     val info = if (fk != null) {
         val help = when {
             fk == EmuKey.ExpansionPak && !game -> "On for every game. To turn it off for one game, pick that game in the chip above."
@@ -144,7 +146,8 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
         }
         if (fixed(fk)) com.joeysretro.joey64.launcher.components.PanelInfo(title(fk), help)
         else EmuChoices.of(fk).let { chs -> com.joeysretro.joey64.launcher.components.PanelInfo(title(fk), help,
-            chs.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it.value == e[fk]) }) { i -> set(fk, chs[i].value) } }
+            chs.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it.value == e[fk]) },
+            note = runAheadNote.takeIf { fk == EmuKey.RunAhead }) { i -> set(fk, chs[i].value) } }
     } else speedInfo(focused, hk, game, sameForAll) { f -> setHk(f) }
 
     com.joeysretro.joey64.launcher.components.ListPanel(panel, info, hints, onHints, modifier) {
@@ -180,6 +183,7 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
         // Thermal fallback moved here from Advanced: it only changes the fast-forward speed (emuspeed_mock screen 4).
         row(EmuKey.Thermal, "Thermal fallback", if (game) SAME else EmuChoices.label(EmuKey.Thermal, e[EmuKey.Thermal]))
         SectionLabel("Advanced")
+        row(EmuKey.RunAhead, "Run-ahead")
         if (hardcore) row(EmuKey.Overclock, "Overclock", "Normal in Hardcore") else row(EmuKey.Overclock, "Overclock")
         row(EmuKey.CpuCore, "CPU core")
     }
@@ -253,6 +257,7 @@ private fun title(k: EmuKey) = when (k) {
     EmuKey.CpuCore -> "CPU core"
     EmuKey.ExpansionPak -> "Expansion Pak"
     EmuKey.Thermal -> "Thermal fallback"
+    EmuKey.RunAhead -> "Run-ahead"
 }
 
 private fun describe(k: EmuKey): String = when (k) {
@@ -260,6 +265,9 @@ private fun describe(k: EmuKey): String = when (k) {
     EmuKey.CpuCore -> "How the N64's CPU is run. Auto is right for almost every game. Applies when the game next starts."
     EmuKey.ExpansionPak -> "The extra 4 MB of memory. Off can help speed in a few games. Applies when the game next starts."
     EmuKey.Thermal -> "Lowers the fast-forward speed as the device gets hot. Applies when the game next starts."
+    EmuKey.RunAhead -> "Runs the game ahead in the background, so a press shows on screen sooner. Each frame is run once more for " +
+        "every frame ahead, so it needs a fast device. More frames than the game's own delay can make it skip. Off in netplay rooms. " +
+        "Applies when the game next starts."
 }
 
 /** The approved popup (mockup screens 3 to 5): the choices with their lines, the tick on the one in use, "Auto gives ..." under the title. */
@@ -269,6 +277,9 @@ private fun EmuChoicePopup(k: EmuKey, current: String, autoGives: String?, onDis
         Column {
             // The row's description (review sheet L9), then "Auto gives ..."; the note below says when it applies.
             PopupTitle(title(k), listOfNotNull(describe(k).removeSuffix(" Applies when the game next starts."), autoGives).joinToString("\n"))
+            if (k == EmuKey.RunAhead) { val ctx = LocalContext.current
+                remember { com.joeysretro.joey64.video.ResNote.runAhead(com.joeysretro.joey64.video.ResNote.of(ctx)) }
+                    ?.let { com.joeysretro.joey64.launcher.components.DeviceNote(it) } }
             for (ch in EmuChoices.of(k)) {
                 val on = ch.value == current
                 JoeyRow(ch.label, Modifier.initialFocus(on), detail = ch.detail,

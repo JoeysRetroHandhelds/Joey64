@@ -63,6 +63,19 @@ class EmuSettingsTest {
         assertTrue(apply(EmuKey.Thermal to "off").env.isEmpty())
     }
 
+    // Run-ahead (approved runahead mockup 2026-11-17): Off by default, 1-4 frames to the host's N64_RUNAHEAD, Hardcore too.
+    @Test fun runAheadGoesToTheEnvironment() {
+        assertEquals("off", EmuKey.RunAhead.default)
+        assertNull(apply().env["N64_RUNAHEAD"])
+        assertNull(apply(EmuKey.RunAhead to "off").env["N64_RUNAHEAD"])
+        for (n in 1..4) assertEquals("$n", apply(EmuKey.RunAhead to "$n").env["N64_RUNAHEAD"])
+        assertNull(apply(EmuKey.RunAhead to "9").env["N64_RUNAHEAD"])
+        assertEquals("2", EmuApply.of(EmuSettings(mapOf(EmuKey.RunAhead to "2")), false, hardcore = true).env["N64_RUNAHEAD"])
+        assertEquals(listOf("off", "1", "2", "3", "4"), EmuChoices.of(EmuKey.RunAhead).map { it.value })
+        assertEquals("2 frames", EmuChoices.label(EmuKey.RunAhead, "2"))
+        assertTrue(EmuKey.RunAhead in EmuKey.AT_START)
+    }
+
     @Test fun allGamesHasNoExpansionPak() {
         val e = EmuSettings.resolve(mapOf(EmuKey.ExpansionPak to "off", EmuKey.Overclock to "2x"), null)
         assertEquals("on", e[EmuKey.ExpansionPak])

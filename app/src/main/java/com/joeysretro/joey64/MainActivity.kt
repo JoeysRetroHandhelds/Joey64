@@ -170,8 +170,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         }
         // The per-device switches the driver reads as it loads (GpuRules.beforeDriver: the Odin 3's KGSL priority).
         applyGpuSettings(GpuRules.beforeDriver(Build.MODEL))
-        // Frame pacing (Settings › Video) and Thermal fallback (Settings › Emulation) are read by the host from the
-        // environment; --es env wins.
+        // Frame pacing (Settings › Video), Thermal fallback and Run-ahead (Settings › Emulation) are read by the host
+        // from the environment; --es env wins.
         for ((k, v) in com.joeysretro.joey64.video.VideoApply.of(video, true).env + com.joeysretro.joey64.emulation.EmuApply.of(emuAtStart, true).env)
             if (android.system.Os.getenv(k) == null) android.system.Os.setenv(k, v, true)
         // Driver and renderer by GPU (setupGpu), or Settings › Video's choice. Override with: am start ... --es renderer parallel|gliden64
@@ -297,7 +297,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val res = if (inRoom) 1 else if (parallel) playUpscale?.removeSuffix("x")?.toIntOrNull() ?: 1
             else video.int(com.joeysretro.joey64.video.VideoKey.Resolution)
         if (res > 1) add(com.joeysretro.joey64.onscreen.GameSetting.RESOLUTION, "${res}x")
-        // Run-ahead is the dev switch for now (libretro_host.cpp: N64_RUNAHEAD 1-4, off in a netplay room).
+        // Run-ahead: Settings › Emulation's, or --es env N64_RUNAHEAD (libretro_host.cpp: 1-4, off in a netplay room).
         val ahead = android.system.Os.getenv("N64_RUNAHEAD")?.toIntOrNull()?.coerceIn(0, 4) ?: 0
         if (ahead > 0 && !inRoom) add("Run-ahead", "$ahead")
         extrasOn.shape?.let { (w, h) -> add("Widescreen", "$w:$h") }
@@ -1376,7 +1376,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun startRowName(key: String) = when (key) {
         "Driver" -> "GPU driver"; "Pacing" -> "Frame pacing"; "Thermal" -> "Thermal fallback"; "Supersample" -> "Supersampling"
         "NativeTexLod" -> "Native texture detail"; "NativeTexRect" -> "Native 2D (TEX_RECT)"; "Apps" -> "Play alongside other apps"
-        "Fps" -> "60 fps"; "CpuCore" -> "CPU core"; "ExpansionPak" -> "Expansion Pak"
+        "Fps" -> "60 fps"; "CpuCore" -> "CPU core"; "ExpansionPak" -> "Expansion Pak"; "RunAhead" -> "Run-ahead"
         else -> key
     }
 

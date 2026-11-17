@@ -17,7 +17,13 @@ enum class EmuKey(val key: String, val default: String) {
     Overclock("overclock", "auto"),
     CpuCore("cpu_core", "auto"),
     ExpansionPak("expansion_pak", "on"),
-    Thermal("thermal", "off");
+    Thermal("thermal", "off"),
+    /**
+     * Run-ahead (approved runahead mockup 2026-11-17, Joey: "an option never default", "Emulation › Advanced",
+     * Hardcore "Allowed", the device note "Yes, show it"): Off, or 1-4 frames, the host's N64_RUNAHEAD. Off by
+     * default on every device; nothing turns it on but the user. The host leaves it off in a netplay room.
+     */
+    RunAhead("run_ahead", "off");
 
     companion object {
         fun of(key: String) = entries.firstOrNull { it.key == key }
@@ -46,12 +52,19 @@ object EmuChoices {
     val thermal = listOf(
         EmuChoice("off", "Off"),
         EmuChoice("on", "On", "Lowers the fast-forward speed as the device gets hot"))
+    val runAhead = listOf(
+        EmuChoice("off", "Off", "The N64's own timing"),
+        EmuChoice("1", "1 frame", "About 17 ms less lag"),
+        EmuChoice("2", "2 frames", "About 33 ms less"),
+        EmuChoice("3", "3 frames", "About 50 ms less; strong devices only"),
+        EmuChoice("4", "4 frames", "About 67 ms less; strong devices only"))
 
     fun of(k: EmuKey): List<EmuChoice> = when (k) {
         EmuKey.Overclock -> overclock
         EmuKey.CpuCore -> cpuCore
         EmuKey.ExpansionPak -> expansionPak
         EmuKey.Thermal -> thermal
+        EmuKey.RunAhead -> runAhead
     }
 
     fun label(k: EmuKey, value: String): String = of(k).firstOrNull { it.value == value }?.label ?: value
@@ -137,6 +150,8 @@ data class EmuApply(val coreOptions: Map<String, String>, val env: Map<String, S
             if (e[EmuKey.ExpansionPak] == "off" && !needsPak) opts["mupen64plus-ForceDisableExtraMem"] = "True"
             val env = LinkedHashMap<String, String>()
             if (e[EmuKey.Thermal] == "on") env["N64_THERMAL_GOV"] = "1"
+            // Run-ahead: allowed in Hardcore (Joey 2026-11-17); the host turns it off in a netplay room.
+            e[EmuKey.RunAhead].toIntOrNull()?.takeIf { it in 1..4 }?.let { env["N64_RUNAHEAD"] = "$it" }
             return EmuApply(opts, env)
         }
     }
