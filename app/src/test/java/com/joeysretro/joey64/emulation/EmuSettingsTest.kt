@@ -15,6 +15,19 @@ class EmuSettingsTest {
 
     private fun apply(vararg kv: Pair<EmuKey, String>, needsPak: Boolean = false) = EmuApply.of(EmuSettings(mapOf(*kv)), needsPak)
 
+    // Hardcore plays run at Normal (approved hardcore-overclock A and A, 2026-11-17): 2x and 4x are set aside, Auto stays Auto.
+    @Test fun hardcoreRunsAtNormal() {
+        for (oc in listOf("2x", "4x")) {
+            val e = EmuSettings(mapOf(EmuKey.Overclock to oc))
+            assertTrue(EmuApply.hardcoreDrops(e))
+            assertEquals(mapOf("mupen64plus-CountPerOp" to "0"), EmuApply.of(e, false, hardcore = true).coreOptions)
+        }
+        assertEquals("1", EmuApply.of(EmuSettings(mapOf(EmuKey.Overclock to "4x")), false).coreOptions["mupen64plus-CountPerOp"])
+        assertFalse(EmuApply.hardcoreDrops(EmuSettings(mapOf(EmuKey.Overclock to "normal"))))
+        assertFalse(EmuApply.hardcoreDrops(EmuSettings(emptyMap())))
+        assertTrue(EmuApply.of(EmuSettings(emptyMap()), false, hardcore = true).coreOptions.isEmpty())
+    }
+
     @Test fun autoSetsNothing() {
         val a = apply()
         assertTrue(a.coreOptions.isEmpty())

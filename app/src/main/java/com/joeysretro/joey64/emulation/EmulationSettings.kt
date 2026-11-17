@@ -111,14 +111,21 @@ data class EmuApply(val coreOptions: Map<String, String>, val env: Map<String, S
 
     companion object {
         /**
+         * RetroAchievements Hardcore runs every game at Normal speed (Joey 2026-11-16; approved mockup
+         * hardcore-overclock A and A, 2026-11-17): an Overclock of 2x or 4x is set aside for the play. Auto and
+         * Normal already are the real N64's speed.
+         */
+        fun hardcoreDrops(e: EmuSettings): Boolean = e[EmuKey.Overclock] == "2x" || e[EmuKey.Overclock] == "4x"
+
+        /**
          * Overclock: Normal is the core's own count per op (0 = its ROM database, else 2); 2x is count per op 1
          * (the smoother timing's); 4x is 1 halved again (CountPerOpDenomPot 1). Setting any of them also
          * keeps the host's per-game smoother timing off. Auto sets nothing. CPU core: Auto sets nothing (the
          * host picks: kInterpreterGames). Expansion Pak Off: never for a game that needs it ([needsPak]).
          */
-        fun of(e: EmuSettings, needsPak: Boolean): EmuApply {
+        fun of(e: EmuSettings, needsPak: Boolean, hardcore: Boolean = false): EmuApply {
             val opts = LinkedHashMap<String, String>()
-            when (e[EmuKey.Overclock]) {
+            when (if (hardcore && hardcoreDrops(e)) "normal" else e[EmuKey.Overclock]) {
                 "normal" -> opts["mupen64plus-CountPerOp"] = "0"
                 "2x" -> opts["mupen64plus-CountPerOp"] = "1"
                 "4x" -> { opts["mupen64plus-CountPerOp"] = "1"; opts["mupen64plus-CountPerOpDenomPot"] = "1" }

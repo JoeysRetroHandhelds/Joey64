@@ -89,7 +89,11 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
     }
     // Greyed: the Expansion Pak on All games, or for a game that needs it.
     // Thermal fallback, now in Speed, is the same for every game like the rest of the group (emuspeed_mock screen 4).
-    fun fixed(k: EmuKey) = (k == EmuKey.ExpansionPak && (!game || needsPak)) || (k == EmuKey.Thermal && game)
+    // Overclock while Hardcore is on (this play's, or Settings › RetroAchievements' for the next): greyed, "Normal in
+    // Hardcore", as Video's 60 fps row (approved mockup hardcore-overclock, Settings row A, 2026-11-17).
+    val hardcore = remember { com.joeysretro.joey64.achievements.RaHardcore.on() || com.joeysretro.joey64.achievements.RaHardcore.wanted(context) }
+    fun fixed(k: EmuKey) = (k == EmuKey.ExpansionPak && (!game || needsPak)) || (k == EmuKey.Thermal && game) ||
+        (k == EmuKey.Overclock && hardcore)
     // No dot on a greyed row: a game that needs the pak keeps it on whatever its file says.
     fun dot(k: EmuKey) = game && k in own && !fixed(k)
     fun autoGives(k: EmuKey): String? = when (k) {
@@ -133,6 +137,8 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
             fk == EmuKey.ExpansionPak && !game -> "On for every game. To turn it off for one game, pick that game in the chip above."
             fk == EmuKey.ExpansionPak && needsPak -> "This game needs the Expansion Pak, so it's always on."
             fk == EmuKey.Thermal && game -> sameForAll
+            fk == EmuKey.Overclock && hardcore -> describe(fk) + " Hardcore plays always run at Normal.\n\n" +
+                "Turn Hardcore off in Settings › RetroAchievements to change it."
             dot(fk) -> "Changed for this game. All games uses ${EmuChoices.label(fk, allE[fk])}."
             else -> listOfNotNull(describe(fk), autoGives(fk)?.let { "$it." }).joinToString(" ")
         }
@@ -174,7 +180,7 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
         // Thermal fallback moved here from Advanced: it only changes the fast-forward speed (emuspeed_mock screen 4).
         row(EmuKey.Thermal, "Thermal fallback", if (game) SAME else EmuChoices.label(EmuKey.Thermal, e[EmuKey.Thermal]))
         SectionLabel("Advanced")
-        row(EmuKey.Overclock, "Overclock")
+        if (hardcore) row(EmuKey.Overclock, "Overclock", "Normal in Hardcore") else row(EmuKey.Overclock, "Overclock")
         row(EmuKey.CpuCore, "CPU core")
     }
 

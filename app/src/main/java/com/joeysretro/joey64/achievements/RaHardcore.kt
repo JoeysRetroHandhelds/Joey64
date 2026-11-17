@@ -41,8 +41,10 @@ object RaHardcore {
      * A game starting, before its cheats and before it loads: the mode it plays in. [casualState]: it starts from a
      * state the user picked to play in Casual (or a start from a state that didn't ask: a frontend's).
      */
-    fun startPlay(context: Context, casualState: Boolean, netplay: Boolean) {
-        val want = wanted(context)
+    fun startPlay(context: Context, casualState: Boolean, netplay: Boolean,
+                  /** Hardcore was turned on mid-game and the game screen started again for it (an overclocked play). */
+                  asked: Boolean = false) {
+        val want = wanted(context) || (asked && available(context))
         play = want && !casualState && !netplay
         RaBridge.setHardcore(play)
         if (want && !play) JLog.i(TAG, "Hardcore: this play is Casual (${if (netplay) "a netplay room" else "it starts from a picked state"})")

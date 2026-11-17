@@ -307,7 +307,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         else if (shader != com.joeysretro.joey64.video.VideoKey.Shader.default)
             add("Shader", com.joeysretro.joey64.video.Picture.valueLabel(shader).removePrefix("Your own: "))
         val oc = emuAtStart[com.joeysretro.joey64.emulation.EmuKey.Overclock]
-        if (oc != com.joeysretro.joey64.emulation.EmuKey.Overclock.default)
+        if (oc != com.joeysretro.joey64.emulation.EmuKey.Overclock.default && !overclockSetAside)
             add("Overclock", com.joeysretro.joey64.emulation.EmuChoices.overclock.firstOrNull { it.value == oc }?.label ?: oc)
         return out
     }
@@ -500,6 +500,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      * restarts the game (the host, at its next frame); macros, slow motion and rewind stop. Off: the approved pop-up.
      */
     private fun hardcoreMidGame(on: Boolean) {
+        if (on && overclockedPlay) { restartInHardcore(); return }
         com.joeysretro.joey64.achievements.RaHardcore.setMidGame(on)
         if (on) {
             for (p in 0 until 4) NativeBridge.stopMacro(p, true)
@@ -1292,6 +1293,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var audioAtStart: com.joeysretro.joey64.audio.AudioSettings? = null
     /** Settings › Emulation as the game started (every row is read only at start). */
     private var emuAtStart = com.joeysretro.joey64.emulation.EmuSettings.DEFAULTS
+    /** This play runs overclocked (2x or 4x, Casual): the core takes its speed only at start, so Hardcore turned on
+     *  mid-game restarts the game screen instead of resetting the core ([restartInHardcore]). */
+    @Volatile private var overclockedPlay = false
+    /** A Hardcore start set Overclock's 2x or 4x aside: the play runs at Normal (the stats overlay leaves it out). */
+    @Volatile private var overclockSetAside = false
     private var parallel = false
     /** --ez sharp / sharp2 (dev): they set the N64 filters themselves, so Game settings leaves those alone. */
     private var devSharp = false
@@ -1398,6 +1404,44 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      * from the new one goes where it went before (the library). Without a written state the game
      * starts from the beginning.
      */
+    /**
+     * Hardcore turned on mid-game in an overclocked play: the core takes its CPU speed only when a game starts (a reset
+     * keeps it), so the game screen starts again fresh, in Hardcore at Normal speed ([EXTRA_HARDCORE_PLAY]), with the
+     * start's Overclock pop-up. Nothing is saved, as the in-place restart saves nothing; the recovery state stays.
+     */
+    private fun restartInHardcore() {
+        val st = states ?: return
+        val rom = startRom ?: return
+        if (quitting) return
+        sessionEnd = "next"
+        quitting = true
+        keepRecovery = true
+        overlay?.screen = null
+        sessionMark(); menuOpen = false
+        NativeBridge.pause(true)
+        stateHandler.removeCallbacks(recoveryTick)
+        JLog.i(TAG, "Hardcore turned on mid-game in an overclocked play: the game starts again at Normal speed")
+        val next = gameStart(this).apply {
+            carriedExtras()?.let { putExtras(it) }
+            removeExtra("rom")
+            intent.data?.let { d ->
+                if (!hasExtra(EXTRA_SOURCE_URI)) putExtra(EXTRA_SOURCE_URI, d.toString())
+                if (!hasExtra(EXTRA_SOURCE_NAME)) displayName(d)?.let { putExtra(EXTRA_SOURCE_NAME, it) }
+            }
+            putExtra(EXTRA_ROM_PATH, rom)
+            putExtra(EXTRA_SAVE_NAME, startSave ?: st.saveName)
+            gameMd5?.let { putExtra(EXTRA_KNOWN_MD5, it) } ?: removeExtra(EXTRA_KNOWN_MD5)
+            removeExtra(EXTRA_LOAD_STATE); removeExtra(EXTRA_PLAY_NOTE)
+            putExtra(EXTRA_CASUAL_STATE, false)
+            putExtra(EXTRA_WAS_HARDCORE, false)
+            putExtra(EXTRA_HARDCORE_PLAY, true)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (owner === this) { NativeBridge.stop(); owner = null }
+        finish()
+        RestartActivity.restart(this, next)
+    }
+
     private fun restartForSettings() {
         val st = states ?: return
         val rom = startRom ?: return
@@ -1918,7 +1962,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // from a state (Continue, a slot, carrying on after a crash) or in a netplay room plays in Casual.
         // Continue and carrying on after a crash start fresh in Hardcore instead (approved 2026-11-04 and part B screen 5).
         val netplay = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null
-        com.joeysretro.joey64.achievements.RaHardcore.startPlay(this, casualState = startLoad() != null, netplay = netplay)
+        com.joeysretro.joey64.achievements.RaHardcore.startPlay(this, casualState = startLoad() != null, netplay = netplay,
+            asked = launcherBool(EXTRA_HARDCORE_PLAY))
         if (hardcoreFresh) {
             JLog.i(TAG, "Hardcore: ${launcherString(EXTRA_LOAD_STATE)} not loaded, the game starts fresh")
             hardcoreStartPops += InGamePopup("hcfresh", InGamePopup.Kind.Hardcore, "Hardcore", "Continue starts fresh", "In-game saves still load")
@@ -2012,7 +2057,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val code = romGameCode(if (RomFiles.isDiskName(rom)) ddCart ?: "" else rom)
         gameCode = com.joeysretro.joey64.video.GameCrop.keyOf(code, gameMd5) // header code, or the MD5 key of a game with none
         com.joeysretro.joey64.video.GameCrop.lines(gameCode, video)?.let { JLog.i(TAG, "crop edges: this game's default, $it lines"); applyVideoDisplay() }
-        val eApply = com.joeysretro.joey64.emulation.EmuApply.of(emuAtStart, com.joeysretro.joey64.emulation.ExpansionPak.needed(code))
+        // Hardcore plays run at Normal speed whatever Overclock says (approved mockup hardcore-overclock A and A,
+        // 2026-11-17): its own pop-up, after the cheats one.
+        val hc = com.joeysretro.joey64.achievements.RaHardcore.on()
+        val ocDrops = com.joeysretro.joey64.emulation.EmuApply.hardcoreDrops(emuAtStart)
+        overclockedPlay = ocDrops && !hc
+        overclockSetAside = ocDrops && hc
+        if (overclockSetAside) {
+            JLog.i(TAG, "Hardcore: Overclock ${emuAtStart[com.joeysretro.joey64.emulation.EmuKey.Overclock]} not used, Normal speed for this play")
+            hardcoreStartPops += InGamePopup("hcoverclock", InGamePopup.Kind.Hardcore, "Hardcore", "Overclock is off for this play",
+                "Normal speed · it stays on for Casual plays")
+        }
+        val eApply = com.joeysretro.joey64.emulation.EmuApply.of(emuAtStart, com.joeysretro.joey64.emulation.ExpansionPak.needed(code), hc)
         val devOpts = devString("opts").orEmpty()
         for ((k, v) in eApply.coreOptions) if (!devOpts.contains("$k=")) NativeBridge.setOption(k, v)
         if (eApply.coreOptions.isNotEmpty()) JLog.i(TAG, "emulation ($code): ${eApply.coreOptions}")
@@ -4217,6 +4273,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         const val EXTRA_CASUAL_STATE = "com.joeysretro.joey64.CASUAL_STATE"
         /** A Restart now from a Hardcore play: the restarted play is Casual (it loads a state) and says so. */
         const val EXTRA_WAS_HARDCORE = "com.joeysretro.joey64.WAS_HARDCORE"
+        /** Hardcore turned on mid-game in an overclocked play ([restartInHardcore]): this start plays in Hardcore. */
+        const val EXTRA_HARDCORE_PLAY = "com.joeysretro.joey64.HARDCORE_PLAY"
         /** The ROM as the user has it (the archive in the ROMs folder), for recently played. */
         const val EXTRA_SOURCE_URI = "com.joeysretro.joey64.SOURCE_URI"
         const val EXTRA_SOURCE_NAME = "com.joeysretro.joey64.SOURCE_NAME"
@@ -4255,7 +4313,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         /** Extras only Joey64's own starts may carry ([fromJoey64]); a start from another app has them dropped. */
         private val LAUNCHER_EXTRAS = listOf(EXTRA_ROM_PATH, EXTRA_SAVE_NAME, EXTRA_LOAD_STATE, EXTRA_SOURCE_URI, EXTRA_SOURCE_NAME,
             EXTRA_TITLE, EXTRA_MD5, EXTRA_KNOWN_MD5, EXTRA_DD_CART, EXTRA_NETPLAY_HOST, EXTRA_NETPLAY_JOIN, EXTRA_NETPLAY_NAME,
-            EXTRA_NETPLAY_KEYS, EXTRA_NETPLAY_KEY, EXTRA_PLAY_NOTE, EXTRA_CASUAL_STATE, EXTRA_WAS_HARDCORE,
+            EXTRA_NETPLAY_KEYS, EXTRA_NETPLAY_KEY, EXTRA_PLAY_NOTE, EXTRA_CASUAL_STATE, EXTRA_WAS_HARDCORE, EXTRA_HARDCORE_PLAY,
             com.joeysretro.joey64.launcher.library.GameLauncher.EXTRA_IS_DISK, com.joeysretro.joey64.launcher.library.GameLauncher.EXTRA_NEEDS_CART)
         const val STATE_AUTO = "auto"
         /** Play's popup set Continue on Play (Y, Always do this; approved E4 2026-11-11): the line shown as the game opens. */
