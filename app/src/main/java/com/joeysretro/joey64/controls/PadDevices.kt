@@ -83,6 +83,27 @@ object PadDevices {
         return out.takeIf { it != set }
     }
 
+    /**
+     * [fixToggleFace] on All games and on every game's own controls, once per install (release audit 2026-11-17: only All
+     * games was moved, so a game's own controls kept A/B and X/Y swapped; and run at every start, it flipped back a set
+     * made to match the old layout on purpose). Waits, without marking, until All games exists and this device's own pad
+     * is there to read. A game's file is checked with All games' controllers, which are the ones it plays with.
+     */
+    fun fixToggleFaceOnce(store: ControlsStore, log: (String) -> Unit) {
+        if (store.toggleFaceDone() || !store.hasAll()) return
+        builtIn() ?: return
+        val all = store.all()
+        fixToggleFace(all)?.let { store.saveAll(it); log("controls: this pad's layout toggle is read now, All games' old Auto map moved") }
+        for (name in store.gamesWithOwn()) {
+            val own = store.game(name) ?: continue
+            val withPads = ControlsSet(List(4) { i -> own.players[i].copy(device = all.players[i].device) })
+            val fixed = fixToggleFace(withPads) ?: continue
+            store.saveGame(name, ControlsSet(List(4) { i -> fixed.players[i].copy(device = own.players[i].device) }))
+            log("controls: $name's own controls moved for this pad's layout toggle")
+        }
+        store.markToggleFaceDone()
+    }
+
     fun face(d: InputDevice?): AutoMap.FaceCodes =
         if (Controllers.profile(d).faceCodes == Controllers.FaceCodes.NINTENDO_LABELS) AutoMap.FaceCodes.NINTENDO_LABELS
         else AutoMap.FaceCodes.POSITION

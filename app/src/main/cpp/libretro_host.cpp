@@ -1655,7 +1655,9 @@ void runLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
-        if (g_paused) flushSave();
+        // Paused: the monitor's open window isn't a frame (release audit 2026-11-17: a pause over 0.5 s logged a HANG).
+        const bool wasPaused = g_paused;
+        if (wasPaused) { flushSave(); hitch::unmeasured(); }
         {
             std::unique_lock<std::mutex> lk(g_pauseMutex);
             for (;;) {
@@ -1691,6 +1693,7 @@ void runLoop() {
             }
         }
         if (!g_running) break;
+        if (wasPaused && !g_paused) hitch::resumed();
         serveStateRequest(g_framesRun >= (uint32_t)stateReadyFrames(), false);
         if (g_portsChanged.exchange(false)) applyPorts(); // a controller given to a player mid-game
         if (g_cheatsChanged.exchange(false)) applyCheats(); // the Cheats page, from the pause menu
@@ -2700,6 +2703,7 @@ JNIEXPORT void JNICALL JNI(start)(JNIEnv*, jobject) {
     { std::lock_guard<std::mutex> lk(g_threadEndMutex); g_threadEnded = false; }
     g_thread = std::thread([] {
         runLoop();
+        hitch::threadEnd();
         { std::lock_guard<std::mutex> lk(g_threadEndMutex); g_threadEnded = true; }
         g_threadEndCv.notify_all();
     });

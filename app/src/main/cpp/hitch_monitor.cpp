@@ -97,6 +97,10 @@ Win g_wins[8];
 std::atomic<uint64_t> g_winId{0};
 std::atomic<int64_t> g_winStart{0}, g_winStartCpu{0};
 std::atomic<bool> g_winOpen{false}, g_winSkip{true}, g_hangOpen{false};
+// Held while the watchdog signals the emulation thread and while that thread ends (threadEnd), so it is never
+// signalled once gone.
+std::mutex g_pthMu;
+int g_settle = 0; // frames left unmeasured after a resume (emulation thread only)
 Snap g_prev;
 bool g_havePrev = false;
 
@@ -326,7 +330,12 @@ void sampleOnce(uint64_t id) {
     if (state == 'R') {
         const uint32_t seq = g_sigSeq.load(std::memory_order_acquire);
         bool got = false;
-        if (g_sigOk && pthread_kill(g_pth, SIGPROF) == 0)
+        bool sent = false;
+        {
+            std::lock_guard<std::mutex> lk(g_pthMu);
+            sent = g_sigOk && g_on.load() && g_winOpen.load() && pthread_kill(g_pth, SIGPROF) == 0;
+        }
+        if (sent)
             for (int i = 0; i < 200 && !got; ++i) { if (g_sigSeq.load(std::memory_order_acquire) != seq) got = true; else usleep(10); }
         if (!got) { snprintf(key, sizeof key, "[%s] running", act); addSeen(id, key, false); return; }
         char a[64], b[64];
@@ -382,7 +391,8 @@ void watchdog() {
             continue;
         }
         sampleOnce(id);
-        if (el >= g_hangMs && id == g_winId.load(std::memory_order_acquire)) {
+        // Skipped meanwhile (the game paused just now): not a hang.
+        if (el >= g_hangMs && id == g_winId.load(std::memory_order_acquire) && !g_winSkip.load(std::memory_order_acquire)) {
             const int64_t now = monoNs();
             if (id != hangId || now - hangLogAt >= 1000000000ll) {
                 const bool first = id != hangId;
@@ -489,6 +499,7 @@ void frame(bool skip) {
     if (!t_emu || !g_on.load(std::memory_order_relaxed)) return;
     const Snap s = take();
     if (++g_frames <= kWarmFrames) skip = true;
+    if (g_settle > 0) { --g_settle; skip = true; }
     const uint64_t id = g_winId.load(std::memory_order_relaxed);
     const Samples smp = samplesOf(id, true);
     if (g_havePrev && !g_winSkip.load(std::memory_order_relaxed)) closeWindow(id, g_prev, s, smp);
@@ -504,6 +515,25 @@ void frame(bool skip) {
 
 void unmeasured() {
     if (t_emu) g_winSkip.store(true, std::memory_order_release);
+}
+
+void resumed() {
+    if (t_emu) g_settle = 30;
+}
+
+void threadEnd() {
+    if (!t_emu) return;
+    g_settle = 0;
+    {
+        std::lock_guard<std::mutex> lk(g_pthMu);
+        g_on = false;
+        g_winSkip.store(true, std::memory_order_release);
+        g_winOpen.store(false, std::memory_order_release);
+    }
+    g_hangOpen = false;
+    g_havePrev = false; // the next game's thread starts its own first window
+    g_frames = 0;
+    t_emu = false;
 }
 
 void presented(uint32_t presentId, bool newImage, int64_t queuedNs, int64_t desiredNs) {

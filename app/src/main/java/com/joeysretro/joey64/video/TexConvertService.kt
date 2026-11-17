@@ -85,6 +85,24 @@ class TexConvertService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** Android's time limit for this kind of service ran out (release audit 2026-11-17): the worker stops at its next step. */
+    private class TimedOut : RuntimeException()
+    @Volatile private var timedOut = false
+
+    /**
+     * Android 15+: a dataSync foreground service has 6 hours a day, and one still running a few seconds after this call
+     * ends the app with an error (the converter waits while a game is played, so a long session could reach it). It stops
+     * here: the copy picks up where it left off and Joey64's screens start it again when there's time (TexConvert.kick;
+     * startForeground's refusal, out of time, is already caught).
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        JLog.w(TAG, "texture packs: Android's background time for today ran out, stopping (goes on later)")
+        timedOut = true
+        wake?.let { if (it.isHeld) it.release() }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         store = TexPackStore(applicationContext)
         nm = getSystemService(NotificationManager::class.java)
@@ -107,7 +125,7 @@ class TexConvertService : Service() {
         val failed = HashMap<String, String>()
         val ready = ArrayList<TexJob>()
         try {
-            while (true) {
+            while (!timedOut) {
                 val jobs = TexConvert.pending(applicationContext).filter { it.pack.id !in done }
                 val job = jobs.firstOrNull() ?: break
                 done.add(job.pack.id)
@@ -122,6 +140,8 @@ class TexConvertService : Service() {
                 val why = convert(job, jobs.size - 1, room, failed)
                 if (why == null) ready.add(job) else { failed[job.pack.id] = why; JLog.w(TAG, "texture packs: ${job.pack.shown} not converted: $why") }
             }
+        } catch (e: TimedOut) {
+            JLog.i(TAG, "texture packs: stopped for Android's time limit")
         } catch (e: Throwable) {
             JLog.e(TAG, "texture packs: conversion stopped: $e")
         } finally {
@@ -145,7 +165,8 @@ class TexConvertService : Service() {
         nm.cancel(resultId(p.id)) // a note from an earlier conversion of this pack ("is ready") no longer holds
         publish(TexConvStatus(cur(1, 0, p.size), after, room, failed, 0), force = true)
         awake(true)
-        val copied = store.copyPngs(p, job.romName, { d, t -> publish(status.copy(cur = cur(1, d, t))) }, { hold(job, after) })
+        val copied = store.copyPngs(p, job.romName, { d, t -> publish(status.copy(cur = cur(1, d, t))) }, { hold(job, after); if (timedOut) throw TimedOut() })
+        if (timedOut) throw TimedOut()
         if (copied.why != null) return copied.why
         // Step 2: the core makes the .hts, outside play.
         val core = TexBuild.corePath(applicationContext)
@@ -156,6 +177,7 @@ class TexConvertService : Service() {
             return null
         }
         hold(job, after)
+        if (timedOut) throw TimedOut()
         publish(status.copy(cur = cur(2, 0, copied.pngs.toLong())), force = true)
         val t0 = System.currentTimeMillis()
         val n = TexBuild.build(core, store.convDir(p).path, job.romName) { k ->
@@ -175,7 +197,7 @@ class TexConvertService : Service() {
         if (now - lastPlayCheck < 1000) return
         lastPlayCheck = now
         var waited = false
-        while (true) {
+        while (!timedOut) {
             val game = playing() ?: break
             if (!waited) { waited = true; awake(false); JLog.i(TAG, "texture packs: waiting while $game is played") }
             playingTitle = game

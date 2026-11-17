@@ -26,6 +26,13 @@ class ControlsStore(private val dir: File) {
     /** Whether All games was ever saved (else the first run: [PadDevices.firstSet]). */
     fun hasAll(): Boolean = all.isFile
 
+    /** [PadDevices.fixToggleFaceOnce] ran on this device's controls (`toggleface.done`). */
+    private val toggleFaceFlag = File(dir, "toggleface.done")
+    fun toggleFaceDone(): Boolean = toggleFaceFlag.isFile
+    fun markToggleFaceDone() {
+        try { dir.mkdirs(); toggleFaceFlag.writeText("1") } catch (e: Exception) { JLog.e(TAG, "can't write ${toggleFaceFlag.name}: $e") }
+    }
+
     /** A game's own controls, or null when it uses All games. */
     fun game(saveName: String): ControlsSet? = read(gameFile(saveName))?.let { ControlsSet.fromJson(it) }
     fun saveGame(saveName: String, set: ControlsSet) = write(gameFile(saveName), set.toJson())

@@ -88,8 +88,14 @@ struct Span {
 void emuThread(uint64_t (*rdpWaitNs)(), unsigned (*rdpWaits)());
 // The game's frame rate (retro_get_system_av_info), for the thresholds.
 void rates(double gameFps);
-// The open window isn't measured after all (the swapchain was rebuilt in it).
+// The open window isn't measured after all (the swapchain was rebuilt in it, or the game is paused).
 void unmeasured();
+// The emulation thread is ending: no window stays open and the watchdog never signals the thread again (release audit
+// 2026-11-17: a pause or a finished thread read as a hang, and a sample could pthread_kill a thread that was gone).
+void threadEnd();
+// The game was paused and goes on now: the next 30 frames aren't measured (the first frame after a resume waits for
+// the audio and its picture is timed against the pause: two "stutters" each resume, Odin 2 Portal 2026-11-17).
+void resumed();
 // Each emulated frame starts (closes the window the last one opened). skip: this window isn't measured (paused,
 // frame advance, fast-forward, slow motion, rewind, a benchmark, a rebuilt swapchain).
 void frame(bool skip);

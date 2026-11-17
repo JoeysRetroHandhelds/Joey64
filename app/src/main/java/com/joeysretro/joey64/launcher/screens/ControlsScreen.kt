@@ -224,7 +224,7 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
     val store = remember { ControlsStore(context) }
     remember(store) {
         if (store.hasAll()) PadDevices.fixStickless(store.all())?.let { store.saveAll(it); JLog.i(TAG, "controls: this device has no sticks, moved to the stickless setup") }
-        if (store.hasAll()) PadDevices.fixToggleFace(store.all())?.let { store.saveAll(it); JLog.i(TAG, "controls: this pad's layout toggle is read now, its old Auto map moved") }
+        PadDevices.fixToggleFaceOnce(store) { JLog.i(TAG, it) }
     }
     LaunchedEffect(Unit) { if (!store.hasAll()) store.saveAll(PadDevices.firstSet(com.joeysretro.joey64.launcher.layout.Tv.isTv(context))) }
     var target by remember { mutableStateOf(game) }

@@ -3498,7 +3498,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // A set made before stickless pads were known: moved to the stickless setup once (approved mockup 2026-11-13).
         else PadDevices.fixStickless(controlsStore.all())?.let { controlsStore.saveAll(it); JLog.i(TAG, "controls: this device has no sticks, moved to the stickless setup") }
         // A set Auto map made before this pad's Xbox/Nintendo toggle was known: moved once (Controllers.faceKey).
-        if (controlsStore.hasAll()) PadDevices.fixToggleFace(controlsStore.all())?.let { controlsStore.saveAll(it); JLog.i(TAG, "controls: this pad's layout toggle is read now, its old Auto map moved") }
+        PadDevices.fixToggleFaceOnce(controlsStore) { JLog.i(TAG, it) }
         controls = controlsStore.forGame(saveName.ifEmpty { null })
         hotkeys = controlsStore.hotkeys()
         applyRewind()
