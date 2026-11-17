@@ -49,7 +49,14 @@ class HeldPicture(private val activity: Activity, private val picture: Bitmap) {
             this.token = token
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             windowAnimations = 0
+            // The whole screen, as the game's surface: a new window fits inside the system bars by default, so with
+            // the bars still up from the launcher the picture sat in a smaller window and grew when the game took
+            // over (Thor 2026-11-17, Paper Mario at 2x: 1282x956 at y 60, then 1440x1080).
+            flags = flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+            if (android.os.Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0)
         }
+        // Where the game's picture goes follows the game window's size (its bars hidden a moment later).
+        activity.window.decorView.addOnLayoutChangeListener(relayout)
         root.viewTreeObserver.addOnDrawListener(object : ViewTreeObserver.OnDrawListener {
             override fun onDraw() {
                 if (drawn) return
@@ -68,6 +75,7 @@ class HeldPicture(private val activity: Activity, private val picture: Bitmap) {
             JLog.i(MainActivity.TAG, "held picture: ${picture.width}x${picture.height} up")
             true
         } catch (e: Exception) {
+            activity.window.decorView.removeOnLayoutChangeListener(relayout)
             JLog.e(MainActivity.TAG, "held picture: can't add its window: $e"); false
         }
     }
@@ -78,13 +86,22 @@ class HeldPicture(private val activity: Activity, private val picture: Bitmap) {
     /** Runs [f] once the picture is on screen (at once if [ready]). */
     fun whenDrawn(f: () -> Unit) { if (ready) f() else onDrawn += f }
 
+    private val relayout = View.OnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
+        if (!gone && (r - l != or - ol || b - t != ob - ot)) place()
+    }
+
     /** Puts the picture where the game's goes with the display settings now (again after they change). */
     fun place() {
         val dv = activity.window.decorView
         var w = dv.width; var h = dv.height
-        if (w <= 0 || h <= 0) activity.resources.displayMetrics.let { w = it.widthPixels; h = it.heightPixels }
+        if (w <= 0 || h <= 0) {
+            // Not laid out yet: the whole screen, as the game's surface will be (displayMetrics leaves the bars out).
+            if (android.os.Build.VERSION.SDK_INT >= 30) activity.windowManager.currentWindowMetrics.bounds.let { w = it.width(); h = it.height() }
+            else activity.resources.displayMetrics.let { w = it.widthPixels; h = it.heightPixels }
+        }
         val r = NativeBridge.pictureRect(w, h, picture.width, picture.height)
         image.layoutParams = FrameLayout.LayoutParams(r[2], r[3]).apply { leftMargin = r[0]; topMargin = r[1] }
+        JLog.i(MainActivity.TAG, "held picture: placed ${r[2]}x${r[3]} at ${r[0]},${r[1]} in ${w}x$h")
     }
 
     /**
@@ -107,6 +124,7 @@ class HeldPicture(private val activity: Activity, private val picture: Bitmap) {
         if (gone) return
         gone = true
         handler.removeCallbacksAndMessages(null)
+        activity.window.decorView.removeOnLayoutChangeListener(relayout)
         val run = onDrawn.toList(); onDrawn.clear()
         if (!added) { run.forEach { it() }; return }
         fun remove() {
