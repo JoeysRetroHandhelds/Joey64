@@ -232,16 +232,16 @@ class GpuRulesTest {
         assertEquals(listOf(GpuRules.Driver.MALISX2, GpuRules.Driver.SYSTEM), g615.take(2))
         assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(adreno, "Adreno (TM) 830", null), 35).first())
         assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(0x13B5, "Mali-G52 MC2", null), 30).first())
-        // the 650: Mr Purple first, then the rest, the phone's own last; no repeats
+        // the 650: Mr Purple T19 first (T30 has no 8-bit storage there), then the rest, the phone's own last; no repeats
         val a650 = names(GpuRules.family(adreno, "Adreno (TM) 650", null), 33)
-        assertEquals(GpuRules.Driver.PURPLE, a650.first())
+        assertEquals(listOf(GpuRules.Driver.PURPLE19, GpuRules.Driver.PURPLE), a650.take(2))
         assertEquals(GpuRules.Driver.SYSTEM, a650.last())
         assertEquals(a650.size, a650.distinct().size)
         // a driver above the Android version is left out
         assertFalse(GpuRules.Driver.APEX in names(GpuRules.family(adreno, "Adreno (TM) 740", null), 32))
         assertTrue(GpuRules.Driver.APEX in names(GpuRules.family(adreno, "Adreno (TM) 740", null), 33))
         assertFalse(GpuRules.Driver.PANVK in names(GpuRules.family(0x13B5, "Mali-G615", null), 34))
-        assertEquals(GpuRules.Driver.PURPLE, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 650", null)).value)
+        assertEquals(GpuRules.Driver.PURPLE19, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 650", null)).value)
         // PowerVR: the phone's own driver is tried with parallel-RDP during a trial
         val other = GpuRules.family(0x1010, "PowerVR B-Series BXM-8-256", null)
         assertEquals(listOf(GpuRules.Driver.SYSTEM), names(other, 35))

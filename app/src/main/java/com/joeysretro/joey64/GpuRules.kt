@@ -52,6 +52,9 @@ object GpuRules {
         R2("r2", "r2/libvulkan_freedreno.so", "Turnip R2"),
         APEX("apex", "apex/vulkan.freedreno.so", "Balemuni Apex", minSdk = 33),
         PURPLE("purple", "purple/vulkan.purple.so", "Mr Purple T30", minSdk = 30),
+        // T19 (2025, Mesa 25.1): the build that showed 8-bit storage on the Adreno 650 and ran parallel-RDP there (RP Mini V2
+        // and Flip 2 testers 2026-11-08); T30 shows none on the 650 (RP Mini V2 log 2026-11-16). Joey 2026-11-16: "Yes, download T19".
+        PURPLE19("purple19", "purple19/vulkan.purple.so", "Mr Purple T19", minSdk = 30),
         DUO("duo", "duo/libvulkan_freedreno.so", "Turnip Duo"),
         TURNIPZ("turnipz", "turnipz/libvulkan_freedreno.so", "TurnipZ", minSdk = 30),
         K11("k11", "k11/vulkan.ad07xx.so", "K11MCH1 Turnip"),
@@ -105,10 +108,10 @@ object GpuRules {
             // The Duo's 722: faux123 (Mario Party 2's text boxes), then by the smoke bench (duo-dz): the Duo build, ARMSX2,
             // Gen8 and K11 even with faux123, R2 ~10% slower, Apex and Mr Purple about half
             f.vendor == Vendor.ADRENO && f.model == 722 -> listOf(Driver.FAUX123, Driver.DUO, Driver.TURNIP, Driver.K11, Driver.R2, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
-            // Adreno 6xx: Mesa gives a6xx no 8-bit storage, so only Mr Purple's build (8-bit storage as a Vulkan 1.2
-            // feature, the RP Mini V2 / Flip 2 testers 2026-11-08) can run parallel-RDP; the rest are checked on the
-            // probe, which costs no game start
-            f.vendor == Vendor.ADRENO && f.model in 600..699 -> listOf(Driver.PURPLE, Driver.TURNIPZ, Driver.K11, Driver.FAUX123, Driver.R2, Driver.SYSTEM)
+            // Adreno 6xx: Mesa gives a6xx no 8-bit storage, so only Mr Purple's T19 (8-bit storage as a Vulkan 1.2
+            // feature, the RP Mini V2 / Flip 2 testers 2026-11-08) can run parallel-RDP (T30 can't: RP Mini V2
+            // 2026-11-16); the rest are checked on the probe, which costs a quick restart each
+            f.vendor == Vendor.ADRENO && f.model in 600..699 -> listOf(Driver.PURPLE19, Driver.PURPLE, Driver.TURNIPZ, Driver.K11, Driver.FAUX123, Driver.R2, Driver.SYSTEM)
             // Other Adreno 7xx, the A32/A33 (G3 Gen 3, G3x Gen 2) and any Adreno with no model known
             // (smoke bench o2p-dz, Odin 2 Portal's 740: R2, faux123 and ARMSX2 even with Gen8, ARMSX2 up to 10% faster;
             // K11 R8 doesn't load there; Apex and Mr Purple about half speed)
@@ -161,8 +164,8 @@ object GpuRules {
         // 1x the two drivers are even (odin3-drv1xcap60: input lag 21.6 vs 22.0 ms, no frame over 33 ms on either), and the
         // stock driver passed compat at 1x (odin3-sys1x-compat, 82/82, 0 black) and on the 2x set (odin3-sys2x-set).
         f.vendor == Vendor.ADRENO && f.model in 800..899 -> Pick(Driver.SYSTEM, "Adreno 8xx: system driver")
-        // Adreno 6xx: only Mr Purple's Turnip has the 8-bit storage parallel-RDP needs (Mesa: a7xx only)
-        f.vendor == Vendor.ADRENO && f.model in 600..699 -> Pick(Driver.PURPLE, "Adreno 6xx: Mr Purple T30 (8-bit storage)")
+        // Adreno 6xx: only Mr Purple's T19 has the 8-bit storage parallel-RDP needs (Mesa: a7xx only; T30 lost it)
+        f.vendor == Vendor.ADRENO && f.model in 600..699 -> Pick(Driver.PURPLE19, "Adreno 6xx: Mr Purple T19 (8-bit storage)")
         f.vendor == Vendor.ADRENO && f.model in 700..899 -> Pick(Driver.TURNIP, "Adreno 6xx-8xx: bundled Turnip")
         // An Adreno with no model known (a marketing name not in the table: A32, A33...): Turnip Gen8 first
         f.vendor == Vendor.ADRENO && f.model == 0 -> Pick(Driver.TURNIP, "Adreno, model not known: bundled Turnip")

@@ -65,6 +65,18 @@
       "bundled": "2026-11-15"
     },
     {
+      "name": "Mr Purple Turnip T19",
+      "file": "purple19/vulkan.purple.so",
+      "used_on": "Adreno 6xx Auto (8-bit storage on the 650 as a Vulkan 1.2 feature; T30 has none there), Android 11+",
+      "repo": "MrPurple666/purple-turnip",
+      "match": "T19",
+      "release": "turnip_mrpurple-T19-toasted",
+      "shown": "Mr Purple T19",
+      "tag": "vturnip_mrpurple-T19-toasted.adpkg",
+      "md5": "5f953080ba9ac858a99f3742c8302055",
+      "bundled": "2026-11-16"
+    },
+    {
       "name": "Turnip Duo (sherft2607)",
       "file": "duo/libvulkan_freedreno.so",
       "used_on": "Adreno 722 step-down",

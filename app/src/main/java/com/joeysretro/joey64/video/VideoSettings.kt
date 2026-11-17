@@ -129,6 +129,7 @@ object VideoChoices {
         VideoChoice("r2", "Turnip R2", "Adreno 6xx-8xx"),
         VideoChoice("apex", "Balemuni Apex", "Adreno 7xx-8xx, Android 13 and up"),
         VideoChoice("purple", "Mr Purple T30", "Adreno 6xx-7xx, Android 11 and up"),
+        VideoChoice("purple19", "Mr Purple T19", "Adreno 6xx, Android 11 and up"),
         VideoChoice("duo", "Turnip Duo", "Adreno 722"),
         VideoChoice("turnipz", "TurnipZ", "Adreno 650, Android 11 and up"),
         VideoChoice("k11", "K11MCH1 Turnip", "Adreno 6xx-7xx"),
