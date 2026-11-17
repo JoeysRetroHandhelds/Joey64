@@ -268,6 +268,32 @@ class ControlsTest {
         assertTrue(AutoMap.layoutsFor(0x2022, 0x3001, "Retroid Pocket Controller", allKeys, hasRx = false).isEmpty())
     }
 
+    @Test fun passedOnPadsAreKnownByTheNamesTheyReport() {
+        fun rowOf(name: String, rx: Boolean = false) = AutoMap.layoutsFor(0x2022, 0x3001, name, allKeys, hasRx = rx).map { it.name }.distinct()
+        // Names from RetroArch's Linux / SDL profiles; USB names come padded with spaces.
+        assertEquals(listOf("Switch Online N64"), rowOf("N64 Controller", rx = true))
+        assertEquals(listOf("Switch Online N64"), rowOf("Nintendo N64 Controller"))
+        assertEquals(listOf("8BitDo 64"), rowOf("8BitDo 64 Bluetooth Controller"))
+        assertEquals(listOf("8BitDo 64"), rowOf("8BitDo 8BitDo 64 Bluetooth Controller"))
+        assertEquals(listOf("Retro-Bit x 8BitDo RB8-64"), rowOf("8Bitdo N64 GamePad"))
+        assertEquals(listOf("Retro-Bit x 8BitDo RB8-64"), rowOf("8Bitdo N64         8Bitdo N64     "))
+        assertEquals(listOf("8BitDo N64 Mod Kit"), rowOf("8BitDo N64 Modkit"))
+        assertEquals(listOf("Hyperkin N64 adapter"), rowOf("Hyperkin Adapter"))
+        assertEquals(listOf("Mayflash N64 adapter"), rowOf("MAYFLASH N64 USB Adapter MF103"))
+        assertTrue(rowOf("Retrolink Nintento 64 Classic USB").contains("Retrolink N64 USB"))
+        assertEquals(listOf("raphnet GC/N64 to USB"), rowOf("raphnet technologies Dual GC/N64 to USB v3.6"))
+        assertEquals(listOf("Bliss-Box 4-Play"), rowOf("Bliss-Box 4-Play N64"))
+        assertEquals(listOf("retroUSB N64 RetroPort"), rowOf("Brain Actuated Technologies N64 RetroPort"))
+        // A name only starts a match at a word's end ("8BitDo 640" isn't the 8BitDo 64), and names other pads share
+        // aren't matched (those adapters are known by ID only).
+        assertTrue(rowOf("8BitDo 640").isEmpty())
+        assertTrue(rowOf("HuiJia  USB GamePad").isEmpty())
+        assertTrue(rowOf("PC Game Controller       ").isEmpty())
+        assertTrue(rowOf("Generic   USB  Joystick  ").isEmpty())
+        // Names count only for a passed-on pad: elsewhere the ID decides.
+        assertTrue(AutoMap.layoutsFor(0x1234, 0x5678, "8BitDo 64 BT", allKeys, hasRx = false).isEmpty())
+    }
+
     @Test fun linuxNumberedRowsResolveToTheNumberingThePadHas() {
         // A joystick-numbered pad (BUTTON_1..): Retrolink's A is Linux button 6, KEYCODE_BUTTON_7.
         val joy = AutoMap.layoutsFor(0x0079, 0x0006, "Generic   USB  Joystick", only(*(188..203).toList().toIntArray()), hasRx = false)

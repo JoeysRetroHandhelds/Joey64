@@ -71,6 +71,25 @@ Not controllers for Android:
 5. **The Switch Online N64 over USB gives no input on Android.** It needs Nintendo's handshake, which Joey64 could send itself through Android's USB host API (as dish does). That's a later item; until then the popup says to use Bluetooth.
 6. **Everything not in the table** gets the position rule from the mockups: A on the bottom face button, B on the left one, Z on the left trigger, C buttons on the right stick.
 
+## Names, for pads whose ID is hidden (2026-11-17)
+
+On a Retroid Pocket, a Bluetooth pad reaches apps through Retroid's controller service as 2022:3001 (the handheld's own pad's ID) with the pad's own name, so Auto map can know it only by name (`PadTable.Row.names`). A row matches when the name, any case and with runs of spaces as one, is the row's label or one of these, whole or followed by more words. The names are what the pad reports on Linux (RetroArch's `udev/` and `sdl2/` profiles), which Android reads too.
+
+| Row | Names |
+|---|---|
+| Switch Online N64 | N64 Controller, Nintendo N64 Controller |
+| 8BitDo 64 | 8BitDo 64 BT (seen on the Duo), 8BitDo 64 Bluetooth Controller, 8BitDo 8BitDo 64 Bluetooth Controller (USB) |
+| RB8-64 | 8Bitdo N64 GamePad (Bluetooth), 8Bitdo N64 8Bitdo N64 (USB) |
+| 8BitDo N64 Mod Kit | 8BitDo N64 Modkit |
+| Hyperkin N64 adapter | Hyperkin Adapter |
+| Mayflash MF103 | MAYFLASH N64 USB Adapter MF103 |
+| Retrolink N64 USB | Retrolink Nintento 64 Classic USB (sic) |
+| raphnet v3 | raphnet technologies Dual GC/N64 to USB, raphnet technologies GC/N64 to USB, raphnet technologies N64 to USB |
+| Bliss-Box 4-Play | Bliss-Box 4-Play N64 |
+| retroUSB N64 RetroPort | Brain Actuated Technologies N64 RetroPort |
+
+Left out, because other pads report the same name: HuiJia USB GamePad (Mayflash N64 to USB), PC Game Controller (Tomee), Generic USB Joystick (Retrolink and DragonRise pads), MAGIC-S PRO (Mayflash's multi-console adapter). The Hyperkin Admiral has no published name; its row keeps our label. Only the 8BitDo 64's name is checked on a device.
+
 ## To check on real pads
 
 Every row not marked **Checked** needs a test on a real pad: connect it, press each button, and compare with the table. Joey64's dev log can show each key code as it arrives.

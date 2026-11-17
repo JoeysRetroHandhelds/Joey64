@@ -64,7 +64,7 @@ object AutoMap {
         // A pad Retroid's service passes on has lost its own ID: known by its name instead ("8BitDo 64 BT").
         val passed = retroidPassThrough(vendor, product, name)
         val rows = PadTable.rows.filter { r ->
-            (r.ids.any { it == (vendor shl 16 or product) } || passed && name.startsWith(r.name, ignoreCase = true)) &&
+            (r.ids.any { it == (vendor shl 16 or product) } || passed && r.named(name)) &&
                 (r.needsRx == null || r.needsRx == hasRx)
         }
         return rows.flatMap { it.candidates() }.filter { fits(it, hasKeys) }.ifEmpty { rows.flatMap { it.candidates() }.take(1) }
@@ -113,8 +113,20 @@ object PadTable {
         /** For the Switch Online N64: true for the generic HID layout (it reports AXIS_RX), false for hid-nintendo's. */
         val needsRx: Boolean? = null,
         val alt: List<Pair<String, Map<N64Button, String>>> = emptyList(),
+        /**
+         * The names the pad reports (RetroArch's Linux and SDL profiles: Android reads the same kernel name), for a pad
+         * whose ID is hidden (Retroid's pass-through). Names other pads share ("HuiJia USB GamePad", "PC Game Controller",
+         * "Generic USB Joystick") are left out: those rows are known by ID only.
+         */
+        val names: List<String> = emptyList(),
     ) {
         val linux get() = map.values.any { it.startsWith("#") }
+
+        /** [deviceName] is this row's pad: our label or one of its [names], whole or followed by more words, any case and spacing. */
+        fun named(deviceName: String): Boolean {
+            val d = norm(deviceName)
+            return (listOf(name) + names).any { n -> val k = norm(n); d == k || d.startsWith("$k ") }
+        }
 
         fun candidates(): List<AutoMap.Layout> = buildList {
             for ((label, m) in listOf(name to map) + alt) {
@@ -127,6 +139,9 @@ object PadTable {
     }
 
     private fun id(v: Int, p: Int) = v shl 16 or p
+
+    /** Lower case, runs of spaces as one, trimmed: USB names come padded ("8Bitdo N64         8Bitdo N64     "). */
+    private fun norm(s: String) = s.trim().replace(Regex("\\s+"), " ").lowercase()
 
     /** Linux button numbers as Android numbers them (Generic.kl), for a gamepad (BTN_SOUTH...) and a joystick (BTN_TRIGGER...). */
     private val PAD = intArrayOf(
@@ -169,20 +184,27 @@ object PadTable {
 
     val rows: List<Row> = listOf(
         Row("Switch Online N64", listOf(id(0x057e, 0x2019)), needsRx = true,
+            names = listOf("N64 Controller", "Nintendo N64 Controller"),
             map = m(A to "B", B to "A", Z to "L1", L to "Y", R to "Z", S to "R2", CU to "C", CD to "R1", CL to "X", CR to "L2")),
         Row("Switch Online N64", listOf(id(0x057e, 0x2019)), needsRx = false,
+            names = listOf("N64 Controller", "Nintendo N64 Controller"),
             map = m(A to "A", B to "B", Z to "L2", L to "L1", R to "R1", S to "START", CU to "SELECT", CD to "X", CL to "Y", CR to "C")),
         Row("8BitDo 64", listOf(id(0x2dc8, 0x3019)),
+            names = listOf("8BitDo 64 BT", "8BitDo 64 Bluetooth Controller", "8BitDo 8BitDo 64 Bluetooth Controller"),
             map = m(A to "A", B to "B", Z to "L2", L to "L1", R to "R1", S to "START", CU to "RS")),
         Row("Retro-Bit x 8BitDo RB8-64", listOf(id(0x2dc8, 0x3830), id(0x2dc8, 0x9002)),
+            names = listOf("8Bitdo N64 GamePad", "8Bitdo N64 8Bitdo N64"),
             map = m(A to "A", B to "B", Z to "SELECT", L to "L1", R to "R1", S to "START", CU to "L2", CD to "X", CL to "Y", CR to "R2")),
         Row("8BitDo N64 Mod Kit", listOf(id(0x2dc8, 0x2869)),
+            names = listOf("8BitDo N64 Modkit"),
             map = m(A to "A", B to "B", Z to "L2", L to "L1", R to "R1", S to "START", CU to "RS")),
         Row("Hyperkin Admiral", listOf(id(0x2e24, 0x200b)),
             map = m(A to "B", B to "A", Z to "THUMBR", L to "Y", R to "Z", S to "R2", CU to "MODE", CD to "THUMBL", CL to "L2", CR to "START")),
         Row("Hyperkin N64 adapter", listOf(id(0x0079, 0x954e), id(0x2e24, 0x0bff)),
+            names = listOf("Hyperkin Adapter"),
             map = m(A to "B", B to "C", Z to "L1", L to "Y", R to "Z", S to "R2", CU to "RS")),
         Row("Mayflash N64 adapter", listOf(id(0x2f24, 0x00f5), id(0x2f24, 0x00f4)),
+            names = listOf("MAYFLASH N64 USB Adapter MF103"),
             map = m(A to "C", B to "B", Z to "L1", L to "Y", R to "Z", S to "R2", CU to "RS"),
             alt = listOf("Mayflash N64 adapter" to m(A to "B", B to "C", Z to "L1", L to "Y", R to "Z", S to "R2", CU to "RS"))),
         Row("Mayflash N64 to USB", listOf(id(0x0e8f, 0x3013)),
@@ -193,15 +215,19 @@ object PadTable {
         Row("Tomee N64 USB", listOf(id(0x11ff, 0x3331)),
             map = m(A to "B6", B to "B5", Z to "B9", L to "B7", R to "B8", S to "B10", CU to "B1", CR to "B2", CD to "B3", CL to "B4")),
         Row("Retrolink N64 USB", listOf(id(0x0079, 0x0006)),
+            names = listOf("Retrolink Nintento 64 Classic USB"),
             map = m(A to "#6", B to "#8", Z to "#7", L to "#4", R to "#5", S to "#9", CU to "#0", CR to "#1", CD to "#2", CL to "#3"),
             alt = listOf("N64-style USB pad" to m(A to "#5", B to "#4", Z to "#8", L to "#6", R to "#7", S to "#9", CD to "#0", CR to "#1", CU to "#2", CL to "#3"))),
         Row("raphnet GC/N64 to USB", listOf(id(0x289b, 0x0063), id(0x289b, 0x003c), id(0x289b, 0x0060), id(0x289b, 0x0061), id(0x289b, 0x0064)),
+            names = listOf("raphnet technologies Dual GC/N64 to USB", "raphnet technologies GC/N64 to USB", "raphnet technologies N64 to USB"),
             map = m(A to "#0", B to "#1", Z to "#2", S to "#3", L to "#4", R to "#5", CU to "#6", CD to "#7", CL to "#8", CR to "#9",
                 DU to "#10", DD to "#11", DL to "#12", DR to "#13")),
         Row("Bliss-Box 4-Play", listOf(id(0x16d0, 0x0d04), id(0x16d0, 0x0d05), id(0x16d0, 0x0d06), id(0x16d0, 0x0d07)),
+            names = listOf("Bliss-Box 4-Play N64"),
             map = m(A to "#2", B to "#1", Z to "#5", L to "#7", R to "#8", S to "#6", CU to "#9", CD to "#4", CL to "#3", CR to "#10",
                 DU to "#11", DD to "#12", DL to "#13", DR to "#14")),
         Row("retroUSB N64 RetroPort", listOf(id(0x1234, 0x0004)),
+            names = listOf("Brain Actuated Technologies N64 RetroPort"),
             map = m(A to "#7", B to "#6", Z to "#5", L to "#13", R to "#12", S to "#4", CU to "#11", CD to "#10", CL to "#9", CR to "#8",
                 DU to "#3", DD to "#2", DL to "#1", DR to "#0")),
     )
