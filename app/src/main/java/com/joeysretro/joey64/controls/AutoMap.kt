@@ -61,9 +61,24 @@ object AutoMap {
      */
     fun layoutsFor(vendor: Int, product: Int, name: String, hasKeys: (IntArray) -> BooleanArray, hasRx: Boolean): List<Layout> {
         if (name.contains("Brawler64", ignoreCase = true)) return listOf(PadTable.brawler64)
-        val rows = PadTable.rows.filter { r -> r.ids.any { it == (vendor shl 16 or product) } && (r.needsRx == null || r.needsRx == hasRx) }
+        // A pad Retroid's service passes on has lost its own ID: known by its name instead ("8BitDo 64 BT").
+        val passed = retroidPassThrough(vendor, product, name)
+        val rows = PadTable.rows.filter { r ->
+            (r.ids.any { it == (vendor shl 16 or product) } || passed && name.startsWith(r.name, ignoreCase = true)) &&
+                (r.needsRx == null || r.needsRx == hasRx)
+        }
         return rows.flatMap { it.candidates() }.filter { fits(it, hasKeys) }.ifEmpty { rows.flatMap { it.candidates() }.take(1) }
     }
+
+    /**
+     * A Bluetooth pad on a Retroid Pocket: Retroid's controller service passes it on to apps as a virtual pad with the
+     * handheld's own pad's ID, 2022:3001, and the pad's own name (Duo 2026-11-17, an 8BitDo 64: "8BitDo 64 BT", its
+     * 2dc8:3019 gone, so Auto map gave it the position rule and B did nothing, and it was taken for the built-in pad).
+     * The handheld's own pad is "Retroid Pocket Controller", "X-Box Controller" in its Xbox position.
+     */
+    fun retroidPassThrough(vendor: Int, product: Int, name: String): Boolean =
+        vendor == 0x2022 && product == 0x3001 &&
+            !name.startsWith("Retroid Pocket", ignoreCase = true) && !name.equals("X-Box Controller", ignoreCase = true)
 
     /** A layout fits when the pad has every key it uses (the D-pad aside: hats don't count as keys). */
     private fun fits(l: Layout, hasKeys: (IntArray) -> BooleanArray): Boolean {

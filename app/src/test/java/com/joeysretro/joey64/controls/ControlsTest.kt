@@ -254,6 +254,20 @@ class ControlsTest {
         assertEquals("D-pad", InputNames.group(s, N64Button.DPAD))
     }
 
+    @Test fun aPadRetroidPassesOnIsKnownByItsName() {
+        // Duo 2026-11-17: the 8BitDo 64 over Bluetooth reaches apps as 2022:3001, the Retroid pad's own ID.
+        val l = AutoMap.layoutsFor(0x2022, 0x3001, "8BitDo 64 BT", allKeys, hasRx = false).single()
+        val s = AutoMap.fromLayout(DeviceChoice.Pad("x", "8BitDo 64 BT"), l)
+        assertEquals(PadInput.Key(KeyEvent.KEYCODE_BUTTON_A), s.buttons[N64Button.A])
+        assertEquals(PadInput.Key(KeyEvent.KEYCODE_BUTTON_B), s.buttons[N64Button.B])
+        assertEquals("Right stick", InputNames.group(s, N64Button.C))
+        assertTrue(AutoMap.retroidPassThrough(0x2022, 0x3001, "8BitDo 64 BT"))
+        // The handheld's own pad, in both toggle positions, and its mouse, stay the handheld's.
+        assertFalse(AutoMap.retroidPassThrough(0x2022, 0x3001, "Retroid Pocket Controller"))
+        assertFalse(AutoMap.retroidPassThrough(0x2022, 0x3001, "X-Box Controller"))
+        assertTrue(AutoMap.layoutsFor(0x2022, 0x3001, "Retroid Pocket Controller", allKeys, hasRx = false).isEmpty())
+    }
+
     @Test fun linuxNumberedRowsResolveToTheNumberingThePadHas() {
         // A joystick-numbered pad (BUTTON_1..): Retrolink's A is Linux button 6, KEYCODE_BUTTON_7.
         val joy = AutoMap.layoutsFor(0x0079, 0x0006, "Generic   USB  Joystick", only(*(188..203).toList().toIntArray()), hasRx = false)

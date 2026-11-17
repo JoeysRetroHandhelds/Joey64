@@ -27,7 +27,8 @@ object PadDevices {
 
     fun pads(): List<InputDevice> = InputDevice.getDeviceIds().toList().mapNotNull { InputDevice.getDevice(it) }.filter { isPad(it) }
 
-    fun isBuiltIn(d: InputDevice): Boolean = !d.isExternal || (d.vendorId shl 16 or d.productId) in BUILT_IN_IDS
+    fun isBuiltIn(d: InputDevice): Boolean = !d.isExternal ||
+        (d.vendorId shl 16 or d.productId) in BUILT_IN_IDS && !AutoMap.retroidPassThrough(d.vendorId, d.productId, d.name ?: "")
 
     fun builtIn(): InputDevice? = pads().firstOrNull { isBuiltIn(it) }
 

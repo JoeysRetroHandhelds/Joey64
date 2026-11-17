@@ -47,7 +47,8 @@ object Controllers {
     )
 
     fun profile(dev: InputDevice?): Profile =
-        dev?.let { KNOWN[(it.vendorId shl 16) or it.productId] } ?: DEFAULT
+        dev?.takeUnless { com.joeysretro.joey64.controls.AutoMap.retroidPassThrough(it.vendorId, it.productId, it.name ?: "") }
+            ?.let { KNOWN[(it.vendorId shl 16) or it.productId] } ?: DEFAULT
 
     @Volatile private var resolver: android.content.ContentResolver? = null
     @Volatile private var toggleRead = 0L
