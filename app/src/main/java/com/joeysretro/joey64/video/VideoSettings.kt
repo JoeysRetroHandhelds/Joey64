@@ -244,7 +244,12 @@ data class VideoApply(
                 opts["mupen64plus-EnableNativeResFactor"] = v.int(VideoKey.Resolution).toString()
             }
             val env = LinkedHashMap<String, String>()
-            when (v[VideoKey.Pacing]) { "steady" -> env["N64_SWAP_INTERVAL"] = "1"; "timed" -> env["N64_SWAP_INTERVAL"] = "2" }
+            // Steady on a 120 Hz screen is auto (3): Steady until the swapchain queue backs up, then timed pacing
+            // (Joey 2026-11-17, "Yes, limit 4": game 59 45-52 -> 13-16 ms poll->display, other games unchanged).
+            when (v[VideoKey.Pacing]) {
+                "steady" -> env["N64_SWAP_INTERVAL"] = if (VideoKey.highRefresh) "3" else "1"
+                "timed" -> env["N64_SWAP_INTERVAL"] = "2"
+            }
             // Look's Sharp preset no longer turns on the sharp-pixels drawing (Picture mockup's Q1, 2026-11-08):
             // that is Shader's Sharp pixels now (Auto gives it at Native on most screens).
             return VideoApply(opts, env)

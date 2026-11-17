@@ -172,9 +172,21 @@ private:
     double extraLeadNs_ = 0;     // timed pacing: lead added after missed slots (timingMutex_)
     double workMaxNs_ = 12e6;    // decaying peak of frame start -> present call
     uint64_t lastTargetNs_ = 0, desiredNs_ = 0;
+    // Auto pacing (N64_SWAP_INTERVAL=3): Steady until the queue backs up, then timed pacing with the learned grid step.
+    bool autoPace_ = false, autoTimed_ = false, autoBack_ = false; // autoBack_: timed pacing didn't pay, Steady for good
+    double autoP2dSum_ = 0, steadyP2d_ = 0;
+    int autoP2dN_ = 0, timedSeen_ = 0;
+    double autoSum_ = 0, autoLogSum_ = 0;
+    int autoN_ = 0, autoLogN_ = 0;
+    int64_t autoFrom_ = 0; // auto pacing judges Steady only from this display time (10 s after the first picture)
+    uint64_t stepNs_ = 0;
+    int stepAge_ = 0, aimNext_ = -1, oddAims_ = 0, oddLate_ = 0, probeLeft_ = 0, sinceProbe_ = 0;
+    bool oddDead_ = false;
     void paceFrame();
     static constexpr uint32_t kTimingRing = 64;
     int64_t pollNs_ = 0, presentPollNs_[kTimingRing] = {};
+    int64_t presentCallNs_[kTimingRing] = {};
+    uint8_t aimOdd_[kTimingRing] = {}; // 0 unknown, 1 aimed even, 2 aimed odd
     uint32_t presentId_ = 0;
     double latSumMs_ = 0, latMaxMs_ = 0;
     uint32_t latCount_ = 0;

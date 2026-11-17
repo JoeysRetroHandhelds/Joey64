@@ -178,6 +178,9 @@ bool VkContext::loadLibrary() {
 bool VkContext::init(const retro_hw_render_context_negotiation_interface_vulkan* negotiation) {
     negotiation_ = negotiation;
     lost_ = false;
+    autoTimed_ = false; autoSum_ = 0; autoN_ = 0; autoLogSum_ = 0; autoLogN_ = 0; autoFrom_ = 0; // auto pacing starts on Steady
+    autoBack_ = false; autoP2dSum_ = 0; autoP2dN_ = 0; steadyP2d_ = 0; timedSeen_ = 0;
+    stepNs_ = 0; stepAge_ = 0; aimNext_ = -1; oddAims_ = oddLate_ = probeLeft_ = sinceProbe_ = 0; oddDead_ = false;
     if (!loadLibrary()) return false;
 
     VkApplicationInfo defaultApp{VK_STRUCTURE_TYPE_APPLICATION_INFO};
@@ -485,6 +488,10 @@ void VkContext::updateSwapInterval() {
         // pacing (2) costs 2-7 ms (Portal, Duo, Odin 3) for nearly the same evenness.
         const char* si = getenv("N64_SWAP_INTERVAL");
         swapMode_ = si ? atoi(si) : 0;
+        // 3 = auto (the 120 Hz default with Steady, Joey 2026-11-17): Steady until the swapchain queue backs up, then
+        // timed pacing for the rest of the game (autoTimed_, set in collectTiming).
+        autoPace_ = swapMode_ == 3;
+        if (autoPace_) swapMode_ = autoTimed_ && !autoBack_ ? 2 : 1;
         if (swapMode_ == 2 && !getPastTiming_) swapMode_ = 0; // timed pacing needs display timing
         if (Display::opts().bfi) swapMode_ = 0; // black frames take the spare refreshes
         if (swapMode_ == 0 && !Display::opts().bfi) interval = 1;
@@ -609,12 +616,38 @@ void VkContext::paceFrame() {
     // earliestPresentTime can't be used for this: it includes our own queued frames, and feeding
     // it back made the budget run away). GPU time after the present call isn't in workMaxNs_, so
     // frames that still miss their slot add lead (extraLeadNs_, up to two refreshes).
-    uint64_t budget = (uint64_t)(std::min(workMaxNs_, (double)period) + extra) + 2 * refreshNs_ + 1000000;
+    // After auto pacing's switch the lead is 12 ms: the default lead was most of timed pacing's lag (game 59 under
+    // Steady's backed-up queue 45-52 ms -> 13-16 ms with it, 2026-11-17, 0-24 uneven frames).
+    uint64_t budget = (uint64_t)(std::min(workMaxNs_, (double)period) + extra)
+        + (autoTimed_ ? 12000000ull : 2 * refreshNs_ + 1000000);
     uint64_t earliest = (uint64_t)now + budget;
     uint64_t k = earliest > anchor ? (earliest - anchor + period - 1) / period : 0;
     uint64_t target = anchor + k * period;
+    if (autoTimed_) {
+        // Learned grid step: aim at the first refresh at or after the earliest start and half a refresh before the
+        // last slot's period, not on the period grid of the last display time (a frame shown a refresh off the even
+        // phase moved that grid half a period, and the next frame skipped a whole slot: Mario Tennis 54 fps). Where
+        // odd refreshes don't show (panels the 60 Hz content switches: Odin 3, Odin 3 Portal, Duo), learned from
+        // display timing in collectTiming, the step is the frame period, looked at again for 120 frames every 1200.
+        if (!stepNs_ || ++stepAge_ >= 120) {
+            stepAge_ = 0;
+            VkRefreshCycleDurationGOOGLE rc{};
+            stepNs_ = getRefreshCycle_ && swapchain_ && getRefreshCycle_(device_, swapchain_, &rc) == VK_SUCCESS && rc.refreshDuration
+                ? rc.refreshDuration : refreshNs_;
+        }
+        uint64_t step = stepNs_;
+        if (oddDead_) {
+            if (probeLeft_ > 0) --probeLeft_;
+            else if (++sinceProbe_ >= 1200) { sinceProbe_ = 0; probeLeft_ = 120; oddAims_ = oddLate_ = 0; }
+            if (probeLeft_ <= 0) step = period;
+        }
+        uint64_t want = earliest;
+        if (lastTargetNs_ && lastTargetNs_ + period - step / 2 > want) want = lastTargetNs_ + period - step / 2;
+        target = anchor + (want > anchor ? (want - anchor + step - 1) / step : 0) * step;
+    }
     if (lastTargetNs_ && target + refreshNs_ / 2 < lastTargetNs_ + period)
         target = lastTargetNs_ + period; // never two frames in one slot
+    if (autoTimed_) aimNext_ = (int)(((target - anchor + refreshNs_ / 2) / refreshNs_) & 1);
     lastTargetNs_ = target;
     desiredNs_ = target - refreshNs_ / 2; // half a refresh early: the compositor rounds up to the slot
     struct timespec ts{(time_t)((target - budget) / 1000000000ull), (long)((target - budget) % 1000000000ull)};
@@ -909,6 +942,9 @@ void VkContext::present(bool newImage) {
     VkPresentTimesInfoGOOGLE times{VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE};
     if (getPastTiming_) {
         presentPollNs_[presentId_ % kTimingRing] = pollNs_;
+        presentCallNs_[presentId_ % kTimingRing] = monoNs();
+        aimOdd_[presentId_ % kTimingRing] = (uint8_t)(aimNext_ + 1);
+        aimNext_ = -1;
         times.swapchainCount = 1; times.pTimes = &when;
         pi.pNext = &times;
         int64_t t = monoNs();
@@ -963,6 +999,72 @@ void VkContext::collectTiming() {
     if (getPastTiming_(device_, swapchain_, &n, past) < 0) return;
     for (uint32_t i = 0; i < n; ++i) {
         hitch::shown(past[i].presentID, (int64_t)past[i].actualPresentTime, (int64_t)past[i].earliestPresentTime, refreshNs_);
+        if (presentId_ - past[i].presentID < kTimingRing && past[i].actualPresentTime) {
+            const uint32_t slot = past[i].presentID % kTimingRing;
+            // Auto pacing: Steady's queue has backed up when the present call to display averages over 4 refreshes
+            // across 120 frames (healthy 2-3; backed up, game 59, 4.3-5.0; Mario Tennis at 2x on the Duo 3.7, which
+            // timed pacing gave 63-100 uneven frames for 1 ms: kept on Steady). N64_AUTO_PACE_REFRESHES overrides.
+            const int64_t call = presentCallNs_[slot];
+            const double q = call ? (double)((int64_t)past[i].actualPresentTime - call) : -1;
+            const int64_t poll = presentPollNs_[slot];
+            const double p2d = poll ? (double)((int64_t)past[i].actualPresentTime - poll) : -1;
+            if (autoPace_ && !autoBack_ && q > 0 && q < 500e6) {
+                static const double limit = getenv("N64_AUTO_PACE_REFRESHES") ? atof(getenv("N64_AUTO_PACE_REFRESHES")) : 4.0;
+                autoSum_ += q; autoLogSum_ += q;
+                if (p2d > 0 && p2d < 500e6) { autoP2dSum_ += p2d; ++autoP2dN_; }
+                // Not in the first 10 s: the game's first frame (~108 ms) and a loaded state (50-220 ms) underrun the
+                // audio, and the catch-up fills Steady's queue (Odin 3 game 59: 41-48 ms for ~5-7 s), which a panel a
+                // little over 120 Hz (Odin 3 121.6) drains by itself; one a little under (Duo 119.9: two refreshes are
+                // 59.95 a second, slower than the game) never does, and that's the case to switch (2026-11-17).
+                const int64_t shownAt = (int64_t)past[i].actualPresentTime;
+                if (!autoTimed_ && (!autoFrom_ || shownAt < autoFrom_)) {
+                    if (!autoFrom_) autoFrom_ = shownAt + 10000000000LL;
+                    autoSum_ = 0; autoN_ = 0; autoP2dSum_ = 0; autoP2dN_ = 0;
+                } else if (!autoTimed_ && ++autoN_ == 120) {
+                    // Steady presents each frame twice and only the first carries its poll, so 120 presents give at
+                    // most 60 poll-to-display samples (a 30 fps game 30): 20 is enough to compare against later.
+                    if (autoSum_ / autoN_ > limit * refreshNs_ && autoP2dN_ >= 20) {
+                        autoTimed_ = true; // updateSwapInterval picks it up within 128 presents
+                        steadyP2d_ = autoP2dSum_ / autoP2dN_;
+                        LOGI("pace: auto: present to display %.2f ms over 120 frames (%.1f refreshes), poll to display %.2f ms: timed pacing from now",
+                             autoSum_ / autoN_ / 1e6, autoSum_ / autoN_ / refreshNs_, steadyP2d_ / 1e6);
+                    }
+                    autoSum_ = 0; autoN_ = 0; autoP2dSum_ = 0; autoP2dN_ = 0;
+                } else if (autoTimed_ && ++timedSeen_ == 180) {
+                    autoP2dSum_ = 0; autoP2dN_ = 0; // the first frames after the switch drain Steady's queue: not counted
+                } else if (autoTimed_ && timedSeen_ == 480) {
+                    // Kept only when it pays: GPU-bound games reach a backed-up queue's present-to-display too (Duo 2x
+                    // Perfect Dark at 4.2 refreshes, 48-51 -> 55 ms with timed pacing), so unless timed pacing's poll to
+                    // display is at least 10% under Steady's, Steady for the rest of the game (Joey 2026-11-17).
+                    const double timed = autoP2dN_ ? autoP2dSum_ / autoP2dN_ : 0;
+                    if (timed > 0 && timed > 0.9 * steadyP2d_) {
+                        autoBack_ = true;
+                        LOGI("pace: auto: poll to display %.2f ms timed against %.2f ms steady: back to Steady", timed / 1e6, steadyP2d_ / 1e6);
+                    } else
+                        LOGI("pace: auto: poll to display %.2f ms timed against %.2f ms steady: timed pacing kept", timed / 1e6, steadyP2d_ / 1e6);
+                }
+                if (++autoLogN_ == 300) {
+                    LOGI("pace: auto: present to display over 300 frames %.2f ms (%s)", autoLogSum_ / autoLogN_ / 1e6,
+                         autoTimed_ ? "timed" : "steady");
+                    autoLogSum_ = 0; autoLogN_ = 0;
+                }
+            }
+            // Learned grid step: a frame aimed at an odd refresh that shows a refresh late means odd slots don't show.
+            const uint8_t aim = aimOdd_[slot];
+            aimOdd_[slot] = 0;
+            if (aim == 2 && past[i].desiredPresentTime) {
+                ++oddAims_;
+                const double late = (double)((int64_t)past[i].actualPresentTime - (int64_t)past[i].desiredPresentTime) - refreshNs_ / 2.0;
+                if (late > refreshNs_ * 0.5) ++oddLate_;
+                if (oddAims_ >= 60) {
+                    const bool dead = oddLate_ * 2 > oddAims_;
+                    if (dead != oddDead_)
+                        LOGI("pace: odd slots %s (%d of %d aims shown a refresh late): grid step now %s", dead ? "don't show" : "show",
+                             oddLate_, oddAims_, dead ? "the frame period" : "one refresh");
+                    oddDead_ = dead; oddAims_ = oddLate_ = 0; probeLeft_ = 0;
+                }
+            }
+        }
         if (presentId_ - past[i].presentID >= kTimingRing) continue; // too old for the ring
         int64_t poll = presentPollNs_[past[i].presentID % kTimingRing];
         if (!poll || !past[i].actualPresentTime) continue;
