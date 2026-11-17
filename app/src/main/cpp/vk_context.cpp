@@ -517,13 +517,25 @@ void VkContext::markLost(const char* what, VkResult r) {
     LOGE("Vulkan: %s (%d): the GPU stopped answering, the game stops", what, (int)r);
 }
 
-// A frame's fence: 5 s at most, far past any frame's GPU work (Odin 3 at 8x: under 20 ms).
+// A frame's fence: 5 s at most, far past any frame's GPU work (Odin 3 at 8x: under 20 ms). The Flip's Mali
+// driver returns VK_TIMEOUT early when a signal lands in the wait (the stutter monitor's SIGPROF: Perfect Dark
+// "stopped answering" within seconds at full speed, 2026-11-17), so an early timeout waits again for the rest.
 bool VkContext::waitFrameFence(uint32_t i) {
     if (lost_) return false;
+    auto nowNs = [] { timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000000ull + t.tv_nsec; };
+    const uint64_t end = nowNs() + 5000000000ull;
     VkResult r;
     {
         hitch::Span span(hitch::FENCE);
-        r = vkWaitForFences(device_, 1, &frameFences_[i], VK_TRUE, 5000000000ull);
+        for (uint64_t left = 5000000000ull;;) {
+            r = vkWaitForFences(device_, 1, &frameFences_[i], VK_TRUE, left);
+            if (r != VK_TIMEOUT) break;
+            const uint64_t now = nowNs();
+            if (now >= end) break;
+            left = end - now;
+            static std::atomic<int> early{0};
+            if (early.fetch_add(1) == 0) LOGI("Vulkan: a fence wait returned early (%.1f s left), waiting again", left / 1e9);
+        }
     }
     if (r == VK_SUCCESS) return true;
     markLost(r == VK_TIMEOUT ? "a frame's GPU work wasn't done in 5 s" : "vkWaitForFences", r);
