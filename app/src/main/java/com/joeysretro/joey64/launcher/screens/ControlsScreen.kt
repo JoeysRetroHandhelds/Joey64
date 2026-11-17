@@ -279,13 +279,17 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
     var autoPak by remember(target) { mutableStateOf<Pak?>(null) }
     // A game with no Rumble Pak support that uses the Controller Pak: Rumble Pak is greyed (PakDb.resolve).
     var cpOnly by remember(target) { mutableStateOf(false) }
+    // The Game Boy games this game's Transfer Pak takes (TransferPakDb); null: any.
+    var tpakGroup by remember(target) { mutableStateOf<String?>(null) }
     LaunchedEffect(target) {
         val t = target ?: return@LaunchedEffect
         withContext(Dispatchers.IO) {
             try {
-                val md5 = LibraryDb.get(context).gameWithFile(t, GameStates::saveNameOf)?.md5
+                val game = LibraryDb.get(context).gameWithFile(t, GameStates::saveNameOf)
+                val md5 = game?.md5
                 autoPak = PakDb.auto(PakDb.load(context), md5)
                 cpOnly = PakDb.controllerOnly(PakDb.loadControllerOnly(context), md5)
+                tpakGroup = com.joeysretro.joey64.controls.TransferPakDb.groupOf(com.joeysretro.joey64.controls.TransferPakDb.load(context), md5)
             } catch (e: Exception) { JLog.e(TAG, "Auto pak: can't look up $t: $e") }
         }
     }
@@ -410,13 +414,6 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                 focused == "Stick" -> StickSource.entries.let { all -> com.joeysretro.joey64.launcher.components.PanelInfo(ctlTitle, ctlHelp,
                     all.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it == setup.stick) }) { i ->
                     edit { editor.set(player, setup.copy(stick = all[i])) } } }
-                focused == "Pak" -> Pak.entries.let { all -> com.joeysretro.joey64.launcher.components.PanelInfo(ctlTitle, ctlHelp,
-                    all.map { val oneGame = it == Pak.Transfer && target == null; val noRumble = it == Pak.Rumble && cpOnly
-                        com.joeysretro.joey64.launcher.components.PanelChoice(pakValue(it, autoPak),
-                            if (oneGame) "For one game: pick it in the chip" else if (noRumble) NO_RUMBLE else pakDetail(it),
-                            it == setup.pak, enabled = !oneGame && !noRumble) }) { i ->
-                    // Transfer Pak opens its setup (Game Boy game and save), as the popup did.
-                    if (all[i] == Pak.Transfer) popup = Popup.PakChoice else edit { editor.set(player, setup.copy(pak = all[i])) } } }
                 focused == "RumbleOn" -> {
                     val motor = com.joeysretro.joey64.launcher.layout.Tv.hasVibrator(context)
                     val ons = if (motor) RumbleOn.entries else RumbleOn.entries.filter { it != RumbleOn.Device }
@@ -478,7 +475,9 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                 JoeyRow("Pak", value = (if (setup.pak == Pak.Rumble && cpOnly) "Controller Pak · no rumble here"
                         else pakValue(setup.pak, autoPak, setup)) + "  ›", enabled = !off, sideways = true,
                     dot = "Pak" in changed,
-                    onFocused = { if (it) focused = "Pak" }) { if (!panel.enter()) popup = Popup.PakChoice }
+                    // A opens the pak popup at once, never the panel's column first (Joey 2026-11-17: the column, then a
+                    // popup for the Transfer Pak, was two steps for one choice).
+                    onFocused = { if (it) focused = "Pak" }) { popup = Popup.PakChoice }
                 // Greyed when the pak can't be a Rumble Pak (approved paks mockup 2026-11-08, screens 1 and 4a).
                 val rumble = !off && when (setup.pak) { Pak.Rumble -> !cpOnly; Pak.Auto -> autoPak == null || autoPak == Pak.Rumble; else -> false }
                 JoeyRow("Rumble on", value = setup.rumbleOn.label + "  ›", enabled = rumble, sideways = true,
@@ -619,11 +618,11 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
         }
         is Popup.TransferSetup -> TransferSetupPopup(targetTitle ?: target ?: "", setup, p.row, close,
             onGame = { popup = Popup.GbGame }, onSave = { popup = Popup.GbSave })
-        Popup.GbGame -> GameBoyListPopup(games = true, setup = setup, onDismiss = { popup = Popup.TransferSetup("game") },
+        Popup.GbGame -> GameBoyListPopup(games = true, setup = setup, group = tpakGroup, n64Title = targetTitle ?: target ?: "", onDismiss = { popup = Popup.TransferSetup("game") },
             onFolders = { popup = Popup.GbFolders(true) }) { game, save ->
             edit { editor.set(player, setup.copy(gbGame = game, gbSave = save)) }; popup = Popup.TransferSetup("game")
         }
-        Popup.GbSave -> GameBoyListPopup(games = false, setup = setup, onDismiss = { popup = Popup.TransferSetup("save") },
+        Popup.GbSave -> GameBoyListPopup(games = false, setup = setup, group = tpakGroup, n64Title = targetTitle ?: target ?: "", onDismiss = { popup = Popup.TransferSetup("save") },
             onFolders = { popup = Popup.GbFolders(false) }, onDefaultSave = { save -> edit { editor.set(player, setup.copy(gbSave = save)) } }) { save, _ ->
             edit { editor.set(player, setup.copy(gbSave = save)) }; popup = Popup.TransferSetup("save")
         }

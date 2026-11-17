@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -332,6 +333,7 @@ private fun PopupFrame(entries: List<PopupEntry>) {
 }
 
 /** One popup's card (or page, panel, bare content) in its place over the dim; [active]: the top one, with focus and keys. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun PopupCard(entry: PopupEntry, active: Boolean) {
     val sp = entry.spec
@@ -357,6 +359,26 @@ private fun PopupCard(entry: PopupEntry, active: Boolean) {
         }
     }
     var aDownTime by remember { mutableLongStateOf(-1L) }
+    // Opening on the ticked row (Joey 2026-11-17: the Game Boy list scrolled to the highlighted row on screen): the
+    // card isn't drawn until focus has landed and the list's scroll to it has ended, so it shows already there. Compose
+    // glides every bring-into-view with its own spring (foundation 1.8 never reads a spec's scrollAnimationSpec), so
+    // the glide happens unseen. Set here once for every popup, so none needs its own; 400 ms at most.
+    val movedAt = remember { IntArray(1) { -1 } }
+    val baseSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+    val openSpec = remember(baseSpec, landing) { OpeningScrollSpec(baseSpec) { movedAt[0] != landing.armedAt } }
+    var opening by remember { androidx.compose.runtime.mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        val start = System.nanoTime()
+        var frames = 0
+        while (System.nanoTime() - start < 400_000_000L) {
+            val now = androidx.compose.runtime.withFrameNanos { System.nanoTime() }
+            frames++
+            val marked = landing.pending && landing.target != null
+            val gliding = now - openSpec.lastWantNs < 40_000_000L
+            if (frames >= 2 && !marked && !gliding) break
+        }
+        opening = false
+    }
     val s = JoeyTheme.spacing
     val c = JoeyTheme.colors
     val fullScreen = sp.fullScreen
@@ -381,6 +403,7 @@ private fun PopupCard(entry: PopupEntry, active: Boolean) {
         val shape = RoundedCornerShape(s.popupCorner)
         Box(
             modifier = Modifier
+                .graphicsLayer { alpha = if (opening) 0f else 1f }
                 .then(if (bare) Modifier.fillMaxSize()
                 else if (fullScreen) Modifier.fillMaxSize().background(c.page)
                 else if (sidePanel) Modifier.fillMaxHeight().widthIn(max = sp.width).fillMaxWidth().background(c.surface)
@@ -419,6 +442,7 @@ private fun PopupCard(entry: PopupEntry, active: Boolean) {
                     val native = event.nativeKeyEvent
                     val p = latest
                     com.joeysretro.joey64.launcher.layout.RemoteKeys.note(native, isTv)
+                    if (native.action == KeyEvent.ACTION_DOWN && native.keyCode in DPAD_MOVES) movedAt[0] = landing.armedAt
                     // A TV remote's OK: a press on release, Hold OK is Start (TV mockup screen 5).
                     if (isTv && okHold.handle(native, click = {
                             view.post {
@@ -468,7 +492,8 @@ private fun PopupCard(entry: PopupEntry, active: Boolean) {
                     }
                 },
         ) {
-            CompositionLocalProvider(LocalDialogBack provides entry.backRegistry, LocalFocusLanding provides landing, LocalRowActions provides rowActions,
+            CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides openSpec,
+                LocalDialogBack provides entry.backRegistry, LocalFocusLanding provides landing, LocalRowActions provides rowActions,
                 LocalPageHints provides null, LocalListPanel provides null,
                 LocalPopupBack provides (if (fullScreen && !bare) ({ entry.requestClose() }) else null)) {
                 sp.content()
@@ -492,6 +517,21 @@ private fun PopupCard(entry: PopupEntry, active: Boolean) {
         // lit for two frames, then the second landing took it back to Who can join. The marked row's own request lands it.
         if (windowFocused && landing.pending && !bodyHasFocus[0]) body.requestFocus(FocusDirection.Enter)
         else if (windowFocused && wasBelow) { wasBelow = false; body.requestFocus(FocusDirection.Enter) }
+    }
+}
+
+private val DPAD_MOVES = setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
+    KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2)
+
+/** [base]'s distances; notes when one is still to scroll before the first D-pad press ([opening]'s glide). */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private class OpeningScrollSpec(private val base: androidx.compose.foundation.gestures.BringIntoViewSpec,
+                                private val opening: () -> Boolean) : androidx.compose.foundation.gestures.BringIntoViewSpec {
+    @Volatile var lastWantNs = 0L
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val d = base.calculateScrollDistance(offset, size, containerSize)
+        if (d != 0f && opening()) lastWantNs = System.nanoTime()
+        return d
     }
 }
 

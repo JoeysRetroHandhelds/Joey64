@@ -79,20 +79,27 @@ internal fun TransferSetupPopup(gameTitle: String, setup: PlayerSetup, row: Stri
  * to the end as Game Boy folders. A game's save list shows only the saves named like the game, with where each one is.
  */
 @Composable
-internal fun GameBoyListPopup(games: Boolean, setup: PlayerSetup, onDismiss: () -> Unit, onFolders: () -> Unit,
+internal fun GameBoyListPopup(games: Boolean, setup: PlayerSetup,
+                              /** The Game Boy games this N64 game takes ([com.joeysretro.joey64.controls.TransferPakDb]); null: any. */
+                              group: String? = null, n64Title: String = "",
+                              onDismiss: () -> Unit, onFolders: () -> Unit,
                               onDefaultSave: (GameBoyFiles.Found) -> Unit = {},
                               onPick: (GameBoyFiles.Found?, GameBoyFiles.Found?) -> Unit) {
     val context = LocalContext.current
+    // Rows that change after a scan (the folder row, the pick) take focus again (the popup's landing).
+    val landing = LocalFocusLanding.current
     var scanned by remember { mutableStateOf(0) }
-    var found by remember { mutableStateOf<GameBoyFiles.Scan?>(null) }
+    // The last scan shows at once, so the popup opens with its rows in and focus already on the ticked one (Joey
+    // 2026-11-17: it opened on Looking…, then scrolled to the highlighted row on screen); the new scan replaces it.
+    var found by remember { mutableStateOf(lastGameBoyScan) }
     var gbFolders by remember { mutableStateOf<List<String>>(emptyList()) }
     var romFolders by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(scanned) {
-        found = null
         val s = SettingsStore(context).settings.first()
         gbFolders = s.gbFolders.sorted(); romFolders = s.romFolders.sorted()
         val f = scanGameBoy(context)
-        found = f
+        lastGameBoyScan = f
+        if (f != found) { found = f; landing?.arm() }
         // A saves folder just picked, the game on New save: its same-name save is picked, as picking the game does.
         val game = setup.gbGame
         if (scanned > 0 && !games && game != null && setup.gbSave == null) GameBoyFiles.saveFor(game, f.saves)?.let(onDefaultSave)
@@ -101,9 +108,16 @@ internal fun GameBoyListPopup(games: Boolean, setup: PlayerSetup, onDismiss: () 
     val picker = if (canPick) rememberGbFolderPicker { scanned++ } else null
     val current = if (games) setup.gbGame else setup.gbSave
     val game = setup.gbGame
+    // Only the Game Boy games this game takes, and only their saves (Joey 2026-11-17).
+    val fitting = found?.games?.filter { com.joeysretro.joey64.controls.TransferPakDb.fits(group, it.name) }
     val inFolders = found?.let { f ->
-        if (games) f.games else if (game != null) f.saves.filter { GameBoyFiles.namedLike(it.name, GameBoyFiles.title(game.name)) } else f.saves
+        if (games) fitting.orEmpty()
+        else if (game != null) f.saves.filter { GameBoyFiles.namedLike(it.name, GameBoyFiles.title(game.name)) }
+        else if (group != null) f.saves.filter { sv -> fitting.orEmpty().any { GameBoyFiles.namedLike(sv.name, GameBoyFiles.title(it.name)) } }
+        else f.saves
     }
+    // Games found, none of them this game's: say so, rather than "can't see your games".
+    val noneFit = group != null && found?.let { if (games) it.games.isNotEmpty() else it.saves.isNotEmpty() } == true
     // A file picked elsewhere isn't in the folders: it still shows, ticked.
     val list = inFolders?.let { l -> if (current != null && l.none { it.uri == current.uri }) listOf(current) + l else l }
     // Nothing in the folders (a file picked elsewhere doesn't count): the folder row comes first.
@@ -114,6 +128,7 @@ internal fun GameBoyListPopup(games: Boolean, setup: PlayerSetup, onDismiss: () 
     }
     val subtitle = when {
         found == null -> null
+        none && noneFit -> if (games) "None of your Game Boy games work with $n64Title." else "None of your Game Boy saves are for games that work with $n64Title."
         none -> if (games) "Joey64 can't see your Game Boy games yet." else "Joey64 can't see your Game Boy saves yet."
         !games && game != null -> "For ${GameBoyFiles.title(game.name)}."
         else -> "From " + fromLabel(context, found!!, list.orEmpty()) + "."
@@ -122,13 +137,6 @@ internal fun GameBoyListPopup(games: Boolean, setup: PlayerSetup, onDismiss: () 
         val scroll = rememberScrollState()
         Column(Modifier.heightIn(max = 460.dp).verticalScroll(scroll)) {
             PopupTitle(if (games) "Game Boy game" else "Game Boy save", subtitle)
-            // Focus landed on None while it looked: land again once the rows are in (the folder row, or the pick). None
-            // keeps its focus without moving into view, under the rows that came in above it: the list goes down to it.
-            val landing = LocalFocusLanding.current
-            LaunchedEffect(found != null) { if (found != null) landing?.arm() }
-            // Down to None once the rows are in: keyed on the list's height, so no frame wait.
-            val bottom = scroll.maxValue
-            LaunchedEffect(found != null, bottom) { if (found != null && current == null && !none && bottom > 0) scroll.scrollTo(bottom) }
             if (found == null) PopupNote("Looking…")
             else if (none && picker != null) JoeyRow(if (games) "Choose your Game Boy folder" else "Choose your saves folder", Modifier.initialFocus(true),
                 detail = if (games) "Your gb or gbc folder, or the ROMs folder that holds them"
@@ -231,6 +239,9 @@ private fun rememberGbFolderPicker(onAdded: () -> Unit): androidx.activity.compo
         }
     }
 }
+
+/** The last Game Boy scan in this process: the lists open with it while a new one runs. */
+@Volatile private var lastGameBoyScan: GameBoyFiles.Scan? = null
 
 /** Scans the ROM folders and the Game Boy folders, off the main thread. */
 private suspend fun scanGameBoy(context: Context): GameBoyFiles.Scan {
