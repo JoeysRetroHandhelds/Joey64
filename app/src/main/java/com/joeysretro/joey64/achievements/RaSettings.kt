@@ -1,6 +1,7 @@
 package com.joeysretro.joey64.achievements
 
 import android.content.Context
+import com.joeysretro.joey64.JLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -16,8 +17,8 @@ enum class PopupSpot(val label: String) {
 
 /**
  * Settings › RetroAchievements (approved tab, 2026-11-05: scratchpad build_ratab.py and
- * build_rapop.py). Defaults as approved. Hardcore and Leaderboards aren't here: locked until
- * RetroAchievements approves Joey64.
+ * build_rapop.py). Defaults as approved. [hardcore] is the Hardcore row's (part B, 2026-11-16): On for a new
+ * sign-in, the row locked until RetroAchievements approves Joey64 (`RaHardcore.APPROVED`). Leaderboards aren't here.
  */
 data class RaOptions(
     val achievements: Boolean = true,
@@ -38,6 +39,11 @@ data class RaOptions(
     val soundVolume: Int = 70,
     /** Offline unlocks (approved mockup 2026-11-08): Joey64's own queue or RAOfflineProxy, one at a time. */
     val offlineBy: OfflineBy = OfflineBy.Joey64,
+    /**
+     * Hardcore (approved part B mockup 2026-11-16, screen 1): On for a new sign-in ([RaSettings.newSignIn]), so a
+     * sign-in from before keeps Off until changed. Only used once [RaHardcore.available].
+     */
+    val hardcore: Boolean = false,
 ) {
     companion object {
         val STAY_SECONDS = listOf(3, 5, 8, 10, 15)
@@ -94,8 +100,29 @@ object RaSettings {
             unlockSound = UnlockSoundChoice.of(p.getString("unlockSound", null), d.unlockSound),
             soundVolume = p.getInt("soundVolume", d.soundVolume).takeIf { it in UnlockSound.VOLUME_STEPS } ?: d.soundVolume,
             offlineBy = OfflineBy.of(p.getString("offlineBy", null)),
+            hardcore = p.getBoolean("hardcore", d.hardcore),
         )
     }
+
+    /**
+     * A sign-in with a password (RetroAchievements asks that Hardcore be the default or one step away): Hardcore
+     * goes On unless the user has set it before. A kept sign-in from an earlier version isn't one.
+     */
+    fun newSignIn(context: Context) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (p.contains("hardcore")) return
+        update(context) { it.copy(hardcore = true) }
+        JLog.i("RaSettings", "Hardcore on: a new sign-in")
+    }
+
+    /** Settings › RetroAchievements' Hardcore row: the user's own choice, kept from now on. */
+    fun setHardcore(context: Context, on: Boolean) {
+        hardcoreSet = true
+        update(context) { it.copy(hardcore = on) }
+    }
+
+    /** The user set Hardcore in this process (the key is then written even for Off). */
+    @Volatile private var hardcoreSet = false
 
     private fun write(context: Context, o: RaOptions) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -116,6 +143,8 @@ object RaSettings {
             .putString("unlockSound", o.unlockSound.name)
             .putInt("soundVolume", o.soundVolume)
             .putString("offlineBy", o.offlineBy.name)
+            // Written only once set (a new sign-in or the row), so newSignIn can tell "never set" from Off.
+            .also { e -> if (o.hardcore || hardcoreSet) e.putBoolean("hardcore", o.hardcore) }
             .apply()
     }
 }

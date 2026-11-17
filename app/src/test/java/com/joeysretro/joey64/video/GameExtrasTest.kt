@@ -97,8 +97,9 @@ class GameExtrasTest {
         assertEquals(21 to 9, VideoApply.aspect(VideoSettings(emptyMap()), on.shape))
         val off = ExtrasOn.of(x, VideoSettings.DEFAULTS, hardcore = false)
         assertTrue(off.codeLines.isEmpty()); assertNull(off.shape); assertFalse(off.fps)
-        val hc = ExtrasOn.of(x, VideoSettings(mapOf(VideoKey.Widescreen to GameExtras.ALL)), hardcore = true)
-        assertTrue(hc.codeLines.isEmpty())
+        // Hardcore (Joey 2026-11-16, option A): the widescreen code stays, 60 fps goes.
+        val hc = ExtrasOn.of(x, VideoSettings(mapOf(VideoKey.Widescreen to "21:9 Widescreen", VideoKey.Fps to GameExtras.ALL)), hardcore = true)
+        assertEquals(1, hc.codeLines.size); assertEquals(hc.widescreenLine, hc.codeLines[0]); assertEquals(21 to 9, hc.shape); assertFalse(hc.fps)
     }
 
     @Test fun rowsStartOffAndApplyAtStart() {
@@ -119,7 +120,7 @@ class GameExtrasTest {
         assertEquals(4 to 3, VideoApply.aspect(VideoSettings(mapOf(VideoKey.Aspect to "4:3")), pd.shape))
         // Widescreen off or Hardcore: nothing; a game not on the list: nothing
         assertNull(ExtrasOn.withOwnMode(ExtrasOn.NONE, "NPDE", VideoSettings.DEFAULTS, hardcore = false).shape)
-        assertNull(ExtrasOn.withOwnMode(ExtrasOn.NONE, "NPDE", auto, hardcore = true).shape)
+        assertEquals(16 to 9, ExtrasOn.withOwnMode(ExtrasOn.NONE, "NPDE", auto, hardcore = true).shape) // widescreen stays in Hardcore
         assertNull(ExtrasOn.withOwnMode(ExtrasOn.NONE, "NSME", auto, hardcore = false).shape)
         assertNull(ExtrasOn.withOwnMode(ExtrasOn.NONE, null, auto, hardcore = false).shape)
         // A picked code keeps its own shape

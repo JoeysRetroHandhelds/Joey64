@@ -544,6 +544,13 @@ JNIEXPORT void JNICALL RAJNI(setHardcore)(JNIEnv*, jclass, jboolean on) {
     RLOGI("Hardcore %s", on ? "on" : "off");
 }
 
+// RetroAchievements' pause limit (hardcore compliance): 0 when the game may pause now, else the frames to run first.
+JNIEXPORT jint JNICALL RAJNI(pauseWait)(JNIEnv*, jclass) {
+    if (!g_client || !g_hardcore.load()) return 0;
+    uint32_t frames = 0;
+    return rc_client_can_pause(g_client, &frames) ? 0 : (jint)std::max<uint32_t>(frames, 1);
+}
+
 JNIEXPORT jstring JNICALL RAJNI(awardRequest)(JNIEnv* env, jclass, jint id, jstring hash, jint secondsSince, jboolean hardcore) {
     std::string out;
     const rc_client_user_t* user = g_client ? rc_client_get_user_info(g_client) : nullptr;

@@ -154,7 +154,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         val key = if (k == ExtraKind.Widescreen) VideoKey.Widescreen else VideoKey.Fps
         val x = extras
         return when {
-            hardcore -> "Off in Hardcore" to false
+            hardcore && k == ExtraKind.Fps -> "Off in Hardcore" to false // widescreen stays in Hardcore (Joey 2026-11-16)
             target == null -> VideoChoices.label(key, v[key]) to true
             x == null -> "" to false
             x.of(k).isEmpty() -> "None for this game" to false
@@ -455,7 +455,7 @@ private const val FPS_NOTE = "The game runs at 60 frames a second instead of 30.
 
 /** The line under the focused Widescreen / 60 fps row (approved version A, screens 1, 3, 5 and 6). */
 private fun extraText(k: ExtraKind, hardcore: Boolean, none: Boolean): String = when {
-    hardcore -> "Off while RetroAchievements Hardcore is on. Your pick comes back when it's off."
+    hardcore && k == ExtraKind.Fps -> "Off while RetroAchievements Hardcore is on. Your pick comes back when it's off."
     none -> if (k == ExtraKind.Widescreen) "There's no widescreen code for this game yet." else "There's no 60 fps code for this game yet."
     k == ExtraKind.Widescreen -> "Experimental: some games glitch with it. Shows more of the game at the sides, for a wide screen. The picture switches to 16:9 with it. Some games draw the HUD wider. Applies when the game next starts."
     else -> "Experimental: some games glitch with it. $FPS_NOTE Applies when the game next starts."

@@ -338,8 +338,12 @@ private fun SignedIn(account: RaBridge.Account, onHints: (List<Hint>) -> Unit, m
         while (true) { value = RaBridge.unsentCount(); kotlinx.coroutines.delay(2_000L) }
     }
 
+    // Hardcore (approved part B mockup 2026-11-16, screen 1): a choice once RetroAchievements approves Joey64 (until
+    // then debug builds with files/dev_hardcore), else locked "Not approved yet" as before.
+    val hcAvailable = remember { com.joeysretro.joey64.achievements.RaHardcore.available(context) }
     val hints = when (focused) {
-        "hc", "lb" -> tabHints
+        "lb" -> tabHints
+        "hc" -> if (hcAvailable) listOf(Hint("A", "Change")) + tabHints else tabHints
         "out" -> listOf(Hint("A", "Sign out")) + tabHints
         else -> listOf(Hint("A", "Change")) + tabHints
     }
@@ -360,7 +364,11 @@ private fun SignedIn(account: RaBridge.Account, onHints: (List<Hint>) -> Unit, m
         "place" -> o.popPlace.label; "bplace" -> o.badgePlace.label; "dur" -> "${o.popSeconds} seconds"
         "snd" -> o.unlockSound.label; "off" -> OfflineRoute.rowValue(o.offlineBy, proxyRunning, waiting); else -> null
     }
-    val info = com.joeysretro.joey64.launcher.components.PanelInfo(title, text, lines = listOfNotNull(now?.let { "Now" to it }))
+    val info = if (focused == "hc" && hcAvailable) com.joeysretro.joey64.launcher.components.PanelInfo("Hardcore", HARDCORE_TEXT,
+        listOf(com.joeysretro.joey64.launcher.components.PanelChoice("On", "Unlocks count as Hardcore", on = o.hardcore),
+            com.joeysretro.joey64.launcher.components.PanelChoice("Off", "Casual: everything is allowed, unlocks count as softcore", on = !o.hardcore))) { i ->
+        RaSettings.setHardcore(context, i == 0)
+    } else com.joeysretro.joey64.launcher.components.PanelInfo(title, text, lines = listOfNotNull(now?.let { "Now" to it }))
     com.joeysretro.joey64.launcher.components.ListPanel(panel, info, hints, onHints, modifier) {
         run {
                 SectionLabel("Account")
@@ -372,7 +380,9 @@ private fun SignedIn(account: RaBridge.Account, onHints: (List<Hint>) -> Unit, m
                     if (RaBridge.unsentCount() > 0) picker = "out" else RaBridge.signOut()
                 }
                 SectionLabel("Play")
-                JoeyRow("Hardcore", sideways = true, value = "Not approved yet", enabled = false, lock = true, onFocused = { if (it) focused = "hc" })
+                if (hcAvailable) JoeyRow("Hardcore", sideways = true, value = if (o.hardcore) "On" else "Off",
+                    onFocused = { if (it) focused = "hc" }) { if (!panel.enter()) picker = "hc" }
+                else JoeyRow("Hardcore", sideways = true, value = "Not approved yet", enabled = false, lock = true, onFocused = { if (it) focused = "hc" })
                 Toggle("enc", "Encore mode", o.encore) { x, v -> x.copy(encore = v) }
                 Toggle("spec", "Spectator mode", o.spectator) { x, v -> x.copy(spectator = v) }
                 Toggle("unof", "Unofficial achievements", o.unofficial) { x, v -> x.copy(unofficial = v) }
@@ -408,6 +418,18 @@ private fun SignedIn(account: RaBridge.Account, onHints: (List<Hint>) -> Unit, m
         "dur" -> StayPicker(o.popSeconds, onDismiss = { picker = null }) { s -> set { it.copy(popSeconds = s) }; picker = null }
         "snd" -> SoundPicker(o.unlockSound, o.soundVolume, onDismiss = { UnlockSound.stop(); picker = null }) { s ->
             set { it.copy(unlockSound = s) }; picker = null
+        }
+        "hc" -> com.joeysretro.joey64.launcher.components.JoeyDialog(onDismiss = { picker = null },
+            hints = listOf(Hint("A", "Select"), Hint("B", "Close"))) {
+            // A narrow screen has no panel: the same two choices as a popup.
+            androidx.compose.foundation.layout.Column {
+                com.joeysretro.joey64.launcher.components.PopupTitle("Hardcore", HARDCORE_TEXT)
+                for (on in listOf(true, false)) com.joeysretro.joey64.launcher.components.JoeyRow(if (on) "On" else "Off",
+                    if (on == o.hardcore) Modifier.initialFocus() else Modifier,
+                    detail = if (on) "Unlocks count as Hardcore" else "Casual: everything is allowed, unlocks count as softcore") {
+                    RaSettings.setHardcore(context, on); picker = null
+                }
+            }
         }
         "out" -> SignOutPrompt(RaBridge.unsentCount(), onDismiss = { picker = null }) { picker = null; RaBridge.signOut() }
         "off" -> OfflinePicker(o.offlineBy, proxyRunning, onDismiss = { picker = null }) { by -> set { it.copy(offlineBy = by) }; picker = null }
@@ -460,6 +482,10 @@ private fun SignOutPrompt(count: Int, onDismiss: () -> Unit, onSignOut: () -> Un
         }
     }
 }
+
+/** Hardcore's panel help (approved part B mockup 2026-11-16, screen 1). */
+private const val HARDCORE_TEXT = "Achievements and leaderboards count fully. While it's on: no loading states, rewind, slow motion, " +
+    "frame advance, cheats or macros. Saving states, fast-forward and pausing still work."
 
 private fun describe(key: String, account: RaBridge.Account): Pair<String, String> = when (key) {
     "ach" -> "Achievements" to "Off: games start without RetroAchievements. Applies from the next game."

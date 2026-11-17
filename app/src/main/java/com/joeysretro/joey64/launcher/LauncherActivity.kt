@@ -422,7 +422,7 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
                                 }
                                 savesFor != null -> androidx.compose.runtime.key(savesFor) {
                                     com.joeysretro.joey64.launcher.screens.SavesScreen(savesFor!!, onHints = { settingsHints = it },
-                                        onPlay = { which -> model.play(savesFor!!.game, which) { intent -> context.startActivity(intent) } }) { backFromGamePage { model.closeSaves(back = true) } }
+                                        onPlay = { which, casual -> model.playWith(savesFor!!.game, which, casual) { intent -> context.startActivity(intent) } }) { backFromGamePage { model.closeSaves(back = true) } }
                                 }
                                 screenshotsFor != null -> androidx.compose.runtime.key(screenshotsFor) {
                                     com.joeysretro.joey64.launcher.screens.ScreenshotsScreen(screenshotsFor!!, onHints = { settingsHints = it }) { backFromGamePage { model.closeScreenshots(back = true) } }

@@ -147,6 +147,8 @@ object NativeBridge {
     /** Before loadGame: GameShark code ("ADDRESS VALUE" pairs, any separator), applied at load. */
     external fun addCheat(code: String)
 
+    /** Before loadGame: the codes Hardcore keeps (the widescreen code, Joey 2026-11-16); they go in [addCheat] too, for Casual. */
+    external fun setHardcoreCodes(codes: Array<String>)
     /** Every cheat at once, one per string (its codes joined): a running game takes them between frames, a paused one on resume. */
     external fun setCheats(codes: Array<String>)
     /** The GameShark cartridge's button down or up (its codes run only while it's down); between frames. */

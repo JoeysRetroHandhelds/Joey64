@@ -87,6 +87,8 @@ data class InGamePopup(
         GpuFaster,
         /** Texture packs (approved mockup 2026-11-15, screen 5): the pack a game starts with, and its folder that can't be reached (orange). */
         TexPack, TexPackNote,
+        /** RetroAchievements Hardcore (approved part B mockup 2026-11-16): what it keeps off (gold), and Hardcore off for this play (grey). */
+        Hardcore, HardcoreOff,
         /** The tried driver wasn't faster, or didn't start: back to the one in use (screen 2b). */
         GpuBack }
 }
@@ -174,16 +176,18 @@ fun InGamePopupCard(p: InGamePopup) {
         InGamePopup.Kind.GpuBack -> R.drawable.ic_arrow_back_up
         InGamePopup.Kind.TexPack -> R.drawable.ic_hd
         InGamePopup.Kind.TexPackNote -> R.drawable.ic_alert
+        InGamePopup.Kind.Hardcore -> R.drawable.ic_alert
+        InGamePopup.Kind.HardcoreOff -> R.drawable.ic_trophy_off
     }
     JoeyToast(icon, p.label, p.name, p.line, iconTint = when (p.kind) {
         InGamePopup.Kind.Problem, InGamePopup.Kind.ChallengeFailed -> JoeyTheme.colors.error
         InGamePopup.Kind.Account, InGamePopup.Kind.Achievement, InGamePopup.Kind.Progress, InGamePopup.Kind.Game,
         InGamePopup.Kind.NoAchievements, InGamePopup.Kind.AchievementsOff, InGamePopup.Kind.GpuFaster,
-        InGamePopup.Kind.Turbo, InGamePopup.Kind.TurboOff, InGamePopup.Kind.NetBlocked -> JoeyTheme.colors.gold
+        InGamePopup.Kind.Turbo, InGamePopup.Kind.TurboOff, InGamePopup.Kind.NetBlocked, InGamePopup.Kind.Hardcore -> JoeyTheme.colors.gold
         InGamePopup.Kind.NetWait, InGamePopup.Kind.GpuNote, InGamePopup.Kind.TexPackNote -> JoeyTheme.colors.tagMissable
         InGamePopup.Kind.TexPack -> JoeyTheme.colors.accent
         InGamePopup.Kind.GpuOk -> JoeyTheme.colors.good
-        InGamePopup.Kind.GpuBack -> JoeyTheme.colors.textDim
+        InGamePopup.Kind.GpuBack, InGamePopup.Kind.HardcoreOff -> JoeyTheme.colors.textDim
         else -> null
     }, badge = p.badge, compact = p.compact, framed = p.framed, extra = p.extra, bar = p.bar, chip = p.chip, warn = p.warn)
 }

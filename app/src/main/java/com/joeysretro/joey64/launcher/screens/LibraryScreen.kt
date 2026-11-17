@@ -138,9 +138,17 @@ fun LibraryScreen(model: LibraryModel, updateAsking: Boolean = false, onSearch: 
     model.askContinue.collectAsStateWithLifecycle().value?.let { ask ->
         CarryOnPopup(ask, model) { slot, always -> model.continueAnswered(slot, always) { context.startActivity(it) } }
     }
+    model.askHardcoreState.collectAsStateWithLifecycle().value?.let { a ->
+        val at = a.ask.states.firstOrNull { it.slot == a.slot }?.savedAt
+        PlayFromStateCard(com.joeysretro.joey64.states.StateSlots.label(a.slot) +
+            (at?.let { " · " + com.joeysretro.joey64.launcher.ingame.SlotDates.withTime(it, System.currentTimeMillis()) } ?: "")) { how ->
+            model.hardcoreStateAnswered(how) { context.startActivity(it) }
+        }
+    }
     // Reports, asked once (approved reports mockup 2026-11-08, screen 5) when the library first shows (Joey 2026-11-11);
     // never over another question: it waits for the updater, the offline note, a lost folder, recovery and Continue.
     val askingSomething = model.recovery.collectAsStateWithLifecycle().value != null || model.askContinue.collectAsStateWithLifecycle().value != null ||
+        model.askHardcoreState.collectAsStateWithLifecycle().value != null ||
         updateAsking || model.offline.collectAsStateWithLifecycle().value || model.lostFolder.collectAsStateWithLifecycle().value != null
     if (model.askReports.collectAsStateWithLifecycle().value && !askingSomething) AskReportsPopup(model::reportsAnswered)
     // A save state of a game on the wanted list (approved mockup 2026-11-12): after reports' question, never over another.
@@ -589,7 +597,8 @@ private fun OfflinePopup(onOk: () -> Unit) {
 internal fun CarryOnPopup(ask: LibraryModel.AskContinue, model: LibraryModel, onAnswer: (Int?, Boolean) -> Unit) {
     val c = JoeyTheme.colors
     val now = remember { System.currentTimeMillis() }
-    var focused by remember { mutableStateOf(ask.states.first().slot) }
+    val landOn = ask.focus?.takeIf { f -> ask.states.any { it.slot == f } } ?: ask.states.first().slot
+    var focused by remember { mutableStateOf(landOn) }
     val pictures = remember(ask) {
         ask.states.associate { s -> s.slot to s.picture?.let { p -> android.graphics.BitmapFactory.decodeByteArray(p, 0, p.size)?.asImageBitmap() } }
     }
@@ -621,7 +630,7 @@ internal fun CarryOnPopup(ask: LibraryModel.AskContinue, model: LibraryModel, on
                         if (group != lastGroup && group.isNotEmpty()) com.joeysretro.joey64.launcher.components.SectionLabel(group)
                         lastGroup = group
                         CarryOnRow(name(s.slot), date(s.savedAt!!), pictures[s.slot], null,
-                            Modifier.initialFocus(s === ask.states.first()).onFocusChanged { if (it.hasFocus) focused = s.slot }) { onAnswer(s.slot, false) }
+                            Modifier.initialFocus(s.slot == landOn).onFocusChanged { if (it.hasFocus) focused = s.slot }) { onAnswer(s.slot, false) }
                     }
                     Spacer(Modifier.height(8.dp))
                     CarryOnRow("Start fresh", "From the game's title screen", null, R.drawable.ic_play,

@@ -539,7 +539,9 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
      * Play's "Pick where to start" (approved E4 2026-11-11, contplay_mock.png): the game's states, Where you quit
      * (Auto) first, then the older quit saves, then the slots, each with its picture.
      */
-    data class AskContinue(val game: LibraryGame, val states: List<com.joeysretro.joey64.states.GameStates.SlotFile>)
+    data class AskContinue(val game: LibraryGame, val states: List<com.joeysretro.joey64.states.GameStates.SlotFile>,
+        /** The row focus lands on: the slot a card over the popup was opened from (null: the first). */
+        val focus: Int? = null)
     private val _askContinue = MutableStateFlow<AskContinue?>(null)
     /**
      * A state request to put to the player (StateRequests.check after a session): the popup is Joey's to design, so
@@ -621,7 +623,33 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
             StateSlots.AUTO -> com.joeysretro.joey64.MainActivity.STATE_AUTO
             else -> com.joeysretro.joey64.MainActivity.STATE_SLOT + slot
         }
+        // A slot with Hardcore wanted: "Play from this state?" takes the popup's place (approved part B mockup 2026-11-16,
+        // screen 5). The auto save state is Continue, which starts fresh in Hardcore without asking (approved 2026-11-04).
+        if (slot != FRESH && slot != StateSlots.AUTO && com.joeysretro.joey64.achievements.RaHardcore.wanted(app)) {
+            _askHardcoreState.value = AskHardcoreState(ask, slot, note)
+            return
+        }
         play(ask.game, load) { intent -> start(if (note != null) intent.putExtra(com.joeysretro.joey64.MainActivity.EXTRA_PLAY_NOTE, note) else intent) }
+    }
+
+    /** "Play from this state?" for Play's state popup: [ask] to go back to on Cancel, the [slot] picked. */
+    data class AskHardcoreState(val ask: AskContinue, val slot: Int, val note: String?)
+    private val _askHardcoreState = MutableStateFlow<AskHardcoreState?>(null)
+    val askHardcoreState: StateFlow<AskHardcoreState?> = _askHardcoreState
+
+    /** The card's answer: Casual loads the slot for this play, Fresh starts from power-on in Hardcore, null goes back. */
+    fun hardcoreStateAnswered(how: com.joeysretro.joey64.launcher.screens.HardcoreStart?, start: (Intent) -> Unit) {
+        val a = _askHardcoreState.value ?: return
+        _askHardcoreState.value = null
+        val note = a.note
+        val go: (Intent) -> Unit = { intent -> start(if (note != null) intent.putExtra(com.joeysretro.joey64.MainActivity.EXTRA_PLAY_NOTE, note) else intent) }
+        when (how) {
+            // Cancel: back to the popup, focus on the slot the card came from (popups F2).
+            null -> _askContinue.value = a.ask.copy(focus = a.slot)
+            com.joeysretro.joey64.launcher.screens.HardcoreStart.Casual ->
+                playWith(a.ask.game, com.joeysretro.joey64.MainActivity.STATE_SLOT + a.slot, true, go)
+            com.joeysretro.joey64.launcher.screens.HardcoreStart.Fresh -> play(a.ask.game, null, start = go)
+        }
     }
 
     // ---- reports (approved reports mockup, version A, Joey 2026-11-08) ---------------------------------
@@ -1017,13 +1045,17 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
     fun cartCancelled() { _needsCart.value = null }
 
     /** Gets [game] ready and hands [start] its intent. One at a time: a second press while a zip unpacks does nothing. */
-    fun play(game: LibraryGame, loadState: String? = null, start: (Intent) -> Unit) {
+    /** [casual]: a state the user chose to play in Casual with Hardcore wanted ("Play from this state?"). */
+    fun play(game: LibraryGame, loadState: String? = null, start: (Intent) -> Unit) = playWith(game, loadState, false, start)
+
+    fun playWith(game: LibraryGame, loadState: String?, casual: Boolean, start: (Intent) -> Unit) {
         if (game.id in _greyed.value) { askAboutFolderOf(game); return }
         if (starting) return
         starting = true
         viewModelScope.launch {
             try {
                 val intent = withContext(Dispatchers.IO) { launcher.intentFor(game, loadState) }
+                    ?.apply { if (casual) putExtra(com.joeysretro.joey64.MainActivity.EXTRA_CASUAL_STATE, true) }
                 val app = getApplication<Application>()
                 if (intent != null && intent.getBooleanExtra(GameLauncher.EXTRA_IS_DISK, false) &&
                     !withContext(Dispatchers.IO) { com.joeysretro.joey64.launcher.storage.BiosImport.ready(app) }) {

@@ -94,6 +94,8 @@ sealed interface PauseScreen {
                       val speed: Boolean = false) : PauseScreen
     /** No driver worked (screens 3b-3c): starts with GLideN64, the game paused until answered. [reportsOn]: Send reports is on. */
     data class GpuNone(val steps: List<GpuStep>, val reportsOn: Boolean) : PauseScreen
+    /** The pause menu's Hardcore row, Off to On (approved part B mockup 2026-11-16, screen 2): "Turn on Hardcore?", Cancel focused. */
+    data object HardcoreOn : PauseScreen
 }
 
 /** One line of the driver trial's list: ✕ failed with its reason, ▶ starting now, · later, ✓ what runs. */
@@ -136,7 +138,7 @@ object GpuTrialCard {
 /** What the Controller disconnected popup's rows do. */
 enum class DisconnectChoice { BuiltIn, Touch, WithoutThem, Quit }
 
-enum class MenuRow { Resume, Save, Load, GameSettings, Controls, Cheats, Achievements }
+enum class MenuRow { Resume, Save, Load, GameSettings, Controls, Cheats, Hardcore, Achievements }
 
 /** One cell of the slot picker. [savedAt] null: nothing in the slot. [picture]: the PNG beside the state, if any. */
 data class SlotView(val slot: Int, val name: String, val savedAt: Long?, val picture: ImageBitmap?)
@@ -189,6 +191,16 @@ interface PauseActions {
     fun quit()
     /** The Quit row's name, from Controls > Hotkeys > Quit game ("Quit to library" or "Quit and exit Joey64"). */
     val quitLabel: String get() = "Quit to library"
+    /**
+     * RetroAchievements Hardcore for this play (approved part B mockup 2026-11-16, option A): null when the menu has no
+     * Hardcore row (not available, not signed in, a netplay room), else whether it's on. On, Load state and Cheats are
+     * locked and the hint row says why (approved 2026-11-04).
+     */
+    val hardcore: Boolean? get() = null
+    /** The Hardcore row: On goes Off at once (back to the game with a pop-up), Off asks first ([PauseScreen.HardcoreOn]). */
+    fun hardcoreRow() {}
+    /** The question's answer: Restart in Hardcore ([restart]), or Cancel / B back to the menu. */
+    fun hardcoreOn(restart: Boolean) {}
     /** Back from the picker to the menu. */
     fun backToMenu(from: MenuRow)
     fun pick(save: Boolean, slot: Int)
@@ -231,6 +243,18 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
     if (screen is PauseScreen.Disconnected) { DisconnectedPopup(screen, actions); return }
     if (screen is PauseScreen.NetPaused || screen is PauseScreen.NetOutOfStep || screen is PauseScreen.NetLeft) { NetplayPopup(screen, actions); return }
     if (screen is PauseScreen.GpuTry || screen is PauseScreen.GpuNone) { GpuTrialPopup(screen, actions); return }
+    if (screen is PauseScreen.HardcoreOn) {
+        // Takes the menu's place (one card at a time); Cancel and B go back to the menu's Hardcore row.
+        JoeyDialog(onDismiss = { actions.hardcoreOn(false) }, hints = listOf(Hint("A", "Select"), Hint("B", "Cancel")), width = 470.dp) {
+            Column {
+                PopupTitle("Turn on Hardcore?", "${com.joeysretro.joey64.launcher.components.gameName(title)} restarts from the start. " +
+                    "Anything not saved in the game is lost. Your save states stay.")
+                com.joeysretro.joey64.launcher.components.JoeyRow("Cancel", Modifier.initialFocus(), detail = "Keep playing in Casual") { actions.hardcoreOn(false) }
+                com.joeysretro.joey64.launcher.components.JoeyRow("Restart in Hardcore") { actions.hardcoreOn(true) }
+            }
+        }
+        return
+    }
     if (screen is PauseScreen.NoSpace) {
         JoeyDialog(onDismiss = { actions.closeNoSpace() }, hints = listOf(Hint("A", "OK"), Hint("B", "Back to game")), width = 470.dp) {
             Column {
@@ -242,6 +266,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
     }
     val picker = screen as? PauseScreen.Picker
     val restart = screen as? PauseScreen.Restart
+    val hardcore = androidx.compose.runtime.remember(screen) { actions.hardcore }
     // The slot the picker's focus is on: Auto while saving has no A (it's dimmed, quitting writes it).
     var pickerAt by androidx.compose.runtime.remember(picker) { androidx.compose.runtime.mutableIntStateOf(picker?.focus ?: -1) }
     val hints = when {
@@ -257,12 +282,21 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
         // Five slot pictures to a row once older quit saves make it longer than three rows of four.
         width = when { restart != null -> 470.dp; picker == null -> 300.dp; picker.slots.size > 12 -> 564.dp; else -> 454.dp },
         wrap = screen is PauseScreen.Menu,
+        // Hardcore on: the hint row says why Load state and Cheats are locked (approved 2026-11-04).
+        hintEnd = if (screen is PauseScreen.Menu && hardcore == true) "Loading a state is off while Hardcore is on. Saving still works." else null,
     ) {
         val landing = LocalFocusLanding.current
         LaunchedEffect(screen) { landing?.arm() }
         when (screen) {
             is PauseScreen.Menu -> Column {
-                PopupTitle(com.joeysretro.joey64.launcher.components.gameName(title))
+                if (hardcore == null) PopupTitle(com.joeysretro.joey64.launcher.components.gameName(title))
+                else Row(verticalAlignment = Alignment.Top) {
+                    // The play's mode at the title's right (approved 2026-11-04; part B mockup 2026-11-16, screens 2 and 6).
+                    Column(Modifier.weight(1f)) { PopupTitle(com.joeysretro.joey64.launcher.components.gameName(title)) }
+                    Text(if (hardcore) "Hardcore" else "Casual", style = JoeyTheme.type.note,
+                        color = if (hardcore) JoeyTheme.colors.gold else JoeyTheme.colors.textDim,
+                        modifier = Modifier.padding(end = JoeyTheme.spacing.rowPadH, top = 6.dp))
+                }
                 // Netplay screen 2: only the line is new; the menu is today's.
                 val netLine = androidx.compose.runtime.remember(screen) { actions.netLine }
                 if (netLine != null) Text(netLine, style = JoeyTheme.type.note, color = JoeyTheme.colors.gold,
@@ -278,14 +312,21 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
                     NetBlockedRow("Load state")
                 } else {
                 JoeyOption("Save state", Modifier.initialFocus(screen.from == MenuRow.Save), value = "$saveSlotName  ▸") { actions.openSave() }
-                JoeyOption("Load state", Modifier.initialFocus(screen.from == MenuRow.Load), value = "›") { actions.openLoad() }
+                if (hardcore == true) com.joeysretro.joey64.launcher.components.JoeyRow("Load state", Modifier.initialFocus(screen.from == MenuRow.Load),
+                    value = "›", enabled = false, lock = true) {}
+                else JoeyOption("Load state", Modifier.initialFocus(screen.from == MenuRow.Load), value = "›") { actions.openLoad() }
                 }
                 PopupDivider()
                 JoeyOption("Game settings", Modifier.initialFocus(screen.from == MenuRow.GameSettings),
                     value = androidx.compose.runtime.remember(screen) { actions.gameSettingsLabel } + "  ›") { actions.openGameSettings() }
                 JoeyOption("Controls", Modifier.initialFocus(screen.from == MenuRow.Controls), value = "›") { actions.openControls() }
                 if (room) NetBlockedRow("Cheats")
+                else if (hardcore == true) com.joeysretro.joey64.launcher.components.JoeyRow("Cheats", Modifier.initialFocus(screen.from == MenuRow.Cheats),
+                    value = "›", enabled = false, lock = true) {}
                 else JoeyOption("Cheats", Modifier.initialFocus(screen.from == MenuRow.Cheats), value = "›") { actions.openCheats() }
+                // NEW in part B (option A): this play's Hardcore, only when it can be picked and outside a netplay room.
+                if (hardcore != null) JoeyOption("Hardcore", Modifier.initialFocus(screen.from == MenuRow.Hardcore),
+                    value = if (hardcore) "On  ›" else "Off  ›") { actions.hardcoreRow() }
                 // Only when RetroAchievements knows the game (signed in, and it has a set).
                 val hasSet = androidx.compose.runtime.remember(screen) { com.joeysretro.joey64.achievements.RaBridge.gameInfo() != "null" ||
                     com.joeysretro.joey64.achievements.RaBridge.debugCache != null }
@@ -305,7 +346,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
             }
             is PauseScreen.Controls, is PauseScreen.Cheats, is PauseScreen.Achievements, is PauseScreen.GameSettings, PauseScreen.SignIn,
             is PauseScreen.Disconnected, is PauseScreen.NoSpace, is PauseScreen.NetPaused, is PauseScreen.NetOutOfStep, is PauseScreen.NetLeft,
-            is PauseScreen.GpuTry, is PauseScreen.GpuNone -> {}
+            is PauseScreen.GpuTry, is PauseScreen.GpuNone, PauseScreen.HardcoreOn -> {}
         }
     }
 }

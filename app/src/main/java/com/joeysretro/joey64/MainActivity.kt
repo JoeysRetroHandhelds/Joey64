@@ -481,8 +481,32 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     private fun slowMotionRelease() { if (slowHeld) { slowHeld = false; setSlowMotion(false) } }
 
-    private fun popHardcore(what: String) =
-        pop("hardcore", InGamePopup.Kind.Problem, what, "Not in Hardcore", "RetroAchievements Hardcore is on")
+    /**
+     * A hotkey Hardcore keeps off (approved "Hardcore / Load state is off", part B mockup 2026-11-16 screen 6): one
+     * pop-up at a time, the same one again only after 3 s (a held or repeated press doesn't stack them).
+     */
+    private fun popHardcore(what: String) {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (what == hcPopWhat && now - hcPopAt < 3_000) return
+        hcPopWhat = what; hcPopAt = now
+        val name = if (what.endsWith("s")) "$what are off" else "$what is off" // "Macros are off"
+        pop("hardcore", InGamePopup.Kind.Hardcore, "Hardcore", name, "Save states and fast-forward still work")
+    }
+    private var hcPopWhat = ""
+    private var hcPopAt = 0L
+
+    /**
+     * Hardcore on or off for the rest of this play (the pause menu's row, approved option A; the debug broadcast). On
+     * restarts the game (the host, at its next frame); macros, slow motion and rewind stop. Off: the approved pop-up.
+     */
+    private fun hardcoreMidGame(on: Boolean) {
+        com.joeysretro.joey64.achievements.RaHardcore.setMidGame(on)
+        if (on) {
+            for (p in 0 until 4) NativeBridge.stopMacro(p, true)
+            setSlowMotion(false); rewindRelease()
+        } else overlay?.show(hardcoreOffPop())
+        applyRewind()
+    }
 
     /** Gives the host the rewind settings (at start, and when Controls change over the paused game). */
     private fun applyRewind() {
@@ -1403,6 +1427,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                     putExtra(EXTRA_SAVE_NAME, startSave ?: st.saveName)
                     gameMd5?.let { putExtra(EXTRA_KNOWN_MD5, it) } ?: removeExtra(EXTRA_KNOWN_MD5)
                     if (saved) putExtra(EXTRA_LOAD_STATE, STATE_RECOVERY) else removeExtra(EXTRA_LOAD_STATE)
+                    // Coming back from a state is a state load, so the restarted play is Casual; a Hardcore play says so
+                    // with the approved Hardcore off pop-up (part B mockup 2026-11-16, screen 3).
+                    putExtra(EXTRA_CASUAL_STATE, saved)
+                    putExtra(EXTRA_WAS_HARDCORE, saved && com.joeysretro.joey64.achievements.RaHardcore.on())
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 if (owner === this) { NativeBridge.stop(); owner = null }
@@ -1762,8 +1790,20 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun applyCheats(rom: String, saveName: String, userLines: List<String>) {
         cheatKeys = headerKeys(rom) // "": a 64DD disk with no cartridge, no header
         if (saveName.isEmpty()) return
-        // Hardcore: no cheats (RetroAchievements' rules; the host also refuses them). The widescreen / 60 fps codes are none then.
-        if (com.joeysretro.joey64.achievements.RaHardcore.on()) { if (userLines.isNotEmpty()) JLog.i(TAG, "cheats: ${userLines.size} left on, not used in Hardcore"); return }
+        // The codes Hardcore keeps: the widescreen code (Joey 2026-11-16, option A), also for Hardcore turned on mid-game.
+        NativeBridge.setHardcoreCodes(listOfNotNull(extrasOn.widescreenLine).toTypedArray())
+        // Hardcore: no cheats (RetroAchievements' rules; the host also refuses them), 60 fps off; one pop-up says so
+        // (approved part B mockup 2026-11-16, screen 7).
+        if (com.joeysretro.joey64.achievements.RaHardcore.on()) {
+            extrasOn.widescreenLine?.let { NativeBridge.addCheat(it) }
+            if (userLines.isNotEmpty()) {
+                JLog.i(TAG, "cheats: ${userLines.size} left on, not used in Hardcore")
+                val n = userLines.size
+                hardcoreStartPops += InGamePopup("hccheats", InGamePopup.Kind.Hardcore, "Hardcore",
+                    if (n == 1) "1 cheat is off for this play" else "$n cheats are off for this play", "They stay on for Casual plays")
+            }
+            return
+        }
         val lines = userLines + extrasOn.codeLines
         for (l in lines) NativeBridge.addCheat(l)
         cheatsMost = lines.size
@@ -1833,7 +1873,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      * up at once, read on [gameIo] ahead of [prepareGame], and stays until the game's frames from that state are drawn.
      */
     private fun showHeldPicture() {
-        val which = launcherString(EXTRA_LOAD_STATE) ?: return
+        val which = startLoad() ?: return
         val name = earlySaveName()?.takeIf { it.isNotEmpty() } ?: return
         val slot: Int? = when {
             which == STATE_AUTO -> StateSlots.AUTO
@@ -1851,12 +1891,39 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         }
     }
 
+    /**
+     * Hardcore wanted and the launcher's Continue (or carrying on after a crash) asked for the auto or recovery state:
+     * the state isn't loaded and the game starts fresh in Hardcore (approved 2026-11-04). A state the user picked
+     * ([EXTRA_CASUAL_STATE], "Play from here in Casual") loads and the play is Casual.
+     */
+    private val hardcoreFresh: Boolean by lazy {
+        val which = launcherString(EXTRA_LOAD_STATE)
+        (which == STATE_AUTO || which == STATE_RECOVERY) && !launcherBool(EXTRA_CASUAL_STATE) &&
+            com.joeysretro.joey64.achievements.RaHardcore.wanted(this) &&
+            android.system.Os.getenv("N64_NETPLAY") == null && android.system.Os.getenv("N64_NETPLAY_SERVE") == null
+    }
+
+    /** The state this start loads: the launcher's, unless Hardcore starts the game fresh ([hardcoreFresh]). */
+    private fun startLoad(): String? = if (hardcoreFresh) null else launcherString(EXTRA_LOAD_STATE)
+
+    /** Hardcore's pop-ups for this start (cheats left off, Continue starting fresh), shown once the game is up. */
+    private val hardcoreStartPops = java.util.concurrent.CopyOnWriteArrayList<InGamePopup>()
+
+    private fun hardcoreOffPop() = InGamePopup("hardcore", InGamePopup.Kind.HardcoreOff, "Hardcore off", "Casual for the rest of this play",
+        "Turning it back on restarts the game")
+
     /** On [gameIo]: everything before loadGame that reads or writes files. Null: no ROM. */
     private fun prepareGame(): Prepared? {
         // RetroAchievements Hardcore for this play, before the widescreen / 60 fps codes and cheats are picked: a start
         // from a state (Continue, a slot, carrying on after a crash) or in a netplay room plays in Casual.
-        com.joeysretro.joey64.achievements.RaHardcore.startPlay(this, fromState = launcherString(EXTRA_LOAD_STATE) != null,
-            netplay = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null)
+        // Continue and carrying on after a crash start fresh in Hardcore instead (approved 2026-11-04 and part B screen 5).
+        val netplay = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null
+        com.joeysretro.joey64.achievements.RaHardcore.startPlay(this, casualState = startLoad() != null, netplay = netplay)
+        if (hardcoreFresh) {
+            JLog.i(TAG, "Hardcore: ${launcherString(EXTRA_LOAD_STATE)} not loaded, the game starts fresh")
+            hardcoreStartPops += InGamePopup("hcfresh", InGamePopup.Kind.Hardcore, "Hardcore", "Continue starts fresh", "In-game saves still load")
+        }
+        if (launcherBool(EXTRA_WAS_HARDCORE)) hardcoreStartPops += hardcoreOffPop()
         var (rom, saveName) = resolveRom() ?: run { JLog.e(TAG, "No ROM. Push one to ${getExternalFilesDir(null)}/test.z64"); return null }
         val disk = RomFiles.isDiskName(rom)
         // A 64DD disk: the IPL BIOS comes from the data folder's bios/ (the core reads its copy in files/system).
@@ -2090,6 +2157,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             earlyPops.clear()
         }
         trialCardAtStart()
+        // Hardcore's pop-ups for this start (cheats left off, Continue starting fresh, Hardcore off after a restart).
+        for (p in hardcoreStartPops) overlay?.show(p)
+        hardcoreStartPops.clear()
         // "Play will always ... Change it in Settings › Saves." (approved E4 screens 5-6), once, as the game opens.
         launcherString(EXTRA_PLAY_NOTE)?.let { pop("playnote", InGamePopup.Kind.PlayNote, "Continue on Play", it, "Change it in Settings › Saves.") }
         noSticksNote()
@@ -2125,7 +2195,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             recent = recentEntry(saveName, title)
             recent?.let { RecentlyPlayed.record(this, it) }
         }
-        when (val which = launcherString(EXTRA_LOAD_STATE)) {
+        when (val which = startLoad()) {
             null -> {}
             STATE_AUTO -> stateHandler.post { startLoadFailed = !st.load(StateSlots.AUTO) }
             STATE_RECOVERY -> stateHandler.post { startLoadFailed = !st.loadRecovery() }
@@ -2211,7 +2281,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             put("driverId", driverIdNow)
             @Suppress("DEPRECATION") val shown = if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay
             shown?.refreshRate?.takeIf { it > 0 }?.let { put("refreshHz", Math.round(it)) }
-            put("fromState", launcherString(EXTRA_LOAD_STATE) != null)
+            put("fromState", startLoad() != null)
             put("cheats", cheatsMost)
             gpuWhy?.let { w ->
                 put("driverRule", w.driverRule)
@@ -2275,8 +2345,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
     private fun slotName(slot: Int) = StateSlots.label(slot)
 
-    private fun openMenu() {
-        val o = overlay ?: return
+    /**
+     * Pauses and opens the menu; false when it didn't (no overlay, or Hardcore's pause limit held it: then [retry], or
+     * the menu, runs once it's allowed, as approved 2026-11-04).
+     */
+    private fun openMenu(retry: (() -> Unit)? = null, force: Boolean = false): Boolean {
+        val o = overlay ?: return false
+        // [force]: Joey64's own pauses (a controller gone, no space, netplay) aren't the player's, so aren't held.
+        if (!force && !menuOpen && pauseHeldBack { if (!quitting && !menuOpen) (retry ?: { openMenu() })() }) return false
         sessionMark(); menuOpen = true
         achievementsDirect = false
         NativeBridge.pause(true)
@@ -2287,6 +2363,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         releaseAll()
         o.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Menu()
         touch?.setActive(false)
+        return true
     }
 
     /**
@@ -2324,7 +2401,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun openAchievementsAt(t: GameOverlay.Tap) {
         if (signsIn(t)) {
             overlay?.hide("ra")
-            openMenu()
+            if (!openMenu(retry = { openAchievementsAt(t) })) return
             overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.SignIn
             return
         }
@@ -2332,7 +2409,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             is GameOverlay.Tap.Badges -> t.newest
             is GameOverlay.Tap.Popup -> t.popup.key.substringAfter('-', "").toIntOrNull()
         }
-        openMenu()
+        if (!openMenu(retry = { openAchievementsAt(t) })) return
         overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Achievements(id)
     }
 
@@ -2453,6 +2530,21 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         }
         override fun backToMenu(from: com.joeysretro.joey64.launcher.ingame.MenuRow) {
             overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Menu(from)
+        }
+        // On: always (its locks, and the row to turn it off). Off: the row only where it can be turned on, signed in.
+        override val hardcore: Boolean? get() = when {
+            com.joeysretro.joey64.achievements.RaHardcore.on() -> true
+            net.inRoom || !com.joeysretro.joey64.achievements.RaHardcore.available(this@MainActivity) ||
+                com.joeysretro.joey64.achievements.RaBridge.account.value == null -> null
+            else -> false
+        }
+        override fun hardcoreRow() {
+            if (com.joeysretro.joey64.achievements.RaHardcore.on()) { closeMenu(); hardcoreMidGame(false) }
+            else overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.HardcoreOn
+        }
+        override fun hardcoreOn(restart: Boolean) {
+            if (!restart) { overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Menu(com.joeysretro.joey64.launcher.ingame.MenuRow.Hardcore); return }
+            closeMenu(); hardcoreMidGame(true)
         }
         override fun reset() {
             overlay?.screen = null
@@ -2672,6 +2764,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private var hotkeyPaused = false
     private fun togglePause() {
         if (menuOpen) return
+        if (!hotkeyPaused && pauseHeldBack { if (!menuOpen && !hotkeyPaused) togglePause() }) return
         sessionMark(); hotkeyPaused = !hotkeyPaused
         if (hotkeyPaused) {
             NativeBridge.pause(true)
@@ -2710,7 +2803,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             else pop("achievements", InGamePopup.Kind.NoAchievements, "Achievements", "None for this game", "RetroAchievements has no set for it")
             return
         }
-        openMenu()
+        if (!openMenu(retry = { openAchievementsHotkey() })) return
         achievementsDirect = true
         overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Achievements(toGame = true)
     }
@@ -2938,6 +3031,23 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (quitting || menuOpen) return
         openMenu()
     }
+
+    /**
+     * RetroAchievements' pause limit in Hardcore (rc_client_can_pause; approved 2026-11-04: a pause asked for too soon
+     * is held until it's allowed, with no message). True: held, [retry] runs once the frames have run.
+     */
+    private fun pauseHeldBack(retry: () -> Unit): Boolean {
+        if (!com.joeysretro.joey64.achievements.RaHardcore.on()) return false
+        val wait = com.joeysretro.joey64.achievements.RaBridge.pauseWait()
+        if (wait <= 0) return false
+        if (pauseHeld != null) return true
+        JLog.i(TAG, "Hardcore: pause held for $wait frames")
+        val r = Runnable { pauseHeld = null; if (!destroyed && !pauseHeldBack(retry)) retry() }
+        pauseHeld = r
+        fpsHandler.postDelayed(r, wait * 17L)
+        return true
+    }
+    private var pauseHeld: Runnable? = null
 
     /**
      * Quit to library: the game is paused, the auto slot written (Continue starts from it) and the
@@ -3469,7 +3579,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         JLog.i(TAG, "controls: $name (player ${p + 1}) disconnected, the game waits for it")
         players[p].release(); push(p)
         waitingPlayer = p
-        if (!menuOpen) openMenu()
+        if (!menuOpen) openMenu(force = true)
         val builtIn = PadDevices.builtIn() != null
         overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Disconnected(p, name, builtIn,
             touch = !builtIn && p == 0 && touch != null && touchSettings.show != com.joeysretro.joey64.touch.TouchShow.Never)
@@ -3552,7 +3662,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val free = devFree ?: place.free
         if (free == null || !com.joeysretro.joey64.saves.NoSpace.isFull(free, need)) return false
         JLog.e(TAG, "not enough space: ${what.name} needs $need bytes, ${place.name} has $free free")
-        if (!menuOpen) openMenu()
+        if (!menuOpen) openMenu(force = true)
         overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.NoSpace(com.joeysretro.joey64.saves.NoSpace.text(what, slot, place.name, free, need))
         return true
     }
@@ -4038,9 +4148,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             override fun onReceive(ctx: Context, i: Intent) {
                 if (owner == null) { JLog.w(TAG, "HARDCORE: no game running"); return }
                 val on = i.getBooleanExtra("on", true)
-                com.joeysretro.joey64.achievements.RaHardcore.setMidGame(on)
-                if (on) for (p in 0 until 4) NativeBridge.stopMacro(p, true)
-                runOnUiThread { applyRewind() }
+                runOnUiThread { hardcoreMidGame(on) }
             }
         }
         for ((receiver, action) in listOf(debugStick to "com.joeysretro.joey64.STICK", debugButtons to "com.joeysretro.joey64.BUTTONS", debugDump to "com.joeysretro.joey64.DUMP",
@@ -4093,6 +4201,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         const val EXTRA_SAVE_NAME = "com.joeysretro.joey64.SAVE_NAME"
         /** The launcher: load this state once the game is up, [STATE_AUTO] (Continue) or [STATE_RECOVERY] (after a crash). */
         const val EXTRA_LOAD_STATE = "com.joeysretro.joey64.LOAD_STATE"
+        /** The launcher: [EXTRA_LOAD_STATE] is a state the user chose to play in Casual with Hardcore wanted ("Play from this state?"). */
+        const val EXTRA_CASUAL_STATE = "com.joeysretro.joey64.CASUAL_STATE"
+        /** A Restart now from a Hardcore play: the restarted play is Casual (it loads a state) and says so. */
+        const val EXTRA_WAS_HARDCORE = "com.joeysretro.joey64.WAS_HARDCORE"
         /** The ROM as the user has it (the archive in the ROMs folder), for recently played. */
         const val EXTRA_SOURCE_URI = "com.joeysretro.joey64.SOURCE_URI"
         const val EXTRA_SOURCE_NAME = "com.joeysretro.joey64.SOURCE_NAME"
@@ -4131,7 +4243,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         /** Extras only Joey64's own starts may carry ([fromJoey64]); a start from another app has them dropped. */
         private val LAUNCHER_EXTRAS = listOf(EXTRA_ROM_PATH, EXTRA_SAVE_NAME, EXTRA_LOAD_STATE, EXTRA_SOURCE_URI, EXTRA_SOURCE_NAME,
             EXTRA_TITLE, EXTRA_MD5, EXTRA_KNOWN_MD5, EXTRA_DD_CART, EXTRA_NETPLAY_HOST, EXTRA_NETPLAY_JOIN, EXTRA_NETPLAY_NAME,
-            EXTRA_NETPLAY_KEYS, EXTRA_NETPLAY_KEY, EXTRA_PLAY_NOTE,
+            EXTRA_NETPLAY_KEYS, EXTRA_NETPLAY_KEY, EXTRA_PLAY_NOTE, EXTRA_CASUAL_STATE, EXTRA_WAS_HARDCORE,
             com.joeysretro.joey64.launcher.library.GameLauncher.EXTRA_IS_DISK, com.joeysretro.joey64.launcher.library.GameLauncher.EXTRA_NEEDS_CART)
         const val STATE_AUTO = "auto"
         /** Play's popup set Continue on Play (Y, Always do this; approved E4 2026-11-11): the line shown as the game opens. */

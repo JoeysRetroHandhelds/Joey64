@@ -47,6 +47,17 @@ class RaPopupsTest {
         assertEquals("No achievements for this game yet", RaPopupText.summary(game, null).line)
     }
 
+    // Approved part B mockup 2026-11-16, screen 4: Hardcore in yellow; with Game start summary off, the name alone.
+    @Test fun summarySaysTheMode() {
+        assertEquals("*RetroAchievements* · Softcore", RaPopupText.summary(game, null).label)
+        val hc = RaPopupText.summary(game, null, hardcore = true)
+        assertEquals("RetroAchievements · *Hardcore*", hc.label)
+        assertEquals("19 of 40 achievements · 164 of 400 points", hc.line)
+        val short = RaPopupText.summary(game, null, hardcore = true, full = false)
+        assertEquals("", short.line)
+        assertEquals(game.optString("title"), short.name)
+    }
+
     @Test fun beatenAndMasteredAreFramed() {
         game.put("unlocked", 26)
         val b = RaPopupText.beaten(game, null)

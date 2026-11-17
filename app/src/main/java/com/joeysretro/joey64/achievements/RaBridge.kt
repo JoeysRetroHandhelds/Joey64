@@ -300,6 +300,8 @@ object RaBridge {
             ctx?.let { fetchAvatar(it, user.optString("avatar")) }
             _expired.value = false
             _signIn.value = SignInState.Idle
+            // Hardcore On for a new sign-in (approved part B mockup 2026-11-16, screen 1).
+            if (kind == Login.Password && ctx != null) RaSettings.newSignIn(ctx)
             sendLater(5_000)
             JLog.i(TAG, "signed in: ${user.optString("display")}, ${user.optInt("score")} points, ${user.optInt("softcore")} softcore points")
             return
@@ -493,6 +495,11 @@ object RaBridge {
     @JvmStatic private external fun awardRequest(id: Int, hash: String, secondsSince: Int, hardcore: Boolean): String
     /** RaHardcore: rc_client's hardcore mode. Turned on with a game loaded, the host restarts the game at its next frame. */
     @JvmStatic external fun setHardcore(on: Boolean)
+    /**
+     * rc_client_can_pause: 0 when the game may pause now (the pause is counted), else the frames still to run first
+     * (Hardcore: 20 frames after the last pause, more for pauses close together, up to 5 s). Always 0 in Casual.
+     */
+    @JvmStatic external fun pauseWait(): Int
 
     /** The bundled core's commit (core-version.txt), 7 digits, or "unknown". */
     private fun coreCommit(ctx: Context): String = try {

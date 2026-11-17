@@ -362,6 +362,8 @@ bool g_ffKeepSync = false;
 // GameShark codes, one cheat per string (its codes joined by any separator): applied after
 // load_game, and again between frames when the Cheats page changes them (setCheats).
 std::vector<std::string> g_cheats;
+// The codes Hardcore keeps: the widescreen code (Joey 2026-11-16, option A; setHardcoreCodes). Under g_cheatsMutex.
+std::vector<std::string> g_hcCheats;
 std::mutex g_cheatsMutex;
 std::atomic<bool> g_cheatsChanged{false};
 // Core options changed while the game runs (Game settings from the pause menu): the UI thread queues
@@ -524,8 +526,12 @@ std::string gameSharkHeld(const std::string& line) {
 void applyCheats() {
     std::lock_guard<std::mutex> lk(g_cheatsMutex);
     core.cheat_reset();
-    // RetroAchievements Hardcore: no cheats (and no GameShark button), whatever the list holds.
-    if (Cheevos::hardcore()) { if (!g_cheats.empty()) LOGI("cheats: %zu not used in Hardcore", g_cheats.size()); else LOGI("cheats: none"); return; }
+    // RetroAchievements Hardcore: no cheats (and no GameShark button), whatever the list holds; only the widescreen code.
+    if (Cheevos::hardcore()) {
+        for (size_t i = 0; i < g_hcCheats.size(); ++i) { core.cheat_set((unsigned)i, true, g_hcCheats[i].c_str()); LOGI("Hardcore keeps widescreen code: %s", g_hcCheats[i].c_str()); }
+        LOGI("cheats: %zu not used in Hardcore", g_cheats.size() > g_hcCheats.size() ? g_cheats.size() - g_hcCheats.size() : 0);
+        return;
+    }
     const bool held = g_gsButton.load();
     for (size_t i = 0; i < g_cheats.size(); ++i) {
         const std::string line = held ? gameSharkHeld(g_cheats[i]) : g_cheats[i];
@@ -2729,6 +2735,21 @@ JNIEXPORT void JNICALL JNI(addCheat)(JNIEnv* env, jobject, jstring code) {
         g_cheats.emplace_back(c);
     }
     env->ReleaseStringUTFChars(code, c);
+}
+
+// The codes Hardcore keeps (the widescreen code), set before loadGame; they are also in the plain list for Casual.
+JNIEXPORT void JNICALL JNI(setHardcoreCodes)(JNIEnv* env, jobject, jobjectArray codes) {
+    std::vector<std::string> next;
+    jsize n = env->GetArrayLength(codes);
+    for (jsize i = 0; i < n; ++i) {
+        auto s = (jstring)env->GetObjectArrayElement(codes, i);
+        const char* c = env->GetStringUTFChars(s, nullptr);
+        next.emplace_back(c);
+        env->ReleaseStringUTFChars(s, c);
+        env->DeleteLocalRef(s);
+    }
+    std::lock_guard<std::mutex> lk(g_cheatsMutex);
+    g_hcCheats = std::move(next);
 }
 
 // Core options for a running game (keys[i] = values[i]): taken between frames, a paused game's on resume.

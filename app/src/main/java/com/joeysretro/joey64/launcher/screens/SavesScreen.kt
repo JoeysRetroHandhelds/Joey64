@@ -81,6 +81,14 @@ private sealed interface SvPopup {
     /** [fromDelete]: back from Delete's question (B or Keep it), focus on Delete (A8 2026-11-12). */
     data class StateOptions(val state: SaveManager.State, val fromDelete: Boolean = false) : SvPopup
     data class DeleteState(val state: SaveManager.State) : SvPopup
+    /** Play from here with Hardcore wanted: "Play from this state?" (approved part B mockup 2026-11-16, screen 5). */
+    data class HardcoreState(val state: SaveManager.State) : SvPopup
+}
+
+/** The game screen's EXTRA_LOAD_STATE for a state on this page. */
+private fun stateLoad(slot: Int) = when (slot) {
+    SaveManager.RECOVERY -> com.joeysretro.joey64.MainActivity.STATE_RECOVERY
+    else -> com.joeysretro.joey64.MainActivity.STATE_SLOT + slot
 }
 
 /** "Mario Tennis" for "Mario Tennis (USA)". */
@@ -95,7 +103,7 @@ private fun shortName(t: String) = t.substringBefore(" (").ifBlank { t }
  * picture, size and date. A on a state: Play from here, Delete (asks). States have no Rename (the drawing has none).
  */
 @Composable
-fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (String) -> Unit, onClose: () -> Unit) {
+fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (load: String?, casual: Boolean) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     val c = JoeyTheme.colors
     val s = JoeyTheme.spacing
@@ -285,14 +293,20 @@ fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (String) ->
             Column {
                 PopupTitle(SaveManager.stateLabel(p.state.slot))
                 JoeyRow("Play from here", Modifier.initialFocus(!p.fromDelete), detail = "Starts the game from this save state") {
+                    if (com.joeysretro.joey64.achievements.RaHardcore.wanted(context)) { popup = SvPopup.HardcoreState(p.state); return@JoeyRow }
                     popup = null
-                    onPlay(when (p.state.slot) {
-                        SaveManager.RECOVERY -> com.joeysretro.joey64.MainActivity.STATE_RECOVERY
-                        else -> com.joeysretro.joey64.MainActivity.STATE_SLOT + p.state.slot
-                    })
+                    onPlay(stateLoad(p.state.slot), false)
                 }
                 PopupDivider()
                 JoeyOption("Delete", Modifier.initialFocus(p.fromDelete)) { popup = SvPopup.DeleteState(p.state) }
+            }
+        }
+        is SvPopup.HardcoreState -> PlayFromStateCard("${SaveManager.stateLabel(p.state.slot)} · ${SlotDates.withTime(p.state.savedAt, System.currentTimeMillis())}") { how ->
+            popup = if (how == null) SvPopup.StateOptions(p.state) else null
+            when (how) {
+                HardcoreStart.Casual -> onPlay(stateLoad(p.state.slot), true)
+                HardcoreStart.Fresh -> onPlay(null, false)
+                null -> {}
             }
         }
         is SvPopup.DeleteState -> JoeyDialog(onDismiss = { popup = SvPopup.StateOptions(p.state, fromDelete = true) },

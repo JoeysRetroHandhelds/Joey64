@@ -40,7 +40,7 @@ object RaPopupText {
      * the game's icon, "RetroAchievements · Softcore", its name, and how
      * much of the set is unlocked.
      */
-    fun summary(game: JSONObject, badge: File?): InGamePopup {
+    fun summary(game: JSONObject, badge: File?, hardcore: Boolean = false, full: Boolean = true): InGamePopup {
         val n = game.optInt("achievements")
         val got = game.optInt("unlocked")
         val line = when {
@@ -48,15 +48,19 @@ object RaPopupText {
             got >= n -> "All $n achievements · ${game.optInt("points")} points"
             else -> "$got of $n achievements · ${game.optInt("pointsUnlocked")} of ${game.optInt("points")} points"
         }
-        return InGamePopup("summary", InGamePopup.Kind.Game, "*RetroAchievements* · Softcore", game.optString("title"), line, badge = badge)
+        return InGamePopup("summary", InGamePopup.Kind.Game, if (hardcore) "RetroAchievements · *Hardcore*" else "*RetroAchievements* · Softcore", game.optString("title"),
+            if (full) line else "", badge = badge)
     }
 
+    /** The play's mode: the start banner has Hardcore in yellow (approved part B mockup 2026-11-16, screen 4), these in words. */
+    fun mode(hardcore: Boolean = RaHardcore.on()) = if (hardcore) "Hardcore" else "Softcore"
+
     /** "*Beaten* · Softcore / Mario Tennis / Finished the game · 26 of 40 achievements" (after the unlock that beats it). */
-    fun beaten(game: JSONObject, badge: File?) = InGamePopup("beaten", InGamePopup.Kind.Game, "*Beaten* · Softcore",
+    fun beaten(game: JSONObject, badge: File?) = InGamePopup("beaten", InGamePopup.Kind.Game, "*Beaten* · ${mode()}",
         game.optString("title"), "Finished the game · ${game.optInt("unlocked")} of ${game.optInt("achievements")} achievements",
         badge = badge, framed = true)
 
-    fun mastered(game: JSONObject, badge: File?) = InGamePopup("mastered", InGamePopup.Kind.Game, "*Mastered* · Softcore",
+    fun mastered(game: JSONObject, badge: File?) = InGamePopup("mastered", InGamePopup.Kind.Game, "*Mastered* · ${mode()}",
         game.optString("title"), "All ${game.optInt("achievements")} achievements · ${game.optInt("points")} points",
         badge = badge, framed = true)
 
@@ -116,7 +120,10 @@ class RaPopups(
                     for (u in urls) RaBadges.fetch(app, u)
                     JLog.i(TAG, "badges for offline: ${urls.size} asked for")
                 }
-                if (o.popSummary) show(RaPopupText.summary(game, badge(game.optString("badge"))))
+                // Hardcore is shown at every Hardcore start (RetroAchievements' compliance rules; approved part B mockup
+                // 2026-11-16, screen 4): with Game start summary off, only the first line and the name.
+                val hc = RaHardcore.on()
+                if (o.popSummary || hc) show(RaPopupText.summary(game, badge(game.optString("badge")), hc, full = o.popSummary))
             }
             "unlocked" -> {
                 if (a == null) return

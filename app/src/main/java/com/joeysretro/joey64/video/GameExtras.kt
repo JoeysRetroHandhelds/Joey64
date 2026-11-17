@@ -109,26 +109,29 @@ data class GameExtras(val widescreen: List<ExtraVersion>, val fps: List<ExtraVer
  * runs faster for a 60 fps code. [log] says what was picked.
  */
 data class ExtrasOn(val codeLines: List<String>, val shape: Pair<Int, Int>?, val fps: Boolean, val log: String,
-                    val widescreenName: String? = null, val fpsName: String? = null) {
+                    val widescreenName: String? = null, val fpsName: String? = null,
+                    /** The widescreen code's line alone: the one code Hardcore keeps (Joey 2026-11-16, option A). */
+                    val widescreenLine: String? = null) {
     companion object {
         val NONE = ExtrasOn(emptyList(), null, false, "none")
 
+        /** [hardcore]: the widescreen code stays (RetroAchievements counts widescreen as quality of life), 60 fps is off. */
         fun of(x: GameExtras, v: VideoSettings, hardcore: Boolean): ExtrasOn {
-            if (hardcore) return NONE.copy(log = "off in Hardcore")
             val ws = x.pick(ExtraKind.Widescreen, v[VideoKey.Widescreen])
-            val fps = x.pick(ExtraKind.Fps, v[VideoKey.Fps])
+            val fps = if (hardcore) null else x.pick(ExtraKind.Fps, v[VideoKey.Fps])
             val lines = listOfNotNull(ws, fps).map { it.codes.joinToString(",") }
-            val log = "widescreen ${ws?.name ?: "off"} (${x.widescreen.size} here), fps ${fps?.name ?: "off"} (${x.fps.size} here)"
-            return ExtrasOn(lines, ws?.shape, fps != null, log, ws?.name, fps?.name)
+            val log = "widescreen ${ws?.name ?: "off"} (${x.widescreen.size} here), fps ${fps?.name ?: if (hardcore) "off in Hardcore" else "off"} (${x.fps.size} here)"
+            return ExtrasOn(lines, ws?.shape, fps != null, log, ws?.name, fps?.name, ws?.codes?.joinToString(","))
         }
 
         /**
          * Widescreen's "When a game has one" for a game with a 16:9 mode of its own ([OwnWidescreen]) and no code picked:
          * no code, only the 16:9 picture for Aspect ratio's Auto (Joey 2026-11-10: "Yes, use it"). The game's own option
-         * is still the player's to set in the game. Not in Hardcore, which locks Widescreen.
+         * is still the player's to set in the game. Hardcore too (widescreen stays, Joey 2026-11-16).
          */
+        @Suppress("UNUSED_PARAMETER")
         fun withOwnMode(on: ExtrasOn, gameCode: String?, v: VideoSettings, hardcore: Boolean): ExtrasOn {
-            if (hardcore || on.shape != null || v[VideoKey.Widescreen] != GameExtras.ALL) return on
+            if (on.shape != null || v[VideoKey.Widescreen] != GameExtras.ALL) return on
             val where = OwnWidescreen.where(gameCode) ?: return on
             return on.copy(shape = 16 to 9, log = on.log + ", the game's own 16:9 mode: 16:9 picture (set in the game: $where)")
         }
