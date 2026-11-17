@@ -94,16 +94,14 @@ android {
     defaultConfig {
         applicationId = "com.joeysretro.joey64"
         minSdk = 29
-        // Google Play: new apps and updates target Android 16 (API 36) since 2026-08-31.
+        // Android 16 (API 36), Google Play's minimum since 2026-08-31 (Joey64 isn't on Play; kept, Joey 2026-11-16).
         targetSdk = 36
         versionCode = 6
         versionName = "0.2.2"
         ndk { abiFilters += "arm64-v8a" }
-        // 16 KB page alignment for the host and the driver hooks (Google Play rejects 4 KB-aligned libraries; NDK 27
-        // still links at 4 KB by default). The core and librashader get theirs in their own builds.
+        // 16 KB page alignment for the host and the driver hooks (devices with 16 KB pages can't load 4 KB-aligned
+        // libraries; NDK 27 still links at 4 KB by default). The core and librashader get theirs in their own builds.
         externalNativeBuild { cmake { cppFlags += "-std=c++17"; arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON" } }
-        // The Google Play build (build type "play"): no GitHub updater, no install permission (src/play/AndroidManifest.xml).
-        buildConfigField("boolean", "PLAY", "false")
         buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
         buildConfigField("boolean", "GIT_DIRTY", "$gitDirty")
         buildConfigField("long", "BUILD_TIME", "${System.currentTimeMillis()}L")
@@ -130,13 +128,6 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (keystoreProperties.containsKey("storeFile")) signingConfig = signingConfigs.getByName("release")
-        }
-        // Google Play (Joey 2026-11-16: "Start fixes"): the release build without the GitHub updater, which Play doesn't
-        // allow (an app updates only through Play). ./gradlew bundlePlay makes the .aab.
-        create("play") {
-            initWith(getByName("release"))
-            matchingFallbacks += "release"
-            buildConfigField("boolean", "PLAY", "true")
         }
     }
     sourceSets["main"].assets.srcDir(buildInfoAssets)
@@ -180,4 +171,4 @@ dependencies {
 }
 
 tasks.named("preBuild") { dependsOn(copyCoreVersion) }
-afterEvaluate { listOf("preReleaseBuild", "prePlayBuild").forEach { tasks.named(it) { dependsOn(checkBundledFiles) } } }
+afterEvaluate { tasks.named("preReleaseBuild") { dependsOn(checkBundledFiles) } }

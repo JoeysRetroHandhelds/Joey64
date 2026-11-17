@@ -404,10 +404,9 @@ private fun AboutTab(updates: UpdateModel, onHints: (List<Hint>) -> Unit, modifi
             // A tap leaves nothing focused, and Compose won't focus a row in touch mode: back to
             // controller mode, then focus goes to Check for updates, as the mockup shows.
             VersionRow(updates, testing) { inputMode.requestInputMode(InputMode.Keyboard); landing?.arm() }
-            // The Google Play build has no Check for updates (Play updates it), so focus starts on Core.
-            if (!BuildConfig.PLAY) JoeyRow("Check for updates", modifier = Modifier.initialFocus(), sideways = true, onFocused = { if (it) focused = "chk" },
+            JoeyRow("Check for updates", modifier = Modifier.initialFocus(), sideways = true, onFocused = { if (it) focused = "chk" },
                 trailing = { f -> CheckValue(row, updates.lastCheck, now, f) }) { updates.checkNow() }
-            JoeyRow("Core", modifier = if (BuildConfig.PLAY) Modifier.initialFocus() else Modifier, value = info.core, sideways = true, onFocused = { if (it) focused = "core" })
+            JoeyRow("Core", value = info.core, sideways = true, onFocused = { if (it) focused = "core" })
             JoeyRow("Renderer", value = AboutInfo.renderer(context), sideways = true, onFocused = { if (it) focused = "rdr" })
             JoeyRow("Device", value = info.device, sideways = true, onFocused = { if (it) focused = "dev" })
             JoeyRow("Copy device info", value = if (copied) "Copied" else null, sideways = true, onFocused = { if (it) focused = "copy" }) {
