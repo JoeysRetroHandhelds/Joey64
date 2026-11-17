@@ -3547,22 +3547,28 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // Keyboards and adb's virtual keys play as player 1 (a key nobody binds still goes on to Android).
         if (dev == null || !PadDevices.isPad(dev)) return 0
         var p = controls.players.indexOfFirst { it.device is DeviceChoice.Pad && PadDevices.matches(it.device, dev) }
-        if (p < 0 && PadDevices.isBuiltIn(dev)) p = controls.players.indexOfFirst { it.device == DeviceChoice.BuiltIn }
-        if (p < 0) p = claimFreePlayer(dev)
+        val builtIn = PadDevices.isBuiltIn(dev)
+        // This device's own controls play only as the player set to Built-in controls: with none, they play as no one.
+        if (p < 0 && builtIn) p = controls.players.indexOfFirst { it.device == DeviceChoice.BuiltIn }
+        else if (p < 0) p = claimFreePlayer(dev)
         playerOfDevice[id] = p
-        if (!PadDevices.isBuiltIn(dev)) padNames[id] = dev.name
-        if (p >= 0) JLog.i(TAG, "controls: ${dev.name} (" + "%04x:%04x".format(dev.vendorId, dev.productId) + ") is player ${p + 1}")
+        if (!builtIn) { padNames[id] = dev.name; controlsStore.markPadSeen(dev.descriptor) }
+        val ids = "%04x:%04x".format(dev.vendorId, dev.productId)
+        if (p >= 0) JLog.i(TAG, "controls: ${dev.name} ($ids) is player ${p + 1}")
+        else JLog.i(TAG, "controls: ${dev.name} ($ids) is no player's" + if (builtIn) " (no player has Built-in controls)" else "")
         return p
     }
 
     /**
      * A controller no player has: with no built-in pad here (a phone), it plays as the built-in player;
-     * else the first player with None gets it, Auto mapped, saved to All games so it stays theirs.
+     * else, the first time Joey64 sees it, the first player with None gets it, Auto mapped, saved to All games so it stays
+     * theirs. One seen before ([ControlsStore.padSeen]) whose player was set to None stays unused.
      */
     private fun claimFreePlayer(dev: InputDevice): Int {
         val builtInPlayer = controls.players.indexOfFirst { it.device == DeviceChoice.BuiltIn }
         if (builtInPlayer >= 0 && PadDevices.builtIn() == null &&
             playerOfDevice.values.none { it == builtInPlayer }) return builtInPlayer
+        if (controlsStore.padSeen(dev.descriptor)) return -1
         val free = controls.players.indexOfFirst { it.device == DeviceChoice.None }
         if (free < 0) return -1
         val choice = PadDevices.choiceFor(dev)

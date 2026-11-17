@@ -22,7 +22,25 @@ class ControlsStore(private val dir: File) {
     private val hotkeysFile = File(dir, "hotkeys.json")
 
     fun all(): ControlsSet = read(all)?.let { ControlsSet.fromJson(it) } ?: ControlsSet.defaults()
-    fun saveAll(set: ControlsSet) = write(all, set.toJson())
+    fun saveAll(set: ControlsSet) {
+        write(all, set.toJson())
+        for (p in set.players) (p.device as? DeviceChoice.Pad)?.let { markPadSeen(it.descriptor) }
+    }
+
+    /**
+     * Controllers (by [android.view.InputDevice.descriptor]) Joey64 has given a player or seen in a game, `seen.txt`, one a
+     * line. Only a controller not in it is given to a free player at its first press (Joey 2026-11-17: a player set to None
+     * got the pad back at its next press), so None stays None for one seen before.
+     */
+    private val seenFile = File(dir, "seen.txt")
+    // Read each time (a controller's first press in a play, or a save): the launcher and the game screen each have a store.
+    private fun seenSet(): Set<String> = try { if (seenFile.isFile) seenFile.readLines().filter { it.isNotBlank() }.toSet() else emptySet() }
+        catch (e: Exception) { JLog.e(TAG, "can't read ${seenFile.name}: $e"); emptySet() }
+    fun padSeen(descriptor: String): Boolean = descriptor in seenSet()
+    fun markPadSeen(descriptor: String) {
+        if (descriptor.isEmpty() || descriptor in seenSet()) return
+        try { dir.mkdirs(); seenFile.appendText(descriptor + "\n") } catch (e: Exception) { JLog.e(TAG, "can't write ${seenFile.name}: $e") }
+    }
     /** Whether All games was ever saved (else the first run: [PadDevices.firstSet]). */
     fun hasAll(): Boolean = all.isFile
 

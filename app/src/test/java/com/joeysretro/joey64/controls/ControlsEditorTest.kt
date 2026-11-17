@@ -25,6 +25,18 @@ class ControlsEditorTest {
         assertEquals(10, store.all().players[0].deadZone)
     }
 
+    @Test fun aControllerGivenAPlayerIsSeenSoNoneStaysNone() {
+        val store = ControlsStore(tmp.root)
+        org.junit.Assert.assertFalse(store.padSeen("abc"))
+        store.saveAll(ControlsSet.defaults().with(1, AutoMap.byPosition(DeviceChoice.Pad("abc", "8BitDo 64 BT"), AutoMap.FaceCodes.POSITION)))
+        assertTrue(store.padSeen("abc"))
+        // Set back to None: still seen, in a new store too (the game screen has its own).
+        store.saveAll(ControlsSet.defaults())
+        assertTrue(ControlsStore(tmp.root).padSeen("abc"))
+        store.markPadSeen("def"); store.markPadSeen("def"); store.markPadSeen("")
+        assertEquals(listOf("abc", "def"), java.io.File(tmp.root, "seen.txt").readLines())
+    }
+
     @Test fun aGamesFirstChangeCopiesAllGamesAndDotsTheRow() {
         val store = ControlsStore(tmp.root)
         val e = ControlsEditor(store, "Mario Kart 64 (USA)", byPos)
