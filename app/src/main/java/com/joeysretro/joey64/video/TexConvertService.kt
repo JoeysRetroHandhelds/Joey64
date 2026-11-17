@@ -101,7 +101,15 @@ class TexConvertService : Service() {
         wake?.let { if (it.isHeld) it.release() }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+        // The core's build (step 2) can't be stopped from inside: it ignores its callback's answer. This process
+        // (:texconv) holds nothing else, so it ends here; the unfinished .hts isn't whole, so the next run makes it again
+        // from the PNG copy (GLideNHQ clears a cache it can't load when the PNG folder is there).
+        if (building) {
+            JLog.w(TAG, "texture packs: the pack file was being made; this process ends so it stops")
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
     }
+    @Volatile private var building = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         store = TexPackStore(applicationContext)
@@ -180,10 +188,14 @@ class TexConvertService : Service() {
         if (timedOut) throw TimedOut()
         publish(status.copy(cur = cur(2, 0, copied.pngs.toLong())), force = true)
         val t0 = System.currentTimeMillis()
-        val n = TexBuild.build(core, store.convDir(p).path, job.romName) { k ->
-            publish(status.copy(cur = cur(2, k.toLong(), copied.pngs.toLong())))
-            hold(job, after)
-        }
+        building = true
+        val n = try {
+            TexBuild.build(core, store.convDir(p).path, job.romName) { k ->
+                publish(status.copy(cur = cur(2, k.toLong(), copied.pngs.toLong())))
+                hold(job, after)
+            }
+        } finally { building = false }
+        if (timedOut) throw TimedOut()
         val hts = store.converted(p)
         if (n <= 0 || hts == null || !TexPacks.htsWhole(hts)) return "the pack file couldn't be made"
         store.dropPngs(p)

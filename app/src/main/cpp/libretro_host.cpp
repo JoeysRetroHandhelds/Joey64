@@ -1105,7 +1105,8 @@ void logStats() {
         static uint64_t gpuNsBefore = 0;
         if (g_vulkan && g_statRuns > 0) {
             double gpuMs = -1;
-            if (g_rdpWaitNs) { const uint64_t n = g_rdpWaitNs(); gpuMs = (n - gpuNsBefore) / 1e6 / g_statRuns; gpuNsBefore = n; }
+            // A count lower than the last one (the core loaded again in this process starts its total at 0) is all new.
+            if (g_rdpWaitNs) { const uint64_t n = g_rdpWaitNs(); gpuMs = (n >= gpuNsBefore ? n - gpuNsBefore : n) / 1e6 / g_statRuns; gpuNsBefore = n; }
             if (gpuMs >= 0) snprintf(split, sizeof split, " (emulation %.2f of it GPU %.2f, present %.2f)", g_statEmuMs / g_statRuns, gpuMs, g_statPresentMs / g_statRuns);
             else snprintf(split, sizeof split, " (emulation %.2f, present %.2f)", g_statEmuMs / g_statRuns, g_statPresentMs / g_statRuns);
         }
