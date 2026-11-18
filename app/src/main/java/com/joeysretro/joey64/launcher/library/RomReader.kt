@@ -197,6 +197,18 @@ object RomReader {
         )
     }
 
+    /**
+     * Only the header of the ROM in [input] (its first 64 bytes, any byte order), for a library update that needs a
+     * header column again (LibrarySchema.V9): null when they aren't an N64 ROM's. Doesn't close [input].
+     */
+    fun readHeader(input: InputStream): RomHeader? {
+        val buf = ByteArray(HEADER_SIZE)
+        if (readFully(input, buf, 0, HEADER_SIZE) < HEADER_SIZE) return null
+        val order = RomByteOrder.of(buf) ?: return null
+        order.toBigEndian(buf, HEADER_SIZE)
+        return parseHeader(buf)
+    }
+
     /** The header of a ROM already in .z64 order ([z64] holds at least its first 64 bytes). */
     fun parseHeader(z64: ByteArray): RomHeader {
         val nameBytes = z64.copyOfRange(0x20, 0x34)

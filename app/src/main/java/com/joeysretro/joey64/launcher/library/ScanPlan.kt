@@ -3,8 +3,11 @@ package com.joeysretro.joey64.launcher.library
 /** A ROM file the scan found in a picked folder ([com.joeysretro.joey64.launcher.storage.RomFolders.scan]). */
 data class FoundRom(val uri: String, val treeUri: String, val name: String, val size: Long, val modified: Long)
 
-/** A file the library already knows (the `files` table). [gameId] is null when it couldn't be read as a ROM. */
-data class KnownFile(val uri: String, val treeUri: String, val size: Long, val modified: Long, val gameId: Long?)
+/**
+ * A file the library already knows (the `files` table). [gameId] is null when it couldn't be read as a ROM.
+ * [headerOnly]: a library update asked for its header again (`files.reread`, LibrarySchema.V9).
+ */
+data class KnownFile(val uri: String, val treeUri: String, val size: Long, val modified: Long, val gameId: Long?, val headerOnly: Boolean = false)
 
 /**
  * What one scan has to do (plan, Phase 1: "cached by file size and date"):
@@ -13,8 +16,12 @@ data class KnownFile(val uri: String, val treeUri: String, val size: Long, val m
  *  - [gone]: known files no longer in a folder that was scanned leave the library. A folder that
  *    couldn't be scanned (card out, permission taken away) loses nothing: its files stay, so
  *    pulling the SD card doesn't empty the library.
+ *  - [headers]: unchanged files a library update marked: only their header is read, for their game ([gameIds]).
  */
-data class ScanPlan(val toRead: List<FoundRom>, val unchanged: List<FoundRom>, val gone: List<String>)
+data class ScanPlan(
+    val toRead: List<FoundRom>, val unchanged: List<FoundRom>, val gone: List<String>,
+    val headers: List<FoundRom> = emptyList(), val gameIds: Map<String, Long> = emptyMap(),
+)
 
 object ScanPlanner {
     /** A folder that listed [found] ROMs is read again when it lists none but had [hadGames] games last time. */
@@ -28,13 +35,18 @@ object ScanPlanner {
         val byUri = known.associateBy { it.uri }
         val toRead = ArrayList<FoundRom>()
         val unchanged = ArrayList<FoundRom>()
+        val headers = ArrayList<FoundRom>()
+        val gameIds = HashMap<String, Long>()
         for (f in found) {
             val k = byUri[f.uri]
-            if (k != null && k.size == f.size && k.modified == f.modified) unchanged += f else toRead += f
+            if (k != null && k.size == f.size && k.modified == f.modified) {
+                unchanged += f
+                if (k.headerOnly && k.gameId != null) { headers += f; gameIds[f.uri] = k.gameId }
+            } else toRead += f
         }
         val foundUris = found.mapTo(HashSet()) { it.uri }
         val gone = known.filter { k -> k.treeUri in scannedTrees && k.uri !in foundUris && keepUnder.none { k.uri.startsWith(it) } }.map { it.uri }
-        return ScanPlan(toRead, unchanged, gone)
+        return ScanPlan(toRead, unchanged, gone, headers, gameIds)
     }
 
     /**

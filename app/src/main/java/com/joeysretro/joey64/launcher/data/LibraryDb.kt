@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
 import com.joeysretro.joey64.launcher.library.FoundRom
 import com.joeysretro.joey64.launcher.library.KnownFile
+import com.joeysretro.joey64.launcher.library.RomHeader
 import com.joeysretro.joey64.launcher.library.RomInfo
 
 /**
@@ -19,7 +20,7 @@ import com.joeysretro.joey64.launcher.library.RomInfo
  * the file is renamed or moved, or the same ROM sits in two folders.
  */
 object LibrarySchema {
-    const val VERSION = 8
+    const val VERSION = 9
 
     val V1 = listOf(
         // md5: RetroAchievements' N64 hash, the MD5 of the ROM in big-endian (.z64) byte order.
@@ -183,6 +184,20 @@ object LibrarySchema {
         "ALTER TABLE games ADD COLUMN header_name TEXT",
     )
 
+    /**
+     * Version 9 (queue follow-up "a lighter library migration re-read", 2026-11-17): what the next scan reads again
+     * of an unchanged file. 'header' reads only the ROM header and fills the game's header columns
+     * ([LibraryDb.saveHeader]); null reads nothing. V3, V4 and V8 each set every file's size to -1, so the first scan
+     * after the update hashed every ROM whole for a column that comes from its first 64 bytes (a slow first scan on
+     * big libraries). A later version that adds a header column sets [REREAD_HEADER] instead.
+     */
+    val V9 = listOf(
+        "ALTER TABLE files ADD COLUMN reread TEXT",
+    )
+
+    /** The upgrade step for a version that adds a column read from the ROM header (see [V9]). */
+    const val REREAD_HEADER = "UPDATE files SET reread = 'header' WHERE game_id IS NOT NULL"
+
     /** Tables the cache owns; emptied on sign-out. */
     val RA_CACHE = listOf("ra_achievements", "ra_sets")
 }
@@ -279,7 +294,7 @@ class LibraryDb private constructor(context: Context) :
     }
 
     override fun onCreate(db: SQLiteDatabase) {
-        for (sql in LibrarySchema.V1 + LibrarySchema.V2 + LibrarySchema.V3 + LibrarySchema.V4 + LibrarySchema.V5 + LibrarySchema.V6 + LibrarySchema.V7 + LibrarySchema.V8) db.execSQL(sql)
+        for (sql in LibrarySchema.V1 + LibrarySchema.V2 + LibrarySchema.V3 + LibrarySchema.V4 + LibrarySchema.V5 + LibrarySchema.V6 + LibrarySchema.V7 + LibrarySchema.V8 + LibrarySchema.V9) db.execSQL(sql)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -303,6 +318,8 @@ class LibraryDb private constructor(context: Context) :
             for (sql in LibrarySchema.V8) db.execSQL(sql)
             db.execSQL("UPDATE files SET size = -1")
         }
+        if (oldVersion < 9) for (sql in LibrarySchema.V9) db.execSQL(sql)
+        // A later version that adds a header column: its SQL, then db.execSQL(LibrarySchema.REREAD_HEADER).
     }
 
     /** Adds a finished play session and keeps the game's total and last-played in step. */
@@ -414,11 +431,30 @@ class LibraryDb private constructor(context: Context) :
 
     /** Every file the library knows, for the scan to compare against (ScanPlanner). */
     fun knownFiles(): List<KnownFile> =
-        readableDatabase.rawQuery("SELECT uri, tree_uri, size, modified, game_id FROM files", null).use { c ->
+        readableDatabase.rawQuery("SELECT uri, tree_uri, size, modified, game_id, reread FROM files", null).use { c ->
             buildList {
-                while (c.moveToNext()) add(KnownFile(c.getString(0), c.getString(1), c.getLong(2), c.getLong(3), if (c.isNull(4)) null else c.getLong(4)))
+                while (c.moveToNext()) add(KnownFile(c.getString(0), c.getString(1), c.getLong(2), c.getLong(3), if (c.isNull(4)) null else c.getLong(4),
+                    headerOnly = c.getString(5) == "header"))
             }
         }
+
+    /**
+     * Fills [gameId]'s header columns from [header] (an unchanged file marked for a header re-read, [LibrarySchema.V9])
+     * and clears the file's mark. A 64DD disk ([header] null: no cartridge header) only has its mark cleared.
+     */
+    fun saveHeader(uri: String, gameId: Long, header: RomHeader?) {
+        writableDatabase.transaction {
+            if (header != null) update("games", ContentValues().apply {
+                put("header_id", header.gameCode)
+                put("region", header.region.code.code)
+                put("revision", header.revision)
+                put("header_name", header.packName)
+                if (header.crc1 == 0L && header.crc2 == 0L) putNull("header_key")
+                else put("header_key", com.joeysretro.joey64.cheats.CheatLogic.keyOf(header))
+            }, "id = ?", arrayOf(gameId.toString()))
+            execSQL("UPDATE files SET reread = NULL WHERE uri = ?", arrayOf<Any>(uri))
+        }
+    }
 
     /**
      * Records a file the scan read: its game, added by MD5 when the library hasn't seen it (any
@@ -439,6 +475,7 @@ class LibraryDb private constructor(context: Context) :
                 }, SQLiteDatabase.CONFLICT_IGNORE)
                 gameId = rawQuery("SELECT id FROM games WHERE md5 = ?", arrayOf(info.md5)).use { c -> if (c.moveToFirst()) c.getLong(0) else null }
                 update("games", ContentValues().apply {
+                    put("header_id", info.header.gameCode)
                     put("region", info.header.region.code.code)
                     put("revision", info.header.revision)
                     put("rom_size", info.size)
@@ -456,6 +493,7 @@ class LibraryDb private constructor(context: Context) :
                 put("modified", file.modified)
                 put("game_id", gameId)
                 put("seen_at", now)
+                putNull("reread")   // a whole read fills every column
             }
             if (update("files", row, "uri = ?", arrayOf(file.uri)) == 0) insertOrThrow("files", null, row)
         }

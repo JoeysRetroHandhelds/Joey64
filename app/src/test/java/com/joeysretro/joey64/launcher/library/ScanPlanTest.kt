@@ -13,6 +13,19 @@ class ScanPlanTest {
     private fun known(name: String, tree: String = sd, size: Long = 100, modified: Long = 1, gameId: Long? = 1) =
         KnownFile("$tree/$name", tree, size, modified, gameId)
 
+    @Test fun aMarkedUnchangedFileHasOnlyItsHeaderRead() {
+        val p = ScanPlanner.plan(
+            listOf(found("a.z64"), found("b.zip"), found("c.zip", size = 200), found("notes.zip")),
+            listOf(KnownFile("$sd/a.z64", sd, 100, 1, 7, headerOnly = true), known("b.zip"),
+                KnownFile("$sd/c.zip", sd, 100, 1, 8, headerOnly = true), KnownFile("$sd/notes.zip", sd, 100, 1, null, headerOnly = true)),
+            setOf(sd),
+        )
+        assertEquals(listOf("a.z64"), p.headers.map { it.name })   // c changed: read whole; notes isn't a ROM
+        assertEquals(mapOf("$sd/a.z64" to 7L), p.gameIds)
+        assertEquals(listOf("c.zip"), p.toRead.map { it.name })
+        assertEquals(listOf("a.z64", "b.zip", "notes.zip"), p.unchanged.map { it.name })
+    }
+
     @Test fun aFirstScanReadsEverything() {
         val p = ScanPlanner.plan(listOf(found("a.z64"), found("b.zip")), emptyList(), setOf(sd))
         assertEquals(listOf("a.z64", "b.zip"), p.toRead.map { it.name })

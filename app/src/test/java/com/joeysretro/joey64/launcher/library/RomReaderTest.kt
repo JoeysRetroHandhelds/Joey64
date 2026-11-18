@@ -37,6 +37,24 @@ class RomReaderTest {
     private fun crc(b: ByteArray) = "%08X".format(CRC32().apply { update(b) }.value)
     private fun read(b: ByteArray) = RomReader.read(ByteArrayInputStream(b))
 
+    @Test fun aHeaderAloneMatchesTheWholeRead() {
+        val z = z64(code = "NSMJ", revision = 1)
+        val whole = read(z)!!.header
+        for (b in listOf(z, v64(z), n64(z))) assertEquals(whole, RomReader.readHeader(ByteArrayInputStream(b)))
+        assertNull(RomReader.readHeader(ByteArrayInputStream(ByteArray(64))))
+        assertNull(RomReader.readHeader(ByteArrayInputStream(z.copyOf(40))))
+        // In a zip: only the first entry that is a ROM, past a macOS copy; a disk has no header.
+        val zip = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zo ->
+                zo.putNextEntry(ZipEntry("__MACOSX/._a.z64")); zo.write(ByteArray(100)); zo.closeEntry()
+                zo.putNextEntry(ZipEntry("readme.txt")); zo.write("hello".toByteArray()); zo.closeEntry()
+                zo.putNextEntry(ZipEntry("a.v64")); zo.write(v64(z)); zo.closeEntry()
+            }
+        }.toByteArray()
+        assertEquals(whole, ArchiveReader.headerInZip(ByteArrayInputStream(zip))!!.header)
+        assertEquals(ArchiveReader.HeaderRead(null), ArchiveReader.headerOf("disk.ndd", ByteArrayInputStream(ByteArray(10))))
+    }
+
     @Test fun allThreeByteOrdersAreTheSameGame() {
         val z = z64()
         val expected = md5(z)

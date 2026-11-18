@@ -25,13 +25,30 @@ object ArchiveReader {
     fun is7z(name: String) = name.substringAfterLast('.', "").equals("7z", ignoreCase = true)
 
     /** Reads [input] as a zip. Null when no entry is an N64 ROM (or the zip is damaged). Doesn't close [input]. */
-    fun readZip(input: InputStream): ArchivedRom? = try {
+    fun readZip(input: InputStream): ArchivedRom? = firstInZip(input) { name, s -> RomReader.read(name, s)?.let { ArchivedRom(name, it) } }
+
+    /**
+     * The header of the first N64 ROM in an archive (zip from [input], or 7z through [channel]), for a library update
+     * that needs header columns again: only the entry's first 64 bytes are unpacked. A 64DD disk is taken with no
+     * header ([HeaderRead.header] null). Null when no entry is a ROM.
+     */
+    fun headerInZip(input: InputStream): HeaderRead? = firstInZip(input, ::headerOf)
+    fun headerIn7z(channel: SeekableByteChannel): HeaderRead? = firstIn7z(channel, ::headerOf)
+
+    /** A header read for an entry or file [name]: [header] null for a 64DD disk. */
+    data class HeaderRead(val header: RomHeader?)
+
+    fun headerOf(name: String, input: InputStream): HeaderRead? =
+        if (RomReader.isDiskName(name)) HeaderRead(null) else RomReader.readHeader(input)?.let { HeaderRead(it) }
+
+    /** Offers each file in the zip [input] to [take] until it returns non-null. Null when nothing was taken, or the zip is damaged. */
+    private fun <T : Any> firstInZip(input: InputStream, take: (String, InputStream) -> T?): T? = try {
         val zip = ZipInputStream(input, ZipNames)
-        var found: ArchivedRom? = null
+        var found: T? = null
         while (found == null) {
             val e = zip.nextEntry ?: break
             if (e.isDirectory || skip(e.name)) continue
-            found = RomReader.read(e.name, zip)?.let { ArchivedRom(e.name, it) }
+            found = take(e.name, zip)
         }
         found
     } catch (e: java.util.zip.ZipException) {

@@ -40,6 +40,8 @@ class LibraryScanner(private val context: Context, private val db: LibraryDb) {
         val threads: Int,
         /** Files that couldn't be opened this time (removed mid-scan, I/O error): tried again next scan. */
         val failed: Int,
+        /** Unchanged files whose header alone was read again for a library update (LibrarySchema.V9). */
+        val headers: Int = 0,
         val games: Int,
         val listMillis: Long,
         val readMillis: Long,
@@ -109,11 +111,19 @@ class LibraryScanner(private val context: Context, private val db: LibraryDb) {
             pool.shutdown()
         }
         coroutineContext.ensureActive()
+        // Header re-reads (LibrarySchema.V9): 64 bytes each, one at a time; a file that can't be read now keeps its mark.
+        var headers = 0
+        for (f in plan.headers) {
+            coroutineContext.ensureActive()
+            val got = try { readHeader(f) } catch (e: Exception) { JLog.w(TAG, "can't read the header of ${f.name}: $e"); continue }
+            db.saveHeader(f.uri, plan.gameIds.getValue(f.uri), got?.header)
+            headers++
+        }
         val t2 = SystemClock.elapsedRealtime()
         Result(
             folders = treeUris.size, foldersSkipped = skipped, files = found.size, read = read.get(), notRoms = notRoms.get(),
             unchanged = plan.unchanged.size, gone = plan.gone.size, threads = threads,
-            failed = failed.get(), games = db.gameCount(), listMillis = t1 - t0, readMillis = t2 - t1,
+            failed = failed.get(), headers = headers, games = db.gameCount(), listMillis = t1 - t0, readMillis = t2 - t1,
         ).also { JLog.i(TAG, "scan: $it") }
     }
 
@@ -124,6 +134,15 @@ class LibraryScanner(private val context: Context, private val db: LibraryDb) {
             if (n in 1..16) return n
         }
         return READ_THREADS
+    }
+
+    /** Only the header of [f] (a 64DD disk: none). Null = no ROM in it any more. Throws when the file can't be opened. */
+    private fun readHeader(f: FoundRom): ArchiveReader.HeaderRead? {
+        if (ArchiveReader.is7z(f.name)) return context.contentResolver.withChannel(f.uri.toUri()) { ArchiveReader.headerIn7z(it) }
+        val input = context.contentResolver.openInputStream(f.uri.toUri()) ?: throw IOException("no stream")
+        return input.buffered(64 * 1024).use { s ->
+            if (ArchiveReader.isZip(f.name)) ArchiveReader.headerInZip(s) else ArchiveReader.headerOf(f.name, s)
+        }
     }
 
     /** Null = not an N64 ROM (recorded so it isn't read again). Throws when the file can't be opened. */
