@@ -2732,13 +2732,23 @@ JNIEXPORT void JNICALL JNI(showAgain)(JNIEnv*, jobject) {
 }
 
 // Where a picture of imgW x imgH goes in a winW x winH window with the display settings as they are now (Display::fit,
-// as both presents place the game): x, y, w, h. For the state's picture held over a start (MainActivity.HeldPicture).
-JNIEXPORT jintArray JNICALL JNI(pictureRect)(JNIEnv* env, jobject, jint winW, jint winH, jint imgW, jint imgH) {
+// as both presents place the game): x, y, w, h, then what comes off it (left, top, right, bottom pixels: the game's
+// border and Crop edges, as the presents cut them). [trim]: the game's border saved with the picture (null: none).
+// For the state's picture held over a start (HeldPicture): placed without its border it showed the border and the
+// game grew when it took over (Smash, Joey 2026-11-17).
+JNIEXPORT jintArray JNICALL JNI(pictureRect)(JNIEnv* env, jobject, jint winW, jint winH, jint imgW, jint imgH, jintArray trim) {
     int x = 0, y = 0, w = winW, h = winH;
-    if (winW > 0 && winH > 0 && imgW > 0 && imgH > 0) Display::fit(winW, winH, imgW, imgH, x, y, w, h);
-    jint r[4] = {x, y, w, h};
-    jintArray out = env->NewIntArray(4);
-    if (out) env->SetIntArrayRegion(out, 0, 4, r);
+    int given[4] = {0, 0, 0, 0};
+    if (trim && env->GetArrayLength(trim) >= 4) env->GetIntArrayRegion(trim, 0, 4, given);
+    Display::Cut c;
+    if (winW > 0 && winH > 0 && imgW > 0 && imgH > 0) {
+        bool crop = Display::cutOf(imgW, imgH, c, given);
+        double shape = crop ? Display::cutShape(imgW, imgH, c, given) : 1.0;
+        Display::fit(winW, winH, imgW - c.l - c.r, imgH - c.t - c.b, x, y, w, h, shape);
+    }
+    jint r[8] = {x, y, w, h, c.l, c.t, c.r, c.b};
+    jintArray out = env->NewIntArray(8);
+    if (out) env->SetIntArrayRegion(out, 0, 8, r);
     return out;
 }
 

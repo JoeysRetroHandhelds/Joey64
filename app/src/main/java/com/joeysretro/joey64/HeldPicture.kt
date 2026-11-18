@@ -22,11 +22,14 @@ import android.widget.ImageView
  * this is its own panel window, as the pop-ups are. The picture sits where the game's will (NativeBridge.pictureRect,
  * the host's own placement with the display settings now), on black, so the game takes over without a jump.
  */
-class HeldPicture(private val activity: Activity, private val picture: Bitmap) {
+class HeldPicture(private val activity: Activity, private val picture: Bitmap,
+                  /** The game's border saved with the picture (FramePicture.trimOf), cut off as the game's will be. */
+                  private val trim: IntArray? = null) {
     private val handler = Handler(Looper.getMainLooper())
     private val root = FrameLayout(activity).apply { setBackgroundColor(Color.BLACK) }
     private val image = ImageView(activity).apply { scaleType = ImageView.ScaleType.FIT_XY; setImageBitmap(picture) }
     private var added = false
+    private var shownCut = listOf(0, 0, 0, 0)
     private var gone = false
     private val onDrawn = mutableListOf<() -> Unit>()
 
@@ -99,9 +102,17 @@ class HeldPicture(private val activity: Activity, private val picture: Bitmap) {
             if (android.os.Build.VERSION.SDK_INT >= 30) activity.windowManager.currentWindowMetrics.bounds.let { w = it.width(); h = it.height() }
             else activity.resources.displayMetrics.let { w = it.widthPixels; h = it.heightPixels }
         }
-        val r = NativeBridge.pictureRect(w, h, picture.width, picture.height)
+        val r = NativeBridge.pictureRect(w, h, picture.width, picture.height, trim)
+        // The part the game shows: its border (Smash) and Crop edges off, as the presents cut them.
+        val cut = if (r.size >= 8) listOf(r[4], r[5], r[6], r[7]) else listOf(0, 0, 0, 0)
+        if (cut != shownCut) {
+            val (cl, ct, cr, cb) = cut
+            val kw = picture.width - cl - cr; val kh = picture.height - ct - cb
+            image.setImageBitmap(if (cut.all { it == 0 } || kw <= 0 || kh <= 0) picture else Bitmap.createBitmap(picture, cl, ct, kw, kh))
+            shownCut = cut
+        }
         image.layoutParams = FrameLayout.LayoutParams(r[2], r[3]).apply { leftMargin = r[0]; topMargin = r[1] }
-        JLog.i(MainActivity.TAG, "held picture: placed ${r[2]}x${r[3]} at ${r[0]},${r[1]} in ${w}x$h")
+        JLog.i(MainActivity.TAG, "held picture: placed ${r[2]}x${r[3]} at ${r[0]},${r[1]} in ${w}x$h, cut $cut")
     }
 
     /**

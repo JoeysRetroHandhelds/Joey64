@@ -62,10 +62,12 @@ inline std::atomic<int>* viTrim() { static std::atomic<int> t[4] = {}; return t;
 // What goes off a w x h picture: the game's border, then Crop edges (lines of the N64's 240 off every edge, the same
 // share of the width and the height). Nothing when it would leave less than half the picture either way.
 struct Cut { int l = 0, t = 0, r = 0, b = 0; };
-inline bool cutOf(int w, int h, Cut& c) {
+// [given]: a border to use instead of the core's (the state's picture held over a start, saved with that picture).
+inline bool cutOf(int w, int h, Cut& c, const int* given = nullptr) {
     c = {};
     if (w <= 0 || h <= 0) return false;
-    std::atomic<int>* v = viTrim();
+    int v[4];
+    for (int i = 0; i < 4; ++i) v[i] = given ? given[i] : viTrim()[i].load();
     // To the nearest pixel: the core's ten thousandths round down (13 of 240 lines comes as 541, 12.98 lines).
     if (opts().trim) {
         c.l = (int)std::lround(w * (v[0] / 10000.0)); c.r = (int)std::lround(w * (v[2] / 10000.0));
@@ -83,9 +85,10 @@ inline bool cutOf(int w, int h, Cut& c) {
 
 // The kept part's shape next to the whole picture's, for fit(): the game's border goes, so a 4:3 picture whose
 // border is wider than it is tall is shown a little narrower than 4:3 (Crop edges keeps the shape on its own).
-inline double cutShape(int w, int h, const Cut& c) {
-    std::atomic<int>* v = viTrim();
+inline double cutShape(int w, int h, const Cut& c, const int* given = nullptr) {
     if (!opts().trim) return 1.0;
+    int v[4];
+    for (int i = 0; i < 4; ++i) v[i] = given ? given[i] : viTrim()[i].load();
     double kw = 1.0 - (v[0] + v[2]) / 10000.0, kh = 1.0 - (v[1] + v[3]) / 10000.0;
     if (w <= 0 || h <= 0 || (c.l + c.r) * 2 >= w || kw <= 0.5 || kh <= 0.5) return 1.0;
     return kw / kh;

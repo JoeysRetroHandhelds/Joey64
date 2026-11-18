@@ -94,8 +94,12 @@ object NativeBridge {
     /** Paused: draws the last picture again with the display settings as they are now (the in-game Picture panel). */
     external fun showAgain()
 
-    /** Where an [imgW] x [imgH] picture goes in a [winW] x [winH] window with the display settings now: x, y, w, h. Any time. */
-    external fun pictureRect(winW: Int, winH: Int, imgW: Int, imgH: Int): IntArray
+    /**
+     * Where an [imgW] x [imgH] picture goes in a [winW] x [winH] window with the display settings now: x, y, w, h, then
+     * the pixels that come off its left, top, right and bottom (the game's border [trim], saved with the picture, and
+     * Crop edges). Any time.
+     */
+    external fun pictureRect(winW: Int, winH: Int, imgW: Int, imgH: Int, trim: IntArray?): IntArray
 
     /** The sides (slot 0) or overlay (slot 1) image as RGBA8, top row first; null clears it. Any time. */
     external fun setLookImage(slot: Int, rgba: ByteArray?, w: Int, h: Int)

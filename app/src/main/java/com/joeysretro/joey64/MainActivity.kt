@@ -1719,6 +1719,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         NativeBridge.setTrim(v.on(com.joeysretro.joey64.video.VideoKey.Trim))
         NativeBridge.setColour(v.int(com.joeysretro.joey64.video.VideoKey.Brightness), v.int(com.joeysretro.joey64.video.VideoKey.Contrast), v.int(com.joeysretro.joey64.video.VideoKey.Saturation), v.int(com.joeysretro.joey64.video.VideoKey.Gamma))
         NativeBridge.setSharpen(when (v[com.joeysretro.joey64.video.VideoKey.Sharpen]) { "cas" -> 1; "fsr" -> 2; else -> 0 }, v.int(com.joeysretro.joey64.video.VideoKey.SharpenStrength))
+        // The state's picture held over a start goes where the game's will with these (a game's own Crop edges, Smash's
+        // 4 lines, came after it was placed: it showed more and the game grew, Joey 2026-11-17).
+        held?.let { h -> runOnUiThread { h.place() } }
     }
 
     // parallel-RDP at 4x on the Adreno 722 (Retroid Pocket Duo) drops most geometry (characters
@@ -1941,11 +1944,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             else -> return
         }
         gameIo.execute {
+            var trim: IntArray? = null
             val bmp = try {
-                GameStates(this, name).startPicture(slot)?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
+                GameStates(this, name).startPicture(slot)?.let {
+                    trim = com.joeysretro.joey64.states.FramePicture.trimOf(it)
+                    android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)
+                }
             } catch (e: Exception) { JLog.w(TAG, "held picture: can't read it: $e"); null }
             if (bmp != null) runOnUiThread {
-                if (!destroyed && !started && held == null) held = HeldPicture(this, bmp).takeIf { it.show() }
+                if (!destroyed && !started && held == null) held = HeldPicture(this, bmp, trim).takeIf { it.show() }
             }
         }
     }
@@ -2090,7 +2097,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // A 60 fps code makes the game's CPU work harder: the CPU runs at counter factor 1 (the smoother timing's
         // CountPerOp=1), unless Overclock is set or --es opts sets it.
         if (p.extras.fps && !eApply.overclockSet && !devOpts.contains("mupen64plus-CountPerOp=")) NativeBridge.setOption("mupen64plus-CountPerOp", "1")
-        if (p.extras.shape != null) { applyVideoDisplay(); held?.place() }
+        if (p.extras.shape != null) applyVideoDisplay()
         JLog.i(TAG, "widescreen / 60 fps: ${p.extras.log}")
         // RetroAchievements: signs in with the kept account first, so the game is identified as it loads.
         com.joeysretro.joey64.achievements.RaBridge.init(this)

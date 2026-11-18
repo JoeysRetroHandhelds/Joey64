@@ -43,7 +43,43 @@ object FramePicture {
         val out = ByteArrayOutputStream(sw * sh)
         shown.compress(Bitmap.CompressFormat.PNG, 100, out)
         shown.recycle()
-        return out.toByteArray()
+        // The game's border with it, so the picture held over a start from this state is cut as the game will be.
+        val trim = try { NativeBridge.viTrim() } catch (e: Throwable) { null }
+        return withTrim(out.toByteArray(), trim)
+    }
+
+    /** The PNG text chunk's keyword for the game's border ("left,top,right,bottom", ten thousandths of the picture). */
+    const val TRIM_KEY = "Joey64 trim"
+
+    /** [png] with the game's border [trim] in a text chunk after its header; as it is when there's no border. */
+    fun withTrim(png: ByteArray, trim: IntArray?): ByteArray {
+        if (trim == null || trim.size < 4 || trim.take(4).all { it == 0 } || png.size < 33) return png
+        val data = (TRIM_KEY + "\u0000" + trim.take(4).joinToString(",")).toByteArray(Charsets.ISO_8859_1)
+        val type = "tEXt".toByteArray(Charsets.ISO_8859_1)
+        val crc = java.util.zip.CRC32().apply { update(type); update(data) }.value
+        val chunk = ByteBuffer.allocate(12 + data.size).putInt(data.size).put(type).put(data).putInt(crc.toInt()).array()
+        // The signature (8) and IHDR (25) come first.
+        return png.copyOfRange(0, 33) + chunk + png.copyOfRange(33, png.size)
+    }
+
+    /** The game's border saved in [png] by [withTrim], or null (none, or a picture from before). */
+    fun trimOf(png: ByteArray): IntArray? {
+        var at = 8
+        while (at + 8 <= png.size) {
+            val len = ByteBuffer.wrap(png, at, 4).int
+            if (len < 0 || at + 12 + len > png.size) return null
+            val type = String(png, at + 4, 4, Charsets.ISO_8859_1)
+            if (type == "IDAT" || type == "IEND") return null
+            if (type == "tEXt") {
+                val text = String(png, at + 8, len, Charsets.ISO_8859_1)
+                if (text.startsWith(TRIM_KEY + "\u0000")) {
+                    val v = text.substringAfter('\u0000').split(',').mapNotNull { it.trim().toIntOrNull() }
+                    return if (v.size == 4 && v.all { it in 0..5000 }) v.toIntArray() else null
+                }
+            }
+            at += 12 + len
+        }
+        return null
     }
 
     /** The 4:3 size the picture is shown at: the width kept, the height made to fit (640x240 -> 640x480). */
