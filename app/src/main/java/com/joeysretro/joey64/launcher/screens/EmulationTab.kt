@@ -120,7 +120,7 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
     LaunchedEffect(target) {
         onControl { ctl -> if (ctl == Control.Search) onY() else false }
     }
-    val y = Hint("Y", if (target == null || keyOf(focused) == null) "Reset to default" else "Use All games")
+    val y = Hint("Y", if (target == null || keyOf(focused) == null) "Reset to default" else "Use global")
     val hints = when {
         fixedRow(focused) -> listOf(Hint("B", "Back"))
         focused == SPEED_FF || focused == SPEED_SLOW -> listOf(Hint("◀▶", "Change"), y, Hint("B", "Back"))
@@ -131,7 +131,7 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
     val allE = EmuSettings.resolve(all, null)
     val fk = keyOf(focused)
-    val sameForAll = "The same for every game. Pick All games in the chip above to change it."
+    val sameForAll = "The same for every game. Pick Global in the chip above to change it."
     // Run-ahead's device note (approved runahead mockup screen 2): the Resolution note's lower tier.
     val runAheadNote = remember { com.joeysretro.joey64.video.ResNote.runAhead(com.joeysretro.joey64.video.ResNote.of(context)) }
     val info = if (fk != null) {
@@ -141,7 +141,7 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
             fk == EmuKey.Thermal && game -> sameForAll
             fk == EmuKey.Overclock && hardcore -> describe(fk) + " Hardcore plays always run at Normal.\n\n" +
                 "Turn Hardcore off in Settings › RetroAchievements to change it."
-            dot(fk) -> "Changed for this game. All games uses ${EmuChoices.label(fk, allE[fk])}."
+            dot(fk) -> "Changed for this game. Global is ${EmuChoices.label(fk, allE[fk])}."
             else -> listOfNotNull(describe(fk), autoGives(fk)?.let { "$it." }).joinToString(" ")
         }
         if (fixed(fk)) com.joeysretro.joey64.launcher.components.PanelInfo(title(fk), help)

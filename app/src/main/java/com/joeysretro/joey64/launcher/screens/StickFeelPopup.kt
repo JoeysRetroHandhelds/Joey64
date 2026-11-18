@@ -102,7 +102,7 @@ fun StickFeelPopup(player: Int, setup: PlayerSetup, changed: Set<String>, allGam
     val f = setup.feel
     var row by remember { mutableStateOf(startRow) }
     var axes by remember { mutableStateOf(FloatArray(4)) }
-    val y = Hint("Y", if (allGames == null) "Reset to default" else "Use All games")
+    val y = Hint("Y", if (allGames == null) "Reset to default" else "Use global")
     JoeyDialog(onDismiss = onDismiss, width = 700.dp,
         hints = listOf(if (row in STEP_ROWS) Hint("◀▶", "Change") else Hint("A", "Change"), y, Hint("B", "Close")),
         onPadButton = { code -> if (code == KeyEvent.KEYCODE_BUTTON_Y) onReset(row) }) {
@@ -131,7 +131,7 @@ fun StickFeelPopup(player: Int, setup: PlayerSetup, changed: Set<String>, allGam
             }
             PopupDivider()
             DescriptionLine(feelLabel(row), if (row in changed && allGames != null)
-                "Changed for this game. All games uses ${feelValue(allGames, row)}." else feelText(row))
+                "Changed for this game. Global is ${feelValue(allGames, row)}." else feelText(row))
         }
     }
 }

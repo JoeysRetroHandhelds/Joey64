@@ -119,7 +119,7 @@ internal fun TouchControlsPage(
     val info = com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOfNotNull(now?.let { "Now" to it }))
     Column(modifier) {
         PageHeader("Controls", sub = "› Touch controls") {
-            PageChip((targetTitle?.let { com.joeysretro.joey64.launcher.components.gameName(it) } ?: "All games") + "  ›", com.joeysretro.joey64.R.drawable.ic_sliders, on = targetTitle != null,
+            PageChip((targetTitle?.let { com.joeysretro.joey64.launcher.components.gameName(it) } ?: "Global") + "  ›", com.joeysretro.joey64.R.drawable.ic_sliders, on = targetTitle != null,
                 modifier = Modifier.initialFocus(focused == "tChipGame"), onFocused = { if (it) onFocused("tChipGame") }) { onGames() }
             Spacer(Modifier.width(8.dp))
             PageChip("Edit layout", com.joeysretro.joey64.R.drawable.ic_hand_click, modifier = Modifier.initialFocus(focused == "tChipEdit"),
@@ -170,7 +170,7 @@ private fun touchRowHelp(row: String): Pair<String, String> = when (row) {
     TouchSettings.ROW_SLIDE -> "Slide between buttons" to "Slide your thumb from one button to the next without lifting it."
     "Tap" -> "Tap to hold" to "Player 1's: ticked buttons stay held after a tap. Shared with the controller."
     "Macros" -> "Macros" to "Player 1's macros, shared with the controller. A Macro button on the screen plays one."
-    "tChipGame" -> "All games or one game" to "Touch controls for every game, or for one game only."
+    "tChipGame" -> "Global or one game" to "Touch controls for every game, or for one game only."
     "tChipEdit" -> "Edit layout" to "Move and resize the buttons."
     else -> "Touch controls" to ""
 }
@@ -195,14 +195,14 @@ private fun ColumnScope.TStepRow(label: String, key: String, value: String, focu
 
 /** The page's hints (screen 8): A Change, Y Reset to default (a game: Use All games), Start Reset page, B Back. */
 internal fun touchPageHints(focused: String, game: Boolean, backLabel: String): List<Hint> {
-    val y = Hint("Y", if (game) "Use All games" else "Reset to default")
+    val y = Hint("Y", if (game) "Use global" else "Reset to default")
     return when (focused) {
         "tChipGame", "tChipEdit" -> listOf(Hint("A", "Select"), Hint("B", backLabel))
         TouchSettings.ROW_OPACITY, TouchSettings.ROW_SENS, TouchSettings.ROW_DEAD, TouchSettings.ROW_FULL ->
             listOf(Hint("◀▶", "Change"), y, Hint("Start", "Reset page"), Hint("B", backLabel))
         "tResetLayouts" -> listOf(Hint("A", "Select"), Hint("Start", "Reset page"), Hint("B", backLabel))
         TouchSettings.ROW_LANDSCAPE, TouchSettings.ROW_PORTRAIT -> listOf(Hint("A", "Edit"), y, Hint("Start", "Reset page"), Hint("B", backLabel))
-        "Tap", "Macros" -> listOfNotNull(Hint("A", "Change"), if (game) Hint("Y", "Use All games") else null, Hint("Start", "Reset page"), Hint("B", backLabel))
+        "Tap", "Macros" -> listOfNotNull(Hint("A", "Change"), if (game) Hint("Y", "Use global") else null, Hint("Start", "Reset page"), Hint("B", backLabel))
         else -> listOf(Hint("A", "Change"), y, Hint("Start", "Reset page"), Hint("B", backLabel))
     }
 }

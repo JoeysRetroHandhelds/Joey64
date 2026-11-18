@@ -238,35 +238,35 @@ private fun GamePage(game: GameRef, summary: GameSummary, inGame: Boolean, focus
     val none = summary.total == 0
     val (title, text) = when {
         focused == GamePart.Video.name -> "Video" to when {
-            summary.count(GamePart.Video) == 0 -> "$name follows All games' Video. Change a row there to give it its own."
+            summary.count(GamePart.Video) == 0 -> "$name follows global Video. Change a row there to give it its own."
             inGame -> "$name's own Video settings. Most rows apply when you go back to the game. Resolution, Renderer, GPU driver and Frame pacing apply when it next starts."
-            else -> "$name's own Video settings. The rows with a dot are its own; the rest follow All games."
+            else -> "$name's own Video settings. The rows with a dot are its own; the rest follow global."
         }
         focused == GamePart.Emulation.name -> "Emulation" to when {
-            summary.count(GamePart.Emulation) == 0 -> "$name follows All games' Emulation. Change a row there to give it its own."
+            summary.count(GamePart.Emulation) == 0 -> "$name follows global Emulation. Change a row there to give it its own."
             inGame -> "$name's own Emulation settings. They apply when it next starts."
-            else -> "$name's own Emulation settings. The rows with a dot are its own; the rest follow All games."
+            else -> "$name's own Emulation settings. The rows with a dot are its own; the rest follow global."
         }
         focused == GamePart.Audio.name -> "Audio" to when {
-            summary.count(GamePart.Audio) == 0 -> "$name follows All games' Audio. A game can have its own Volume and Latency."
+            summary.count(GamePart.Audio) == 0 -> "$name follows global Audio. A game can have its own Volume and Latency."
             inGame -> "$name's own Audio settings. Volume applies when you go back to the game, Latency when it next starts."
             else -> "$name's own Audio settings: Volume and Latency."
         }
         focused == GamePart.Controls.name -> "Controls" to when {
-            summary.count(GamePart.Controls) == 0 -> "$name follows All games' Controls. Change a row there to give it its own."
+            summary.count(GamePart.Controls) == 0 -> "$name follows global Controls. Change a row there to give it its own."
             inGame -> "$name's own Controls. They apply when you go back to the game."
-            else -> "$name's own Controls. The rows with a dot are its own; the rest follow All games."
+            else -> "$name's own Controls. The rows with a dot are its own; the rest follow global."
         }
-        focused == "reset" -> "Reset to All games" to (if (none) "Nothing to reset: $name uses All games." else "Drops this game's own settings.")
-        focused == "copy" -> "Copy to another game" to (if (none) "Nothing to copy: $name uses All games." else "Gives another game these settings.")
+        focused == "reset" -> "Reset to global" to (if (none) "Nothing to reset: $name uses global." else "Drops this game's own settings.")
+        focused == "copy" -> "Copy to another game" to (if (none) "Nothing to copy: $name uses global." else "Gives another game these settings.")
         else -> summary.changes.getOrNull(focused.removePrefix("ch").toIntOrNull() ?: -1)?.let {
-            it.name to "${it.value} for this game, ${it.allGames} on All games. A opens it."
+            it.name to "${it.value} for this game, ${it.allGames} in global. A opens it."
         } ?: ("" to "")
     }
     // One list with the panel beside it (approved 2026-11-11): a part's row shows what's changed in it.
     val part = GamePart.entries.firstOrNull { it.name == focused }
     val info = com.joeysretro.joey64.launcher.components.PanelInfo(title, text,
-        lines = part?.let { p -> summary.changes.filter { it.part == p }.map { it.name to "${it.value} · All games: ${it.allGames}" } } ?: emptyList())
+        lines = part?.let { p -> summary.changes.filter { it.part == p }.map { it.name to "${it.value} · Global: ${it.allGames}" } } ?: emptyList())
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
     Column(Modifier.fillMaxSize().padding(horizontal = s.margin).padding(top = 14.dp, bottom = 8.dp)) {
         com.joeysretro.joey64.launcher.components.PageHeader("Game settings") { InfoChip(com.joeysretro.joey64.launcher.components.gameName(game.title), R.drawable.ic_rail_controls) }
@@ -279,15 +279,15 @@ private fun GamePage(game: GameRef, summary: GameSummary, inGame: Boolean, focus
                     onFocused = { if (it) onFocused(p.name) }) { onOpen(p, null) }
             }
             SectionLabel("All of it")
-            JoeyRow("Reset to All games", Modifier.initialFocus(focused == "reset"), enabled = !none, sideways = true,
+            JoeyRow("Reset to global", Modifier.initialFocus(focused == "reset"), enabled = !none, sideways = true,
                 onFocused = { if (it) onFocused("reset") }) { if (!none) onReset() }
             JoeyRow("Copy to another game", Modifier.initialFocus(focused == "copy"), value = "›", enabled = !none, sideways = true,
                 onFocused = { if (it) onFocused("copy") }) { if (!none) onCopy() }
             SectionLabel("Changed for this game")
-            if (none) Text("Nothing yet: $name uses All games' Video, Emulation, Audio and Controls.", style = JoeyTheme.type.note, color = c.textDim,
+            if (none) Text("Nothing yet: $name uses global Video, Emulation, Audio and Controls.", style = JoeyTheme.type.note, color = c.textDim,
                 modifier = Modifier.padding(horizontal = s.rowPadH, vertical = 6.dp))
             summary.changes.forEachIndexed { i, ch ->
-                JoeyRow(ch.name, Modifier.initialFocus(focused == "ch$i"), value = ch.value, detail = "All games: ${ch.allGames}", sideways = true,
+                JoeyRow(ch.name, Modifier.initialFocus(focused == "ch$i"), value = ch.value, detail = "Global: ${ch.allGames}", sideways = true,
                     onFocused = { if (it) onFocused("ch$i") },
                     leading = { _ -> RowTag(ch.part.label, c.textSecondary, c.chip) }) { onOpen(ch.part, ch.row) }
             }
@@ -308,7 +308,7 @@ private fun GamePopupsFor(game: GameRef, summary: GameSummary, model: GameSettin
         null -> {}
         GsPopup.Reset -> JoeyDialog(onDismiss = { onPopup(null) }, hints = listOf(Hint("A", "Select"), Hint("B", "Close")), width = 470.dp) {
             Column {
-                PopupTitle("Reset to All games?", "${com.joeysretro.joey64.launcher.components.gameName(game.title)} uses All games' Video, Audio and Controls again. Its cheats, saves and states stay.")
+                PopupTitle("Reset to global?", "${com.joeysretro.joey64.launcher.components.gameName(game.title)} uses global Video, Audio and Controls again. Its cheats, saves and states stay.")
                 JoeyOption("Reset") { model.reset(game.saveName); onPopup(null); onChanged() }
                 JoeyOption("Cancel", Modifier.initialFocus()) { onPopup(null) }
             }

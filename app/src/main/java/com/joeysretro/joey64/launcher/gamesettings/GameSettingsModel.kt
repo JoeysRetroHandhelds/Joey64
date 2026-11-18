@@ -165,7 +165,7 @@ class GameSettingsModel(private val video: VideoStore, private val emu: EmuStore
             com.joeysretro.joey64.touch.TouchSettings.ROW_DEAD -> "${s.deadZone}%"
             com.joeysretro.joey64.touch.TouchSettings.ROW_FULL -> "${s.fullAt}%"
             com.joeysretro.joey64.touch.TouchSettings.ROW_SLIDE -> if (s.slide) "On" else "Off"
-            else -> if (s === t) "Its own" else "All games'"
+            else -> if (s === t) "Its own" else "Global"
         }
         val names = listOf(com.joeysretro.joey64.touch.TouchSettings.ROW_SHOW to "Show touch controls", com.joeysretro.joey64.touch.TouchSettings.ROW_OPACITY to "Opacity",
             com.joeysretro.joey64.touch.TouchSettings.ROW_HAPTICS to "Haptics", com.joeysretro.joey64.touch.TouchSettings.ROW_HIDE to "Hide when not touched",

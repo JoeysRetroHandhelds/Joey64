@@ -111,7 +111,7 @@ internal class PictureCtx(
     val presetsChanged: () -> Unit,
 ) {
     val setup: ShaderSetup get() = Picture.setup(v, { n -> presets.firstOrNull { it.name.equals(n, ignoreCase = true) } }, autoSharp)
-    val who: String get() = target ?: "All games"
+    val who: String get() = target ?: "Global"
     fun set(k: VideoKey, value: String) = set(mapOf(k to value))
 }
 
@@ -1032,7 +1032,7 @@ internal fun PicturePanel(saveName: String, row: String, onChanged: () -> Unit, 
             Row(Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp)) {
                 com.joeysretro.joey64.launcher.components.PageChip("This game", null, on = !allGames, onFocused = { if (it) focused = null }) { allGames = false }
                 Spacer(Modifier.width(6.dp))
-                com.joeysretro.joey64.launcher.components.PageChip("All games", null, on = allGames, onFocused = { if (it) focused = null }) { allGames = true }
+                com.joeysretro.joey64.launcher.components.PageChip("Global", null, on = allGames, onFocused = { if (it) focused = null }) { allGames = true }
             }
             SectionLabel("Shader")
             for (e in list) {

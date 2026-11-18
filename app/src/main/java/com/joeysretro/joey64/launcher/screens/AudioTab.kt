@@ -75,7 +75,7 @@ fun AudioTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     LaunchedEffect(target) {
         onControl { ctl -> if (ctl == Control.Search) onY() else false }
     }
-    val y = Hint("Y", if (target == null) "Reset to default" else "Use All games")
+    val y = Hint("Y", if (target == null) "Reset to default" else "Use global")
     val hints = when {
         fixed(focused) -> listOf(Hint("B", "Back"))
         focused == AudioKey.Volume -> listOf(Hint("◀▶", "Change"), y, Hint("B", "Back"))
@@ -85,8 +85,8 @@ fun AudioTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
     val (title, text) = describe(focused)
     val help = when {
-        dot(focused) -> "Changed for this game. All games uses ${AudioChoices.label(focused, AudioSettings.resolve(all, null)[focused])}."
-        fixed(focused) -> "The same for every game. Change it on All games."
+        dot(focused) -> "Changed for this game. Global is ${AudioChoices.label(focused, AudioSettings.resolve(all, null)[focused])}."
+        fixed(focused) -> "The same for every game. Change it in global."
         else -> text
     }
     val fk = focused

@@ -90,7 +90,7 @@ fun GamesForPopup(
         val own = info[g]
         val n = own?.changes ?: 0
         ResetTabPopup("Remove the game's $what settings?",
-            "${own?.title ?: g}'s " + (if (n == 1) "1 change goes" else "$n changes go") + ", and it uses All games' again.",
+            "${own?.title ?: g}'s " + (if (n == 1) "1 change goes" else "$n changes go") + ", and it uses global again.",
             keep = "Keep them", reset = "Remove", onDismiss = { asking = null; backTo = g; focusedGame = null }) {
             asking = null; backTo = ""
             onRemoved(g); games = gamesWithOwn(); focusedGame = null
@@ -107,7 +107,7 @@ fun GamesForPopup(
         }) {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             PopupTitle(title, subtitle)
-            JoeyRow("All games", Modifier.initialFocus(if (backTo != null) backTo == "" else !fromPick && target == null), detail = "Every game without its own",
+            JoeyRow("Global", Modifier.initialFocus(if (backTo != null) backTo == "" else !fromPick && target == null), detail = "Every game without its own",
                 trailing = if (target == null) { _ -> PickerTick() } else null) { onPick(null, null) }
             if (games.isNotEmpty()) PopupDivider()
             for (g in games) {

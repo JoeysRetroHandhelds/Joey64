@@ -2814,7 +2814,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             applyAudioNow(save)
         }
         JLog.i(TAG, "volume hotkey: $now -> $next (${if (gameHas) "this game" else "All games"})")
-        pop("volume", InGamePopup.Kind.Volume, "Volume", "$next%", "Settings › Audio, " + if (gameHas) "this game" else "All games", bar = next / 100f)
+        pop("volume", InGamePopup.Kind.Volume, "Volume", "$next%", "Settings › Audio, " + if (gameHas) "this game" else "Global", bar = next / 100f)
     }
 
     /** Settings › Audio's Mute (All games), off or on. */

@@ -279,7 +279,7 @@ internal fun CropPanel(saveName: String, onDone: () -> Unit) {
             Row(Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp)) {
                 com.joeysretro.joey64.launcher.components.PageChip("This game", null, on = !allGames) { allGames = false }
                 Spacer(Modifier.width(6.dp))
-                com.joeysretro.joey64.launcher.components.PageChip("All games", null, on = allGames) { allGames = true }
+                com.joeysretro.joey64.launcher.components.PageChip("Global", null, on = allGames) { allGames = true }
             }
             TrimRow(trim, short = true, focusFirst = false, onFocus = { show(current) }, onSet = { saveTrim(it) })
             CropRows(current, short = true, onFocus = { show(it ?: current) }, onPick = { save(it) })

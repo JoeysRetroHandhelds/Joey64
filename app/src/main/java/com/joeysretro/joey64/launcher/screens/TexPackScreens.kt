@@ -227,7 +227,7 @@ fun texGamePanel(context: Context, s: TexState, value: String, target: String, o
     } ?: emptyList()
     val top: (@Composable () -> Unit)? = if (inUse == null) null else { { TexPictures(context, target, inUse) } }
     val bottom: (@Composable () -> Unit)? = if (inUse == null || !s.converting(inUse)) null else { { TexConvBar(s, inUse) } }
-    return PanelInfo("Texture pack", if (mine.isEmpty()) "No pack for this game in your pack folders. Add a folder in All games." else
+    return PanelInfo("Texture pack", if (mine.isEmpty()) "No pack for this game in your pack folders. Add a folder in Global." else
         "HD textures made for this game. Applies when the game next starts.", opts.map { it.second }, lines, onPick = { i -> onSet(opts[i].first) }, top = top, bottom = bottom)
 }
 

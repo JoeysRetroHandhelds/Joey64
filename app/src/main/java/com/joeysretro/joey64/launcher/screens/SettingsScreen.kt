@@ -166,7 +166,7 @@ fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher
         // No title under the top bar; the game chip is the first thing on the page (approved top bar, 2026-11-11).
         val tabsEntry = remember { androidx.compose.ui.focus.FocusRequester() }
         if (perGame) com.joeysretro.joey64.launcher.components.PageHeader(null) {
-            PageChip((targetTitle?.let { com.joeysretro.joey64.launcher.components.gameName(it) } ?: "All games") + "  ›", R.drawable.ic_sliders, Modifier.focusProperties { down = tabsEntry },
+            PageChip((targetTitle?.let { com.joeysretro.joey64.launcher.components.gameName(it) } ?: "Global") + "  ›", R.drawable.ic_sliders, Modifier.focusProperties { down = tabsEntry },
                 on = target != null, onFocused = { onChip = it }) { gamesPopup = 1 }
         }
         var focusedTab by remember { mutableIntStateOf(0) }
@@ -174,7 +174,7 @@ fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher
             entry = tabsEntry) { tab = SettingsTab.entries[it] }
         val tabHelp = if (onTabs) SettingsTab.entries[focusedTab].let { com.joeysretro.joey64.launcher.components.PanelInfo(it.label, it.help + " " + TAB_ROW_HELP) }
             // The All games chip's own help (Joey 2026-11-12); it showed the first row's.
-            else if (onChip && target == null) com.joeysretro.joey64.launcher.components.PanelInfo("All games", CHIP_HELP)
+            else if (onChip && target == null) com.joeysretro.joey64.launcher.components.PanelInfo("Global", CHIP_HELP)
             else com.joeysretro.joey64.launcher.components.LocalPanelHelp.current
         androidx.compose.runtime.CompositionLocalProvider(com.joeysretro.joey64.launcher.components.LocalPanelHelp provides tabHelp) {
         key(tab, target, resetGen) {
@@ -197,22 +197,22 @@ fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher
         }
     }
     when (gamesPopup) {
-        1 -> if (tab == SettingsTab.Emulation) GamesForPopup("Emulation for", "A game's own settings are used instead of All games when it starts.", target,
+        1 -> if (tab == SettingsTab.Emulation) GamesForPopup("Emulation for", "A game's own settings are used instead of global when it starts.", target,
             gamesWithOwn = { emuStore.gamesWithOwn() }, changeCount = { emuStore.game(it)?.size ?: 0 },
             what = "emulation", onDismiss = { gamesPopup = 0 },
             onPick = { save, title -> target = save; targetTitle = title; gamesPopup = 0 },
             onPickGame = { gamesPopup = 2 }, onRemoved = { emuStore.removeGame(it) })
-        else if (tab == SettingsTab.Audio) GamesForPopup("Audio for", "A game's own Volume and Latency are used instead of All games when it starts.", target,
+        else if (tab == SettingsTab.Audio) GamesForPopup("Audio for", "A game's own Volume and Latency are used instead of global when it starts.", target,
             gamesWithOwn = { audioStore.gamesWithOwn() }, changeCount = { audioStore.game(it)?.size ?: 0 },
             what = "audio", onDismiss = { gamesPopup = 0 },
             onPick = { save, title -> target = save; targetTitle = title; gamesPopup = 0 },
             onPickGame = { gamesPopup = 2 }, onRemoved = { audioStore.removeGame(it) })
-        else GamesForPopup("Video for", "A game's own settings are used instead of All games when it starts.", target,
+        else GamesForPopup("Video for", "A game's own settings are used instead of global when it starts.", target,
             gamesWithOwn = { videoStore.gamesWithOwn() }, changeCount = { videoStore.game(it)?.size ?: 0 },
             what = "video", onDismiss = { gamesPopup = 0 },
             onPick = { save, title -> target = save; targetTitle = title; gamesPopup = 0 },
             onPickGame = { gamesPopup = 2 }, onRemoved = { videoStore.removeGame(it) })
-        2 -> PickGamePopup("Its settings start as All games'.", { gamesPopup = 1 }) { save, title -> target = save; targetTitle = title; gamesPopup = 0 }
+        2 -> PickGamePopup("Its settings start as global's.", { gamesPopup = 1 }) { save, title -> target = save; targetTitle = title; gamesPopup = 0 }
     }
     if (resetAsk) {
         val close = { resetAsk = false }
@@ -226,9 +226,9 @@ fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher
                 SettingsTab.Emulation -> emuStore.game(game)?.size ?: 0
                 else -> audioStore.game(game)?.size ?: 0
             }
-            if (n == 0) NothingToResetPopup("$name uses All games' ${tab.label}", "It has no ${tab.label} settings of its own.", close)
-            else ResetTabPopup("Use All games for $name?", "${changesGo(n, "on this tab")}, and it uses All games' ${tab.label} again.",
-                "Keep its settings", "Use All games", close) {
+            if (n == 0) NothingToResetPopup("$name uses global ${tab.label}", "It has no ${tab.label} settings of its own.", close)
+            else ResetTabPopup("Use global for $name?", "${changesGo(n, "on this tab")}, and it uses global ${tab.label} again.",
+                "Keep its settings", "Use global", close) {
                 when (tab) {
                     SettingsTab.Video -> videoStore.removeGame(game)
                     SettingsTab.Emulation -> emuStore.removeGame(game)
@@ -238,7 +238,7 @@ fun SettingsScreen(updates: UpdateModel, library: com.joeysretro.joey64.launcher
             }
         } else {
             val note = when (tab) {
-                SettingsTab.Video, SettingsTab.Emulation, SettingsTab.Audio -> "Every row goes back to its default for All games. Games with their own ${tab.label} settings keep them."
+                SettingsTab.Video, SettingsTab.Emulation, SettingsTab.Audio -> "Every row goes back to its default for global. Games with their own ${tab.label} settings keep them."
                 SettingsTab.OnScreen -> "Every row goes back to its default. The achievement pop-ups are RetroAchievements' too, so they change there as well."
                 SettingsTab.Saves -> "Every row goes back to its default. The data folder, your saves, save states and backups stay as they are."
                 else -> "Every row goes back to its default."

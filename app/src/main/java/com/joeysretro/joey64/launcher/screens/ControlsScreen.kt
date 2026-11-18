@@ -378,18 +378,18 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             hotkeysOpen -> listOf(Hint("A", if (focused == "hkFastForward" || focused == "hkQuit") "Open" else "Change"), Hint("X", "Clear"),
                 Hint("Y", "Reset to default"), Hint("B", "Back"))
             focused.startsWith("chip") -> listOf(Hint("A", "Select"), Hint("B", backLabel))
-            focused == "DeadZone" || (focused == "RumbleStrength" && !off) -> listOf(Hint("◀▶", "Change"), Hint("Y", if (target == null) "Reset to default" else "Use All games"),
+            focused == "DeadZone" || (focused == "RumbleStrength" && !off) -> listOf(Hint("◀▶", "Change"), Hint("Y", if (target == null) "Reset to default" else "Use global"),
                 Hint("B", backLabel))
             focused == "Controller" -> listOf(Hint("A", "Change"), Hint("B", backLabel))
             // Pak and Rumble on: nothing for X to clear (approved paks mockup screen 1's hints).
             (focused == "Pak" || focused == "RumbleOn") && !off -> listOf(Hint("A", "Change"),
-                Hint("Y", if (target == null) "Reset to default" else "Use All games"), Hint("B", backLabel))
-            focused == "StickFeel" && !off -> listOf(Hint("A", "Open"), Hint("Y", if (target == null) "Reset to default" else "Use All games"),
+                Hint("Y", if (target == null) "Reset to default" else "Use global"), Hint("B", backLabel))
+            focused == "StickFeel" && !off -> listOf(Hint("A", "Open"), Hint("Y", if (target == null) "Reset to default" else "Use global"),
                 Hint("B", backLabel))
             off -> listOf(Hint("B", backLabel))
-            focused in EXTRA_ROWS -> listOfNotNull(Hint("A", "Change"), if (target == null) null else Hint("Y", "Use All games"),
+            focused in EXTRA_ROWS -> listOfNotNull(Hint("A", "Change"), if (target == null) null else Hint("Y", "Use global"),
                 Hint("B", backLabel))
-            else -> listOf(Hint("A", "Change"), Hint("X", "Clear"), Hint("Y", if (target == null) "Reset to default" else "Use All games"),
+            else -> listOf(Hint("A", "Change"), Hint("X", "Clear"), Hint("Y", if (target == null) "Reset to default" else "Use global"),
                 Hint("B", backLabel))
         }).let { if (hotkeysOpen || connectingOpen || off) it else withResetHint(it) }
 
@@ -414,7 +414,7 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             val tabsEntry = remember { androidx.compose.ui.focus.FocusRequester() }
             @Composable
             fun headerChips() {
-                PageChip((targetTitle?.let { com.joeysretro.joey64.launcher.components.gameName(it) } ?: "All games") + "  ›", R.drawable.ic_sliders,
+                PageChip((targetTitle?.let { com.joeysretro.joey64.launcher.components.gameName(it) } ?: "Global") + "  ›", R.drawable.ic_sliders,
                     androidx.compose.ui.Modifier.focusProperties { down = tabsEntry }, on = target != null,
                     onFocused = { if (it) focused = "chipGame" }) { popup = Popup.Games }
             }
@@ -682,11 +682,11 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             edit { editor.set(player, setup.copy(gbSave = save)) }; popup = Popup.TransferSetup("save")
         }
         is Popup.GbFolders -> GameBoyFoldersPopup { popup = if (p.games) Popup.GbGame else Popup.GbSave }
-        Popup.Games -> GamesForPopup("Controls for", "A game's own controls are used instead of All games when it starts.", target,
+        Popup.Games -> GamesForPopup("Controls for", "A game's own controls are used instead of global when it starts.", target,
             gamesWithOwn = { editor.gamesWithOwn() }, changeCount = { editor.changeCount(it) }, what = "controls",
             onDismiss = close, onPick = { save, title -> target = save; targetTitle = title; close() },
             onPickGame = { popup = Popup.PickGame }, onRemoved = { save -> edit { editor.removeGame(save) } })
-        Popup.PickGame -> PickGamePopup("Its controls start as a copy of All games.", { popup = Popup.Games }) { save, title -> target = save; targetTitle = title; close() }
+        Popup.PickGame -> PickGamePopup("Its controls start as a copy of global.", { popup = Popup.Games }) { save, title -> target = save; targetTitle = title; close() }
         Popup.Diagram -> JoeyDialog(onDismiss = close, hints = listOf(Hint("B", "Close")), width = 760.dp) {
             ControllerDiagram(player, deviceName(setup.device), setup, face)
         }
@@ -711,7 +711,7 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                 setTouch(touchNow.copy(stick = com.joeysretro.joey64.touch.TouchStick.entries[i])); close() }
         }
         Popup.TouchResetLayouts -> ResetTabPopup("Reset layouts?",
-            "Landscape and portrait go back to " + (if (target == null) "the layouts Joey64 starts with." else "All games' layouts."),
+            "Landscape and portrait go back to " + (if (target == null) "the layouts Joey64 starts with." else "the global layouts."),
             "Keep my layouts", "Reset layouts", close) {
             setTouch(touchNow.copy(landscape = touchBase.landscape, portrait = touchBase.portrait)); close()
         }
@@ -720,17 +720,17 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             if (target == null) ResetTabPopup("Reset touch controls?", "Every row on this page and both layouts go back to their defaults. " +
                 "Tap to hold and Macros stay: they're Player 1's Controls rows.", "Keep my settings", "Reset to defaults", close) {
                 setTouch(com.joeysretro.joey64.touch.TouchSettings()); JLog.i(TAG, "reset page: touch controls, All games"); close()
-            } else if (touchNow.changedFrom(touchBase).isEmpty()) NothingToResetPopup("$g uses All games' touch controls", "It has none of its own.", close)
-            else ResetTabPopup("Use All games for touch controls?", "$g's own touch controls go, and it uses All games' again.",
-                "Keep its settings", "Use All games", close) {
+            } else if (touchNow.changedFrom(touchBase).isEmpty()) NothingToResetPopup("$g uses global touch controls", "It has none of its own.", close)
+            else ResetTabPopup("Use global for touch controls?", "$g's own touch controls go, and it uses global again.",
+                "Keep its settings", "Use global", close) {
                 touchStore.removeGame(target!!); touchVer++; JLog.i(TAG, "reset page: touch controls, a game"); close()
             }
         }
-        Popup.TouchGames -> GamesForPopup("Touch controls for", "A game's own touch controls are used instead of All games when it starts.", target,
+        Popup.TouchGames -> GamesForPopup("Touch controls for", "A game's own touch controls are used instead of global when it starts.", target,
             gamesWithOwn = { touchStore.gamesWithOwn() }, changeCount = { touchStore.changeCount(it) }, what = "touch controls",
             onDismiss = close, onPick = { save, title -> target = save; targetTitle = title; close() },
             onPickGame = { popup = Popup.TouchPickGame }, onRemoved = { save -> touchStore.removeGame(save); touchVer++ })
-        Popup.TouchPickGame -> PickGamePopup("Its touch controls start as a copy of All games.", { popup = Popup.TouchGames }) { save, title ->
+        Popup.TouchPickGame -> PickGamePopup("Its touch controls start as a copy of global.", { popup = Popup.TouchGames }) { save, title ->
             target = save; targetTitle = title; close() }
         Popup.ResetPlayer -> {
             val who = "Player ${player + 1}"
@@ -738,9 +738,9 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             if (target == null) ResetTabPopup("Reset $who?", "$who's buttons, stick, dead zone, stick feel and pak go back to what Auto map gives " +
                 "${deviceName(setup.device)}. The controller and the hotkeys stay.", "Keep my settings", "Reset to defaults", close) {
                 edit { editor.resetPlayer(player) }; JLog.i(TAG, "reset tab: player ${player + 1}, All games"); close()
-            } else if (changed.isEmpty()) NothingToResetPopup("$who uses All games' controls", "$g has none of its own for $who.", close)
-            else ResetTabPopup("Use All games for $who?", "${changesGo(changed.size, "for $who in $g")}, and $who uses All games' controls again.",
-                "Keep its settings", "Use All games", close) {
+            } else if (changed.isEmpty()) NothingToResetPopup("$who uses global controls", "$g has none of its own for $who.", close)
+            else ResetTabPopup("Use global for $who?", "${changesGo(changed.size, "for $who in $g")}, and $who uses global controls again.",
+                "Keep its settings", "Use global", close) {
                 edit { editor.resetPlayer(player) }; JLog.i(TAG, "reset tab: player ${player + 1}, a game"); close()
             }
         }
@@ -799,7 +799,7 @@ private fun controlsRowHelp(row: String, setup: PlayerSetup, face: AutoMap.FaceC
         "Turbo" -> "Turbo" to "Ticked buttons press again and again while held."
         "Macros" -> "Macros" to "One button plays a list of presses. Up to 8 a player."
         "tabs" -> "Players" to TABS_HELP
-        "chipGame" -> "All games or one game" to "Controls for every game, or for one game only."
+        "chipGame" -> "Global or one game" to "Controls for every game, or for one game only."
         "chipAuto" -> "Auto map" to "Sets this player's buttons from the controller's known layout."
         "chipView" -> "View controller" to "A picture of the controller with what each button does."
         "chipProfiles" -> "Profiles" to "Save this player's buttons under a name, or load a saved one."
@@ -1102,8 +1102,8 @@ private fun hotkeyDescription(a: HotkeyAction): String? = when (a) {
     HotkeyAction.SlowMotion -> "Slows the game down. Pick its button, Toggle or Hold, and how slow."
     HotkeyAction.Rewind -> "Hold to go back in time. Turn recording on, and pick how far back and how often a moment is kept."
     HotkeyAction.Stats -> "Steps through Off, Simple, Full and Custom. Settings › On screen sets the rest."
-    HotkeyAction.VolumeUp -> "The game's sound 5% louder. Saved as Settings › Audio's Volume: the game's own if it has one, else All games'."
-    HotkeyAction.VolumeDown -> "The game's sound 5% quieter. Saved as Settings › Audio's Volume: the game's own if it has one, else All games'."
+    HotkeyAction.VolumeUp -> "The game's sound 5% louder. Saved as Settings › Audio's Volume: the game's own if it has one, else global's."
+    HotkeyAction.VolumeDown -> "The game's sound 5% quieter. Saved as Settings › Audio's Volume: the game's own if it has one, else global's."
     HotkeyAction.Mute -> "Turns the game's sound off, and on again. It's Settings › Audio's Mute, the same for every game."
     HotkeyAction.UpscaleUp -> "Draws the game one step sharper, up to 8x. For this play only, on parallel-RDP. Settings › Video keeps its own."
     HotkeyAction.UpscaleDown -> "Draws the game one step less sharp. For this play only, on parallel-RDP. Settings › Video keeps its own."

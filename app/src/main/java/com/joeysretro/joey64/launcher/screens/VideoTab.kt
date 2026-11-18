@@ -213,7 +213,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
     LaunchedEffect(target) {
         onControl { ctl -> if (ctl == Control.Search) onY() else false }
     }
-    val hints = listOf(Hint("A", "Change"), Hint("Y", if (target == null) "Reset to default" else "Use All games"), Hint("B", "Back"))
+    val hints = listOf(Hint("A", "Change"), Hint("Y", if (target == null) "Reset to default" else "Use global"), Hint("B", "Back"))
 
     // One list with the panel beside it (approved 2026-11-11, setlist_mock.png): Picture, then Look, then Advanced.
     val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
@@ -352,7 +352,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         is VPopup.Choice -> ChoicePopup(p.key, v[p.key], sub = p.row?.let { describe(it, v).second },
             noteAction = if (p.key == VideoKey.Resolution) sharpLink?.let { (l, act) -> l to { act(); popup = p.back } } else null,
             onDismiss = { popup = p.back }) { set(p.key, it); popup = p.back }
-        VPopup.Crop -> CropPopup(com.joeysretro.joey64.video.GameCrop.of(gameCode, v), target ?: "All games",
+        VPopup.Crop -> CropPopup(com.joeysretro.joey64.video.GameCrop.of(gameCode, v), target ?: "Global",
             trim = v.on(VideoKey.Trim), onTrim = { set(VideoKey.Trim, if (it) "on" else "off") }, onDismiss = { popup = null }) { set(VideoKey.Crop, it.toString()) }
         VPopup.Colour -> ColourPopup(context, v, onDismiss = { popup = null }, onSet = { k, n -> set(k, n) },
             onReset = { set(COLOUR_ROW_KEYS.associateWith { it.default }) })
@@ -365,7 +365,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         is VPopup.Extra -> {
             val key = if (p.kind == ExtraKind.Widescreen) VideoKey.Widescreen else VideoKey.Fps
             val x = extras
-            if (target == null) ExtraPopup(if (p.kind == ExtraKind.Widescreen) "Widescreen" else "60 fps", "All games",
+            if (target == null) ExtraPopup(if (p.kind == ExtraKind.Widescreen) "Widescreen" else "60 fps", "Global",
                 VideoChoices.extrasAll.map { ch -> ExtraOption(ch.value, ch.label, if (ch.value == GameExtras.ALL) countsLine(counts) else ch.detail, false) },
                 v[key], if (p.kind == ExtraKind.Fps) FPS_NOTE else null, onDismiss = { popup = null }) { set(key, it); popup = null }
             else if (x != null) ExtraPopup(if (p.kind == ExtraKind.Widescreen) "Widescreen" else fpsTitle, target,
@@ -423,21 +423,21 @@ private fun describe(row: String, v: VideoSettings): Pair<String, String> = when
 }
 
 private fun allGamesNote(row: String, all: VideoSettings, gameCode: String? = null): String = when (row) {
-    "res" -> "All games uses ${VideoChoices.label(VideoKey.Resolution, all[VideoKey.Resolution])}."
-    "ws" -> "All games uses ${VideoChoices.label(VideoKey.Widescreen, all[VideoKey.Widescreen])}."
-    "fps" -> "All games uses ${VideoChoices.label(VideoKey.Fps, all[VideoKey.Fps])}."
-    "asp" -> "All games uses ${VideoChoices.label(VideoKey.Aspect, all[VideoKey.Aspect])}."
+    "res" -> "Global is ${VideoChoices.label(VideoKey.Resolution, all[VideoKey.Resolution])}."
+    "ws" -> "Global is ${VideoChoices.label(VideoKey.Widescreen, all[VideoKey.Widescreen])}."
+    "fps" -> "Global is ${VideoChoices.label(VideoKey.Fps, all[VideoKey.Fps])}."
+    "asp" -> "Global is ${VideoChoices.label(VideoKey.Aspect, all[VideoKey.Aspect])}."
     // A game with its own default (GameCrop) gets that while All games leaves Crop edges unset (code audit 4, D-M1).
-    "crop" -> "All games uses ${com.joeysretro.joey64.video.GameCrop.label(gameCode, all)}, trim ${VideoChoices.label(VideoKey.Trim, all[VideoKey.Trim]).lowercase()}."
-    "int" -> "All games uses ${VideoChoices.label(VideoKey.Integer, all[VideoKey.Integer])}."
-    "ori" -> "All games uses ${VideoChoices.label(VideoKey.Orientation, all[VideoKey.Orientation])}."
-    "cut" -> "All games uses ${VideoChoices.label(VideoKey.Cutout, all[VideoKey.Cutout])}."
-    "shp" -> "All games uses ${sharpenValue(all)}."
-    "bfi" -> "All games uses ${VideoChoices.label(VideoKey.Bfi, all[VideoKey.Bfi])}."
-    "sh" -> "All games uses ${com.joeysretro.joey64.video.Picture.rowLabel(all)}."
-    "sd" -> "All games uses ${com.joeysretro.joey64.video.Picture.sidesLabel(all, false)}."
-    "ov" -> "All games uses ${com.joeysretro.joey64.video.Picture.overlayLabel(all)}."
-    else -> "Y puts it back to All games."
+    "crop" -> "Global is ${com.joeysretro.joey64.video.GameCrop.label(gameCode, all)}, trim ${VideoChoices.label(VideoKey.Trim, all[VideoKey.Trim]).lowercase()}."
+    "int" -> "Global is ${VideoChoices.label(VideoKey.Integer, all[VideoKey.Integer])}."
+    "ori" -> "Global is ${VideoChoices.label(VideoKey.Orientation, all[VideoKey.Orientation])}."
+    "cut" -> "Global is ${VideoChoices.label(VideoKey.Cutout, all[VideoKey.Cutout])}."
+    "shp" -> "Global is ${sharpenValue(all)}."
+    "bfi" -> "Global is ${VideoChoices.label(VideoKey.Bfi, all[VideoKey.Bfi])}."
+    "sh" -> "Global is ${com.joeysretro.joey64.video.Picture.rowLabel(all)}."
+    "sd" -> "Global is ${com.joeysretro.joey64.video.Picture.sidesLabel(all, false)}."
+    "ov" -> "Global is ${com.joeysretro.joey64.video.Picture.overlayLabel(all)}."
+    else -> "Y puts it back to global."
 }
 
 private fun title(k: VideoKey) = when (k) {
