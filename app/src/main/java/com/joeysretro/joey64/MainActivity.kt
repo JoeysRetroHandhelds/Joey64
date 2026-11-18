@@ -76,6 +76,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      */
     private val fromJoey64 get() = devBuild || intent?.component?.className == GAME_START
     /** One of the launcher's own extras ([LAUNCHER_EXTRAS]), only from a start [fromJoey64]. */
+    /**
+     * This play is in a netplay room (the room's env, set in onCreate before anything reads it). Joey 2026-11-15: "Net
+     * play shouldn't touch save states, nothing created or loaded": no quit save, recovery state, state-request ring or
+     * start load, and an older recovery state of the game is left as it is. The menu, hotkeys and touch buttons refuse
+     * saves and loads already ([netBlocked]); the host refuses loads and rewind.
+     */
+    private var roomPlay = false
+
     private fun launcherString(name: String): String? = if (fromJoey64) intent?.getStringExtra(name) else null
     private fun launcherBool(name: String): Boolean = fromJoey64 && intent?.getBooleanExtra(name, false) == true
 
@@ -168,6 +176,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             val (k, v) = kv.split('=', limit = 2).takeIf { it.size == 2 } ?: return@forEach
             android.system.Os.setenv(k.trim(), v.trim(), true)
         }
+        roomPlay = android.system.Os.getenv("N64_NETPLAY") != null || android.system.Os.getenv("N64_NETPLAY_SERVE") != null
+        if (roomPlay) JLog.i(TAG, "netplay: no save states in a room (none written, loaded or cleared)")
         // The per-device switches the driver reads as it loads (GpuRules.beforeDriver: the Odin 3's KGSL priority).
         applyGpuSettings(GpuRules.beforeDriver(Build.MODEL))
         // Frame pacing (Settings › Video), Thermal fallback and Run-ahead (Settings › Emulation) are read by the host
@@ -1456,7 +1466,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             // Always saved, Save on quit or not: the restart loads it straight back. As the recovery state, so the quit
             // saves stay as they were (code audit 3, M1: each restart pushed the oldest kept one out); the restarted
             // game replaces or clears it as any play does.
-            val saved = !startLoadFailed && st.saveRecovery()
+            val saved = !startLoadFailed && !roomPlay && st.saveRecovery()
             if (saved) keepRecovery = true
             JLog.i(TAG, "game settings: restarting for the new settings, its state ${if (saved) "kept as the recovery state" else "not written"}")
             runOnUiThread {
@@ -1948,7 +1958,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     /** The state this start loads: the launcher's, unless Hardcore starts the game fresh ([hardcoreFresh]). */
-    private fun startLoad(): String? = if (hardcoreFresh) null else launcherString(EXTRA_LOAD_STATE)
+    private fun startLoad(): String? = if (hardcoreFresh || roomPlay) null else launcherString(EXTRA_LOAD_STATE)
 
     /** Hardcore's pop-ups for this start (cheats left off, Continue starting fresh), shown once the game is up. */
     private val hardcoreStartPops = java.util.concurrent.CopyOnWriteArrayList<InGamePopup>()
@@ -2098,7 +2108,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // --es env N64_STATE_RING=<dir> wins (dev).
         if (devString("env")?.contains("N64_STATE_RING=") != true) {
             val md5 = gameMd5 ?: knownMd5()
-            if (launcherBool(EXTRA_STATE_RING) && md5 != null) android.system.Os.setenv("N64_STATE_RING", stateRingDir(this, md5).path, true)
+            if (launcherBool(EXTRA_STATE_RING) && md5 != null && !roomPlay) android.system.Os.setenv("N64_STATE_RING", stateRingDir(this, md5).path, true)
             else android.system.Os.unsetenv("N64_STATE_RING")
         }
         // A texture pack converting in the background waits while a game is played (approved mockup texpacks4).
@@ -2267,7 +2277,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // A picked data folder gets the save RAM the core wrote, every 30 s when it changed (and on exit).
         stateHandler.postDelayed(srmTick, SRM_PUSH_MS)
         // Settings › Saves › Recovery state Off: none is written, so none is offered after a crash.
-        if (recoveryEveryMs > 0) stateHandler.postDelayed(recoveryTick, recoveryEveryMs)
+        if (roomPlay) {}
+        else if (recoveryEveryMs > 0) stateHandler.postDelayed(recoveryTick, recoveryEveryMs)
         else stateHandler.post { st.clearRecovery() }
         // Dev (--es env N64_POPUP_TEST=1): a pop-up kept on screen the whole time, renewed every 4 s,
         // to measure what one costs (plan, Phase 3: the measure).
@@ -2641,7 +2652,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         override fun newPadPick(player: Int) = newPadAnswer(player)
         override fun newPadSettings(settings: com.joeysretro.joey64.controls.ConnectSettings) = controlsStore.saveConnecting(settings)
         override fun closeNoSpace() { closeMenu() }
-        override val inRoom: Boolean get() = net.inRoom
+        // A play started in a room stays one for the menu (also before the room has connected).
+        override val inRoom: Boolean get() = net.inRoom || roomPlay
         override val netLine: String? get() = if (!net.inRoom) null
             else com.joeysretro.joey64.netplay.NetplayWords.waitingForYou(
                 (netPlayers.map { it.player }.ifEmpty { net.playersIn(net.joined) }).filter { it != netMe })
@@ -2736,7 +2748,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun hotkeyEdge(action: HotkeyAction, event: KeyEvent, down: Boolean) {
         val up = event.action == KeyEvent.ACTION_UP
         if (quitting) return
-        if (net.inRoom && com.joeysretro.joey64.netplay.NetplayWords.blockedLine(action) != null) { if (down) netBlocked(action); return }
+        if ((net.inRoom || roomPlay) && com.joeysretro.joey64.netplay.NetplayWords.blockedLine(action) != null) { if (down) netBlocked(action); return }
         when (action) {
             HotkeyAction.GameShark -> if (down) { fpsHandler.removeCallbacks(gameSharkUp); gameSharkButton(true) } else if (up) gameSharkRelease()
             HotkeyAction.FastForward -> if (down || up) fastForwardKey(down)
@@ -3228,7 +3240,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     /** (6) In a room, a hotkey for something that changes the game's course says it waits until you leave (3 s). True if it's blocked. */
     private fun netBlocked(action: HotkeyAction): Boolean {
-        if (!net.inRoom) return false
+        if (!net.inRoom && !roomPlay) return false
         val line = com.joeysretro.joey64.netplay.NetplayWords.blockedLine(action) ?: return false
         JLog.i(TAG, "netplay: ${action.label} refused in a room")
         overlay?.show(InGamePopup("npblock", InGamePopup.Kind.NetBlocked, "Netplay", com.joeysretro.joey64.netplay.NetplayWords.BLOCKED, line, stayMs = NET_BLOCKED_MS))
@@ -3244,7 +3256,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         stateHandler.removeCallbacks(recoveryTick)
         stateHandler.post {
             val stuckMs = NativeBridge.coreStuckMs()
-            val shot = if (stuckMs > STUCK_MS) null.also {
+            val shot = if (roomPlay) null.also { keepRecovery = true; JLog.i(TAG, "states: a netplay room, no quit save") }
+                else if (stuckMs > STUCK_MS) null.also {
                     // Its state can't be taken (that waits 10 s for the next frame, which never comes) and the recovery
                     // state from before is the last good moment: kept, so the library offers it.
                     keepRecovery = true
@@ -3260,7 +3273,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 keepRecovery = true
                 val keep = savesOpts.quitSaves
                 GameStates.writeLater(st.saveName) { if (st.writeQuit(shot, keep)) st.clearRecovery() }
-            } else if (stuckMs <= STUCK_MS) st.clearRecovery()
+            } else if (stuckMs <= STUCK_MS && !roomPlay) st.clearRecovery()
             recent?.let { RecentlyPlayed.record(this, it.copy(lastPlayed = System.currentTimeMillis())) }
             // Quit to: the library (or the frontend that started the game), or out of Joey64 altogether:
             // every screen of ours in this task closes, so Android shows the frontend or home screen.
@@ -4137,7 +4150,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (mine && started && speed != null) { speedLast = null; speedFlush(false); speed?.ended() }
         if (!mine || isFinishing || quitting || !started) return
         val st = states ?: return
-        if (recoveryEveryMs > 0 && !startLoadFailed) stateHandler.post {
+        if (recoveryEveryMs > 0 && !startLoadFailed && !roomPlay) stateHandler.post {
             if (st.saveRecovery()) JLog.i(TAG, "recovery state: written on going to the background")
         }
         stateHandler.post { com.joeysretro.joey64.launcher.storage.SrmSync.push(this, st.saveName) }
@@ -4219,7 +4232,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // any start still copying and before the next one (a disk save is 64.9 MB; code audit 2, finding 1).
         startSave?.let { save -> val app = applicationContext; gameIo.execute { com.joeysretro.joey64.launcher.storage.SrmSync.push(app, save) } }
         // Closed on purpose (Back, or a frontend sending the next game): no recovery state is due.
-        if (isFinishing && states != null) { stateHandler.removeCallbacks(recoveryTick); if (!keepRecovery) states?.clearRecovery() }
+        if (isFinishing && states != null) { stateHandler.removeCallbacks(recoveryTick); if (!keepRecovery && !roomPlay) states?.clearRecovery() }
         if (states != null) stateThread.quitSafely()
         super.onDestroy()
     }
