@@ -2350,6 +2350,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private val sessionStats = DoubleArray(16)
 
     private fun startSession(rom: String, saveName: String) {
+        // The device's own speed and fan modes (performance mode and the like), for the log and the report.
+        val modes = com.joeysretro.joey64.reports.DeviceModes.read(this)
+        JLog.i(TAG, "device modes: " + com.joeysretro.joey64.reports.DeviceModes.line(modes))
         if (!com.joeysretro.joey64.reports.ReportPrefs.recording(this)) return
         if (listOf("env", "opts", "renderer", "driver").any { intent?.hasExtra(it) == true }) { JLog.i(TAG, "reports: a dev start, not recorded"); return }
         val md5 = gameMd5 ?: return
@@ -2363,6 +2366,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // The widescreen / 60 fps versions actually on (the rows above say what was asked for).
         extrasOn.widescreenName?.let { settings.put("on.widescreen", it) }
         extrasOn.fpsName?.let { settings.put("on.fps", it) }
+        for ((k, v) in modes) settings.put("device.$k", v)
         val scale = if (parallel) (playUpscale ?: "1x").removeSuffix("x").toIntOrNull() ?: 1
             else statsRenderer.substringAfter("GLideN64 ").removeSuffix("x").trim().toIntOrNull() ?: 1
         val base = org.json.JSONObject().apply {

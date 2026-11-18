@@ -37,7 +37,7 @@ Each game you play
   • How it ended: you quit, it crashed or stopped responding, or Android closed it
   • Whether it started, and how long its first picture took
   • Stutter (slow frames), audio crackles, and input delay
-  • How hot the device got
+  • How hot the device got, and its performance, fan and battery saver modes
   • CPU core and graphics timing used, screen refresh rate, how many cheats were on, and whether it started from a save state
 
 Netplay games
