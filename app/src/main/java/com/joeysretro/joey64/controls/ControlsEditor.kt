@@ -89,7 +89,7 @@ class ControlsEditor(
             // The page's Stick feel row: all of it; a row inside its popup: that one.
             "StickFeel" -> cur.copy(feel = base.feel)
             in StickFeel.ROWS -> cur.copy(feel = cur.feel.withRow(row, base.feel))
-            else -> N64Button.entries.firstOrNull { it.name == row }?.let { cur.with(it, base.buttons[it]) } ?: return
+            else -> N64Button.entries.firstOrNull { it.name == row }?.let { cur.withInputs(it, base.inputs(it)) } ?: return
         }
         set(player, next)
     }
@@ -98,7 +98,7 @@ class ControlsEditor(
     fun resetGroup(player: Int, group: List<N64Button>) {
         val base = baseFor(player)
         var s = shown.players[player]
-        for (b in group) s = s.with(b, base.buttons[b])
+        for (b in group) s = s.withInputs(b, base.inputs(b))
         if (group == N64Button.C) s = s.copy(cHold = base.cHold)
         set(player, s)
     }

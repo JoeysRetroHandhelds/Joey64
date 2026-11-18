@@ -61,6 +61,12 @@ class PanelInfo(val title: String, val help: String, val choices: List<PanelChoi
                 val bottom: (@Composable () -> Unit)? = null,
                 /** A row inside the [note]'s box, above the choices (8 Gen 2's "Use 2x and the Sharp look", resnote2 A). */
                 val noteAction: Pair<String, () -> Unit>? = null,
+                /** The row's "▶ ..." hint ("Choices"; a button's "Add more", approved multimap mockup A1). */
+                val enterLabel: String = "Choices",
+                /** The hints while inside, by the focused choice (a button's inputs: A Change, X Remove, ◀ Back). */
+                val insideHints: ((Int) -> List<Hint>)? = null,
+                /** The choice focus lands on going in, when it's enabled (a button's Add a button); else the ticked one. */
+                val landAt: Int? = null,
                 val onPick: ((Int) -> Unit)? = null) {
     val pickable get() = choices.isNotEmpty() && onPick != null
 }
@@ -88,6 +94,13 @@ class ListPanelState {
      * back to it. The list's focusRestorer didn't (A8 2026-11-12, Thor: focus went to the tab's first row).
      */
     internal var lastRow: FocusRequester? = null
+    /** The panel choice that has focus while [inside] (X on a button's input removes that one). */
+    var focusedChoice by mutableStateOf(-1)
+        internal set
+    /** Focus goes to the panel's first choice again (after the focused one was removed). */
+    fun reland() { if (inside) landing.arm() }
+    val isInside get() = inside
+    val isWide get() = wide
 
     /** Into the panel's choices; false on a narrow screen (no panel there: the row opens its popup) or with no choices. */
     fun enter(): Boolean {
@@ -165,10 +178,10 @@ fun ListPanel(state: ListPanelState, info: PanelInfo, hints: List<Hint>, onHints
     val tracked = Modifier
         .onFocusChanged { state.listFocused = it.hasFocus }
         .onSizeChanged { state.viewport = it.height }
-    LaunchedEffect(inside, hints, wide, info.pickable) {
+    LaunchedEffect(inside, hints, wide, info.pickable, state.focusedChoice, info.insideHints, info.enterLabel) {
         onHints(when {
-            inside -> listOf(Hint("A", "Pick"), Hint("◀", "Back to the list"), Hint("B", "Back"))
-            wide && info.pickable && hints.none { it.key == "◀▶" } -> hints.take(1) + Hint("▶", "Choices") + hints.drop(1)
+            inside -> info.insideHints?.invoke(state.focusedChoice) ?: listOf(Hint("A", "Pick"), Hint("◀", "Back to the list"), Hint("B", "Back"))
+            wide && info.pickable && hints.none { it.key == "◀▶" } -> hints.take(1) + Hint("▶", info.enterLabel) + hints.drop(1)
             else -> hints
         })
     }
@@ -225,7 +238,8 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
             } })
         }
         info.top?.invoke()
-        val firstAt = shown.indexOfFirst { it.on && it.enabled }.takeIf { it >= 0 } ?: shown.indexOfFirst { it.enabled }.coerceAtLeast(0)
+        val firstAt = info.landAt?.takeIf { shown.getOrNull(it)?.enabled == true }
+            ?: shown.indexOfFirst { it.on && it.enabled }.takeIf { it >= 0 } ?: shown.indexOfFirst { it.enabled }.coerceAtLeast(0)
         shown.forEachIndexed { i, ch ->
             ch.section?.let { Text(it.uppercase(), style = JoeyTheme.type.small, color = c.textDim, maxLines = 1,
                 modifier = Modifier.padding(horizontal = JoeyTheme.spacing.rowPadH).padding(top = 8.dp, bottom = 2.dp)) }
@@ -238,6 +252,7 @@ private fun Panel(state: ListPanelState, info: PanelInfo, modifier: Modifier) {
                         if (i == shown.lastIndex) down = FocusRequester.Cancel
                     },
                 detail = ch.detail, detailWarn = ch.detailWarn, enabled = ch.enabled, experimental = ch.experimental,
+                onFocused = { if (it) state.focusedChoice = i },
                 trailing = if (ch.on) { _ -> com.joeysretro.joey64.launcher.screens.PickerTick() }
                     else ch.value?.let { v -> { _ -> Text(v, style = JoeyTheme.type.small, color = c.textDim, maxLines = 1) } }) {
                 info.onPick?.invoke(i)

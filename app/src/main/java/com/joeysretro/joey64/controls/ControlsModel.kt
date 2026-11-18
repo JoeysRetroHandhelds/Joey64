@@ -128,12 +128,30 @@ data class PlayerSetup(
     /** The Transfer Pak's Game Boy game and save (a game's own only); a null save starts a new one. */
     val gbGame: com.joeysretro.joey64.controls.GameBoyFiles.Found? = null,
     val gbSave: com.joeysretro.joey64.controls.GameBoyFiles.Found? = null,
+    /**
+     * More inputs that also press an N64 button, after [buttons]' own (several controls on one button, approved multimap
+     * mockup A, 2026-11-17): up to [MAX_INPUTS] in all. Any of them presses it ("A or R2").
+     */
+    val extra: Map<N64Button, List<PadInput>> = emptyMap(),
 ) {
-    fun with(b: N64Button, input: PadInput?) = copy(buttons = buttons + (b to input))
+    /** [b] pressed by [input] alone (Change: one button; null clears it). */
+    fun with(b: N64Button, input: PadInput?) = copy(buttons = buttons + (b to input), extra = extra - b)
+
+    /** Everything that presses [b], its own input first. */
+    fun inputs(b: N64Button): List<PadInput> = listOfNotNull(buttons[b]) + extra[b].orEmpty()
+
+    /** [b] pressed by any of [list] (duplicates dropped, at most [MAX_INPUTS]); the first is its own input. */
+    fun withInputs(b: N64Button, list: List<PadInput>): PlayerSetup {
+        val l = list.distinct().take(MAX_INPUTS)
+        return copy(buttons = buttons + (b to l.firstOrNull()), extra = if (l.size > 1) extra + (b to l.drop(1)) else extra - b)
+    }
+    fun withAdded(b: N64Button, input: PadInput) = withInputs(b, inputs(b) + input)
+    fun withReplaced(b: N64Button, i: Int, input: PadInput) = withInputs(b, inputs(b).mapIndexed { j, x -> if (j == i) input else x })
+    fun withRemoved(b: N64Button, i: Int) = withInputs(b, inputs(b).filterIndexed { j, _ -> j != i })
 
     /** Rows that differ from [other] (the per-game page's yellow dots), by row key. */
     fun differences(other: PlayerSetup): Set<String> = buildSet {
-        for (b in N64Button.entries) if (buttons[b] != other.buttons[b]) add(b.name)
+        for (b in N64Button.entries) if (inputs(b) != other.inputs(b)) add(b.name)
         if (stick != other.stick) add("Stick")
         if (deadZone != other.deadZone) add("DeadZone")
         if (pak != other.pak || gbGame != other.gbGame || gbSave != other.gbSave) add("Pak")
@@ -164,12 +182,17 @@ data class PlayerSetup(
         put("rumbleOn", rumbleOn.name)
         put("rumbleStrength", rumbleStrength)
         put("cHold", cHold?.encode() ?: "")
+        if (extra.isNotEmpty()) put("extra", JSONObject().apply {
+            for (b in N64Button.entries) extra[b]?.takeIf { it.isNotEmpty() }?.let { l -> put(b.name, JSONArray().apply { l.forEach { put(it.encode()) } }) }
+        })
         gbGame?.let { put("gbGame", JSONObject().put("uri", it.uri).put("name", it.name)) }
         gbSave?.let { put("gbSave", JSONObject().put("uri", it.uri).put("name", it.name)) }
     }
 
     companion object {
         const val DEFAULT_DEAD_ZONE = 10
+        /** What can press one N64 button: its own input and up to three more (approved multimap mockup A4). */
+        const val MAX_INPUTS = 4
         /** Rumble strength's steps (◀ ▶ like Dead zone). */
         val RUMBLE_STRENGTHS = (10..100 step 10).toList()
 
@@ -189,9 +212,20 @@ data class PlayerSetup(
             val buttons = N64Button.entries.associateWith { b ->
                 if (bo == null || !bo.has(b.name)) fallback.buttons[b] else PadInput.decode(bo.optString(b.name))
             }
+            // A button the file names keeps only the extras the file has; one it doesn't name keeps the fallback's.
+            val eo = o.optJSONObject("extra")
+            val extra = N64Button.entries.mapNotNull { b ->
+                val l = when {
+                    eo != null && eo.has(b.name) -> eo.optJSONArray(b.name)?.let { a -> (0 until a.length()).mapNotNull { PadInput.decode(a.optString(it)) } }.orEmpty()
+                    bo != null && bo.has(b.name) -> emptyList()
+                    else -> fallback.extra[b].orEmpty()
+                }.distinct().take(MAX_INPUTS - 1)
+                if (l.isEmpty() || buttons[b] == null) null else b to l
+            }.toMap()
             return PlayerSetup(
                 device = device,
                 buttons = buttons,
+                extra = extra,
                 stick = StickSource.entries.firstOrNull { it.name == o.optString("stick") } ?: fallback.stick,
                 deadZone = o.optInt("deadZone", fallback.deadZone).coerceIn(0, 50),
                 pak = Pak.entries.firstOrNull { it.name == o.optString("pak") } ?: fallback.pak,

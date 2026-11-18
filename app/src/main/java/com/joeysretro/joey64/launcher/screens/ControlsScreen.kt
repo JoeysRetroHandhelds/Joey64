@@ -155,6 +155,8 @@ private sealed interface Popup {
     data class OnePress(val layouts: List<AutoMap.Layout>) : Popup
     /** [back]: the popup to return to once a button is picked (Fast-forward's and Quit game's Button). */
     data class Remap(val target: Target, val back: Popup? = null) : Popup
+    /** What presses one N64 button, on a narrow screen (no panel there; approved multimap mockup B1's card). */
+    data class Inputs(val b: N64Button) : Popup
     /** The Hotkeys page's Fast-forward and Quit game rows (approved popups, 2026-11-07); [row] has focus on return. */
     data class FastForward(val row: String = "button") : Popup
     data object FfMode : Popup
@@ -205,7 +207,8 @@ private sealed interface Popup {
 
 /** What a remap popup sets. */
 private sealed interface Target {
-    data class Button(val b: N64Button) : Target
+    /** [slot]: null replaces everything on [b] with one button (Change); an index replaces that one; [ADD] adds one. */
+    data class Button(val b: N64Button, val slot: Int? = null) : Target
     data object HotkeyButton : Target
     data class Hotkey(val action: HotkeyAction) : Target
     /** Hold for C buttons' Press a button… */
@@ -213,6 +216,15 @@ private sealed interface Target {
 }
 
 private const val DPAD = "DPad"
+/** [Target.Button]'s slot for Add a button. */
+private const val ADD = -1
+
+/** An N64 button as Controls names it: "A", "D-pad up", "C left". */
+private fun buttonName(b: N64Button) = when (b) {
+    in N64Button.DPAD -> "D-pad ${b.label.lowercase()}"
+    in N64Button.C -> "C ${b.label.lowercase()}"
+    else -> b.label
+}
 private val DPAD_KEYS = setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT)
 private const val CGROUP = "C"
 private val DEAD_ZONES = listOf(0, 5, 10, 15, 20, 25, 30)
@@ -304,6 +316,8 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
 
     // ---- the launcher's buttons ----
     val current by rememberUpdatedState(Triple(focused, player, hotkeysOpen))
+    // The player page's list panel, here so X inside a button's list removes the focused input.
+    val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
     val touchPage by rememberUpdatedState(touchOpen)
     // A tab change from a row lands on the new tab's first row (as Settings does); from the tab row focus stays there.
     // Without it R2 onto Hotkeys left focus on the top bar (Odin 2 Portal 2026-11-13).
@@ -333,7 +347,16 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             // L2 / R2 too (Joey 2026-11-13): Player 1-4, Hotkeys and Connecting; in the launcher L1 / R1 move along the top bar.
             Control.TabPrev, Control.PagePrev -> { if (row != "tabs") tabLanding?.arm(); openTab((tabNow() + TAB_COUNT - 1) % TAB_COUNT); true }
             Control.TabNext, Control.PageNext -> { if (row != "tabs") tabLanding?.arm(); openTab((tabNow() + 1) % TAB_COUNT); true }
-            Control.Extra -> { edit { if (hk) clearHotkey(editor, row) else clearRow(editor, p, row) }; true }
+            Control.Extra -> {
+                val b = N64Button.entries.firstOrNull { it.name == row }
+                if (!hk && b != null && panel.isInside) {
+                    // Inside the button's list: X removes the focused input; the last one stays (X on the row clears it).
+                    val s = editor.shown.players[p]
+                    val i = panel.focusedChoice
+                    if (s.inputs(b).size > 1 && i in s.inputs(b).indices) { edit { editor.set(p, s.withRemoved(b, i)) }; panel.reland() }
+                } else edit { if (hk) clearHotkey(editor, row) else clearRow(editor, p, row) }
+                true
+            }
             // Tap to hold and Macros: Y is Use All games on a game; on All games they have no default but none.
             Control.Search -> { if (!(row in EXTRA_ROWS && target == null)) edit { if (hk) resetHotkey(editor, row) else resetRow(editor, p, row) }; true }
             Control.Options -> { if (!hk && editor.shown.players[p].device != DeviceChoice.None) popup = Popup.ResetPlayer; true }
@@ -421,8 +444,8 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             }
             // One list with the panel beside it (approved 2026-11-11): the focused row's help, and the choices of
             // Stick, Pak and Rumble on.
-            val panel = com.joeysretro.joey64.launcher.components.rememberListPanel()
-            val (ctlTitle, ctlHelp) = controlsRowHelp(focused, setup, face, off, stickless)
+            val (ctlTitle, ctlHelp) = controlsRowHelp(focused, setup, face, off, stickless, wide = panel.isWide)
+            val focusedButton = N64Button.entries.firstOrNull { it.name == focused }
             val ctlInfo = when {
                 off -> com.joeysretro.joey64.launcher.components.PanelInfo(ctlTitle, ctlHelp)
                 focused == "CHold" -> com.joeysretro.joey64.launcher.components.PanelInfo(ctlTitle, ctlHelp,
@@ -438,14 +461,18 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                         ons.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, if (!motor && it == RumbleOn.Controller) "Its own motor" else it.detail,
                             it == setup.rumbleOn) }) { i -> edit { editor.set(player, setup.copy(rumbleOn = ons[i])) } }
                 }
+                focusedButton != null -> inputsInfo(focusedButton, setup, face, ctlTitle, ctlHelp) { slot ->
+                    popup = Popup.Remap(Target.Button(focusedButton, slot)) }
                 else -> com.joeysretro.joey64.launcher.components.PanelInfo(ctlTitle, ctlHelp)
             }
+            // A on a button row: Change (one button) beside the panel; on a narrow screen, the button's list.
+            fun onButton(b: N64Button) { popup = if (panel.isWide) Popup.Remap(Target.Button(b)) else Popup.Inputs(b) }
             com.joeysretro.joey64.launcher.components.ListPanel(panel, ctlInfo, ctlHints, onHints, Modifier.weight(1f)) {
                 SectionLabel("Controller")
                 JoeyRow("Controller", Modifier.initialFocus(focused == "Controller"), value = deviceName(setup.device) + (if (stickless) " · no sticks" else "") + "  ›", sideways = true,
                     onFocused = { if (it) focused = "Controller" }) { popup = Popup.Controller }
                 SectionLabel("Buttons")
-                for (b in N64Button.BUTTONS) BindingRow(b, b.label, setup, face, off, b.name in changed, { focused = it }) { popup = Popup.Remap(Target.Button(b)) }
+                for (b in N64Button.BUTTONS) BindingRow(b, b.label, setup, face, off, b.name in changed, { focused = it }) { onButton(b) }
                 SectionLabel("D-pad and C buttons")
                 for ((key, label, dirs) in listOf(Triple(DPAD, "D-pad", N64Button.DPAD), Triple(CGROUP, "C buttons", N64Button.C))) {
                     // The D-pad moves the stick: its row is greyed (approved stickless mockup 2026-11-13, screen 2).
@@ -466,7 +493,7 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
                         dot = "CHold" in changed, onFocused = { if (it) focused = "CHold" }) { if (!panel.enter()) popup = Popup.CHold }
                     if (expanded) for (b in dirs) BindingRow(b, arrow(b) + " " + b.label, setup, face, off, b.name in changed, { focused = it }, indent = true,
                         prefix = hold?.let { InputNames.key(it.code, null) + " + " } ?: "") {
-                        popup = Popup.Remap(Target.Button(b))
+                        onButton(b)
                     }
                 }
                 SectionLabel("Analog stick")
@@ -556,13 +583,21 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
         is Popup.Remap -> RemapPopup(p.target, setup, editor, face) { input, keyCode ->
             if (input != null || keyCode != null) edit {
                 when (val t = p.target) {
-                    is Target.Button -> editor.set(player, setup.with(t.b, input))
+                    is Target.Button -> editor.set(player, when {
+                        t.slot == null -> setup.with(t.b, input)
+                        input == null -> setup
+                        t.slot == ADD -> setup.withAdded(t.b, input)
+                        else -> setup.withReplaced(t.b, t.slot, input)
+                    })
                     Target.HotkeyButton -> keyCode?.let { editor.setHotkeys(editor.hotkeys.withButton(it)) }
                     is Target.Hotkey -> keyCode?.let { editor.setHotkeys(editor.hotkeys.withKey(t.action, it)) }
                     Target.CHold -> keyCode?.let { editor.set(player, withHold(setup, it, face)) }
                 }
             }
             popup = p.back
+        }
+        is Popup.Inputs -> InputsPopup(p.b, setup, face, close, onPick = { slot -> popup = Popup.Remap(Target.Button(p.b, slot), p) }) { i ->
+            edit { editor.set(player, setup.withRemoved(p.b, i)) }
         }
         is Popup.Hotkey -> HotkeyPopup(p.action, editor, version, p.row, close, player1 = editor.shown.players[0],
             onButton = { popup = Popup.Remap(Target.Hotkey(p.action), Popup.Hotkey(p.action, "button")) }) { h -> edit { editor.setHotkeys(h) } }
@@ -737,10 +772,12 @@ private val EXTRA_ROWS = setOf("Tap", "Turbo", "Macros")
 private fun macrosValue(n: Int) = when (n) { 0 -> "None"; 1 -> "1 macro"; else -> "$n macros" }
 
 /** The player page's panel title and help for the focused row (approved list + panel, 2026-11-11). */
-private fun controlsRowHelp(row: String, setup: PlayerSetup, face: AutoMap.FaceCodes?, off: Boolean, stickless: Boolean = false): Pair<String, String> {
+private fun controlsRowHelp(row: String, setup: PlayerSetup, face: AutoMap.FaceCodes?, off: Boolean, stickless: Boolean = false,
+                            wide: Boolean = true): Pair<String, String> {
     if (off) return "No controller" to "This player has no controller. Pick one in Controller to set their buttons."
     N64Button.entries.firstOrNull { it.name == row }?.let { b ->
-        return b.label to "What presses the N64's ${b.label}: ${InputNames.of(setup.buttons[b], face)}. A changes it, X clears it."
+        return b.label to "What presses the N64's ${b.label}: ${InputNames.list(setup.inputs(b), face)}. " +
+            if (wide) "A changes it to one button, ▶ adds more, X clears it." else "A opens the list, X clears it."
     }
     val hold = setup.cHold?.let { InputNames.key(it.code, null) }
     return when (row) {
@@ -774,9 +811,52 @@ private fun controlsRowHelp(row: String, setup: PlayerSetup, face: AutoMap.FaceC
 @Composable
 private fun BindingRow(b: N64Button, label: String, setup: PlayerSetup, face: AutoMap.FaceCodes?, off: Boolean, changed: Boolean,
                       onFocused: (String) -> Unit, indent: Boolean = false, prefix: String = "", onClick: () -> Unit) {
-    JoeyRow(label, Modifier.padding(start = if (indent) 16.dp else 0.dp), value = prefix + InputNames.of(setup.buttons[b], face),
+    JoeyRow(label, Modifier.padding(start = if (indent) 16.dp else 0.dp), value = prefix + InputNames.list(setup.inputs(b), face),
         enabled = !off, sideways = true, dot = changed,
         onFocused = { if (it) onFocused(b.name) }, onClick = onClick)
+}
+
+/**
+ * A button row's panel (approved multimap mockup A1/A2): what presses it, each one A to change and X to remove, then
+ * Add a button (greyed at [PlayerSetup.MAX_INPUTS]). ▶ goes in, landing on Add a button.
+ */
+private fun inputsInfo(b: N64Button, setup: PlayerSetup, face: AutoMap.FaceCodes?, title: String, help: String,
+                       onSlot: (Int) -> Unit): com.joeysretro.joey64.launcher.components.PanelInfo {
+    val ins = setup.inputs(b)
+    val full = ins.size >= PlayerSetup.MAX_INPUTS
+    val head = "Presses the N64's ${buttonName(b)}"
+    val choices = ins.mapIndexed { i, x -> com.joeysretro.joey64.launcher.components.PanelChoice(InputNames.of(x, face), section = if (i == 0) head else null) } +
+        com.joeysretro.joey64.launcher.components.PanelChoice("+ Add a button",
+            if (full) "Up to ${PlayerSetup.MAX_INPUTS} on one button" else "Another button that presses ${buttonName(b)} too",
+            enabled = !full, section = if (ins.isEmpty()) head else null)
+    return com.joeysretro.joey64.launcher.components.PanelInfo(title, help, choices, enterLabel = "Add more", landAt = ins.size,
+        insideHints = { i ->
+            if (i in ins.indices) listOfNotNull(Hint("A", "Change"), if (ins.size > 1) Hint("X", "Remove") else null, Hint("◀", "Back"))
+            else listOf(Hint("A", "Add"), Hint("◀", "Back"))
+        }) { i -> onSlot(if (i in ins.indices) i else ADD) }
+}
+
+/** Narrow screens: a button's list as a card (approved multimap mockup B1). */
+@Composable
+private fun InputsPopup(b: N64Button, setup: PlayerSetup, face: AutoMap.FaceCodes?, onDismiss: () -> Unit, onPick: (Int) -> Unit,
+                        onRemove: (Int) -> Unit) {
+    val ins = setup.inputs(b)
+    val full = ins.size >= PlayerSetup.MAX_INPUTS
+    var focused by remember { mutableIntStateOf(-1) }
+    JoeyDialog(onDismiss = onDismiss, width = 460.dp,
+        hints = if (focused in ins.indices) listOfNotNull(Hint("A", "Change"), if (ins.size > 1) Hint("X", "Remove") else null, Hint("B", "Back"))
+            else listOf(Hint("A", "Add"), Hint("B", "Back")),
+        onPadButton = { code -> if (code == KeyEvent.KEYCODE_BUTTON_X && focused in ins.indices && ins.size > 1) onRemove(focused) }) {
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            PopupTitle(buttonName(b), "What presses the N64's ${buttonName(b)}")
+            ins.forEachIndexed { i, x ->
+                JoeyRow(InputNames.of(x, face), Modifier.initialFocus(full && i == 0), onFocused = { if (it) focused = i }) { onPick(i) }
+            }
+            JoeyRow("+ Add a button", Modifier.initialFocus(!full), enabled = !full,
+                detail = if (full) "Up to ${PlayerSetup.MAX_INPUTS} on one button" else "Another button that presses ${buttonName(b)} too",
+                onFocused = { if (it) focused = -1 }) { onPick(ADD) }
+        }
+    }
 }
 
 private fun arrow(b: N64Button) = when (b) {
@@ -1081,7 +1161,7 @@ private fun NeedsHotkeyRow(h: Hotkeys, a: HotkeyAction, start: Boolean, onRow: (
 private fun TakenFromPlayer1(h: Hotkeys, a: HotkeyAction, player1: PlayerSetup) {
     val k = h.keys[a] ?: return
     if (!h.isAlone(a)) return
-    val b = N64Button.entries.firstOrNull { (player1.buttons[it] as? PadInput.Key)?.code == k }
+    val b = N64Button.entries.firstOrNull { b -> player1.inputs(b).any { (it as? PadInput.Key)?.code == k } }
     val name = when {
         b == null -> if (player1.stick.usesDPad && k in DPAD_KEYS) "the stick" else return
         b in N64Button.DPAD -> "D-pad ${b.label.lowercase()}"
@@ -1382,13 +1462,20 @@ private fun RemapPopup(target: Target, setup: PlayerSetup, editor: ControlsEdito
     val h = editor.hotkeys
     val (title, line, note) = when (target) {
         is Target.Button -> {
-            val name = when (target.b) {
-                in N64Button.DPAD -> "D-pad ${target.b.label.lowercase()}"
-                in N64Button.C -> "C ${target.b.label.lowercase()}"
-                else -> target.b.label
+            val name = buttonName(target.b)
+            val ins = setup.inputs(target.b)
+            val names = ins.map { InputNames.of(it, face) }
+            when (val slot = target.slot) {
+                // Add a button (approved multimap mockup 3): "Adds it: A and R2 stay".
+                ADD -> Triple(name, "Press another button", when (names.size) {
+                    0 -> "Stays not set if you don't press anything"
+                    1 -> "Adds it: ${names[0]} stays"
+                    else -> "Adds it: ${names.dropLast(1).joinToString(", ")} and ${names.last()} stay"
+                })
+                null -> Triple(name, "Press a button", if (ins.isEmpty()) "Stays not set if you don't press anything"
+                    else "Keeps ${InputNames.list(ins, face)} if you don't press anything")
+                else -> Triple(name, "Press a button", "Keeps ${names.getOrElse(slot) { InputNames.NOT_SET }} if you don't press anything")
             }
-            val now = setup.buttons[target.b]
-            Triple(name, "Press a button", if (now == null) "Stays not set if you don't press anything" else "Keeps ${InputNames.of(now, face)} if you don't press anything")
         }
         Target.CHold -> Triple("Hold for C buttons", "Press the button to hold for the C buttons",
             setup.cHold?.let { "Keeps ${InputNames.key(it.code, null)} if you don't press anything" } ?: "Stays None if you don't press anything")

@@ -44,12 +44,12 @@ class PlayerInput(setup: PlayerSetup) {
     /** Key code to the RetroPad bits it presses (one key may press more than one N64 button). */
     private fun keyBitsFor(s: PlayerSetup): Map<Int, Int> {
         val m = HashMap<Int, Int>()
-        for ((b, input) in s.buttons) if (input is PadInput.Key) m[input.code] = (m[input.code] ?: 0) or (1 shl b.retroBit)
+        for (b in N64Button.entries) for (input in s.inputs(b)) if (input is PadInput.Key) m[input.code] = (m[input.code] ?: 0) or (1 shl b.retroBit)
         return m
     }
 
     private fun cKeysFor(s: PlayerSetup): Set<Int> =
-        if (s.cHold == null) emptySet() else N64Button.C.mapNotNull { (s.buttons[it] as? PadInput.Key)?.code }.toSet()
+        if (s.cHold == null) emptySet() else N64Button.C.flatMap { s.inputs(it) }.mapNotNull { (it as? PadInput.Key)?.code }.toSet()
 
     /** Whether this player uses [keyCode] for an N64 button (or, with the stick on the D-pad, for the stick; or to hold for the C buttons). */
     fun uses(keyCode: Int): Boolean = keyCode in keyBits ||
@@ -113,13 +113,15 @@ class PlayerInput(setup: PlayerSetup) {
         // keys press nothing else then.
         val hold = setup.cHold
         val holding = hold != null && isHeld(hold.code)
-        for ((b, input) in setup.buttons) {
+        // Each N64 button's own input and its extras (several controls on one button): any of them presses it.
+        for (b in N64Button.entries) {
             if (hold != null && b in N64Button.C && !holding) continue
-            val on = when (input) {
-                is PadInput.Key -> isHeld(input.code) && !(dpadOnStick && input.code in DPAD_CODES) &&
-                    !(holding && b !in N64Button.C && input.code in cKeys)
-                is PadInput.Axis -> axisValue(input.axis).let { if (input.positive) it > 0.5f else it < -0.5f }
-                null -> false
+            val on = setup.inputs(b).any { input ->
+                when (input) {
+                    is PadInput.Key -> isHeld(input.code) && !(dpadOnStick && input.code in DPAD_CODES) &&
+                        !(holding && b !in N64Button.C && input.code in cKeys)
+                    is PadInput.Axis -> axisValue(input.axis).let { if (input.positive) it > 0.5f else it < -0.5f }
+                }
             }
             if (on) mask = mask or (1 shl b.retroBit)
         }

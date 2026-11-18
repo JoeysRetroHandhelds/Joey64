@@ -185,7 +185,7 @@ class GameSettingsModel(private val video: VideoStore, private val emu: EmuStore
     private fun rowValue(s: PlayerSetup, r: String) = when (r) {
         "Stick" -> s.stick.label; "DeadZone" -> "${s.deadZone}%"; "Pak" -> s.pak.label
         in StickFeel.ROWS -> feelValue(s.feel, r)
-        else -> N64Button.entries.firstOrNull { it.name == r }?.let { InputNames.of(s.buttons[it], null) } ?: ""
+        else -> N64Button.entries.firstOrNull { it.name == r }?.let { InputNames.list(s.inputs(it), null) } ?: ""
     }
 
     private fun colour(v: VideoSettings) = if (COLOUR.all { v[it] == it.default }) "Default" else "Changed"

@@ -52,8 +52,24 @@ object InputNames {
         else -> "Axis ${a.axis}${if (a.positive) "+" else "-"}"
     }
 
+    /**
+     * Everything that presses one N64 button, as its row says it: "A", "A or R2", "A, R2 or Y", "A or 3 more" (approved
+     * multimap mockup; "or", Joey 2026-11-17: "+" is a hotkey's or Hold for C buttons' press-together).
+     */
+    fun list(inputs: List<PadInput>, face: AutoMap.FaceCodes?): String {
+        val n = inputs.map { of(it, face) }
+        return when (n.size) {
+            0 -> NOT_SET
+            1 -> n[0]
+            2 -> "${n[0]} or ${n[1]}"
+            3 -> "${n[0]}, ${n[1]} or ${n[2]}"
+            else -> "${n[0]} or ${n.size - 1} more"
+        }
+    }
+
     /** A group's value when its four directions are one thing ("D-pad", "Right stick"), or null (then "Split"). */
     fun group(setup: PlayerSetup, dirs: List<N64Button>): String? {
+        if (dirs.any { setup.extra[it].orEmpty().isNotEmpty() }) return null
         val v = dirs.map { setup.buttons[it] }
         if (dirs == N64Button.C && v == N64Button.C.map { PadInput.RIGHT_STICK[it] }) return "Right stick"
         if (dirs == N64Button.DPAD && v == N64Button.DPAD.map { PadInput.DPAD_KEYS[it] }) return "D-pad"

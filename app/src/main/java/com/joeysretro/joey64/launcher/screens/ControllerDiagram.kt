@@ -48,7 +48,7 @@ fun ControllerDiagram(player: Int, name: String, setup: PlayerSetup, face: AutoM
     val c = JoeyTheme.colors
     // Hold for C buttons (stickless pads, 2026-11-13): the C buttons read as the Controls rows do, "R2 + Y".
     val hold = setup.cHold?.let { InputNames.key(it.code, face) + " + " } ?: ""
-    fun v(b: N64Button) = (if (b in N64Button.C && setup.buttons[b] != null) hold else "") + InputNames.of(setup.buttons[b], face)
+    fun v(b: N64Button) = (if (b in N64Button.C && setup.buttons[b] != null) hold else "") + InputNames.list(setup.inputs(b), face)
     val screen = LocalScreenLayout.current
     Column {
         PopupTitle("Player ${player + 1} · $name", "N64 button, and what it's mapped to. Not set: not mapped")
