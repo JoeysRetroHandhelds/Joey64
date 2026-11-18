@@ -1,6 +1,6 @@
 {
   "about": "Joey64 per-game database: what each game needs, what is wrong with it and where, and what was fixed. Seed for the M3 profile DB. Rules: gamedb/README.md. Update this file in the same commit as any change to a game's status (new problem found, fixed, regressed, setting added or dropped).",
-  "updated": "2026-11-14",
+  "updated": "2026-11-17",
   "games": [
     {
       "id": "NPF", "title": "Pokemon Snap",
@@ -435,15 +435,6 @@
       "notes": ["Thor (2026-11-07, app 9263f30 + core dd ddf3103, before the VI event fix in core dd 7a8c4ba, IPL_JPN = Japan v1.2, 30-60 s from the start): \"press start\" title (asks to plug in the modem), 61 emu fps; Rev 1 [b] the same"]
     },
     {
-      "crc": "6EE8AAA61517C148", "title": "Featherlight v1.1 (N64brew Game Jam 2021 homebrew; its header has no game code)",
-      "issues": [
-        {"status": "open", "devices": "all", "what": "jumps to a bogus address 16 s in (\"Compile at bogus memory address: 9e20d357\"); the game ends there", "evidence": "README Full-run fixes (b): fx1-flip 2026-11-12; not looked at why it jumps there"}
-      ],
-      "fixed": [
-        {"what": "the recompiler's exit(1) on that jump closed the whole app", "fix": "core rel2 ab1304b (unmapped-page exception) + main 8bf1958 (the host stops the game on that line); Flip bg1-flip / bgui-flip 2026-11-12: the game screen closes, the app stays up, the library gets the won't-start report"}
-      ]
-    },
-    {
       "id": "CMD", "crc": "0000000000000000", "title": "Nintendo 64 Modem (Japan) (Add-on) (the 64DD Randnet modem cartridge, not a game)",
       "fixed": [
         {"what": "\"Compile at bogus memory address: 80800000\" then the recompiler's exit(1) closed the whole app 16-17 s in", "fix": "core rel2 ab1304b + main 8bf1958; Flip bg1-flip 2026-11-12: the game screen closes, the app stays up"}
@@ -524,8 +515,12 @@
     },
     {
       "id": "", "crc": "6EE8AAA61517C148", "md5": "faf4d5f46e4e2a7e87584ead6923c284", "title": "Featherlight (World) (v1.1) (N64brew Game Jam 2021) (Aftermarket) (Unl)",
-      "issues": [
-        {"status": "parked", "devices": "all", "what": "jumps to a bogus address (9e20d357) in its first second on the recompiler; black screen on the cached interpreter. Its own write-up says it glitches on real N64 hardware too and only runs on Project64 2.3 with angrylion's RDP and Graphics HLE off", "evidence": "full run 2026-11-13 f0303; Odin 3 2026-11-14 fl-dyn / fl-int; n64squid.com/?p=6425"}
+      "settings": [
+        {"what": "SkipPiDmaPastRdram=1 (and ForceAlignmentOfPiDma=0, as for unknown ROMs)", "where": "core mupen64plus.ini by MD5 (joey64-core 669f4df)", "why": "the game asks for a 0-byte cart DMA (cart 0x10037EF0 -> 0x240000); libultra writes size - 1, so the PI's length becomes 0xFFFFFF, a 16 MB copy that wipes every thread's stack above 0x240000. Project64 drops a DMA that would run past the end of RDRAM, so the game runs there; hardware writes the part inside RDRAM over about 3 s (the game's own write-up: it glitches there)"}
+      ],
+      "fixed": [
+        {"what": "the recompiler's exit(1) on its bad jump closed the whole app", "fix": "core rel2 ab1304b (unmapped-page exception) + main 8bf1958 (the host stops the game on that line); Flip bg1-flip / bgui-flip 2026-11-12"},
+        {"what": "jumped to 9e20d357 in its first second (\"Compile at bogus memory address\"), black on the interpreters: osRecvMesg returned through a stack slot the 16 MB DMA had overwritten", "fix": "core 669f4df (SkipPiDmaPastRdram)", "evidence": "pure-interpreter trace o3-fltrace1..4 2026-11-17 (the last 256 instructions, the stack slot's writes, the DMA's caller); o3-flplay1 (debug switch) and o2p-flcheck1 (the database rule alone): title, Start, the first level, walking, 60 fps on the recompiler and the pure interpreter"}
       ]
     },
     {
