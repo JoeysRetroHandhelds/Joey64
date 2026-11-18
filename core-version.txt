@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: main
-commit: 6fd1c56f55b8be346b7bfb053044595e77fc8d08 2026-11-17 10:02:19 -0600 The game's first VI area trims at once: the picture no longer starts with its border and grow
+branch: hotfix-0.2.4
+commit: 87a3369dab6d5fe4dc5e236805e1083aa4f15cfc 2026-11-17 20:39:38 -0600 Texture packs in copy mode: a replaced tile drawn by a copy-mode texture rectangle (Paper Mar
 uncommitted: none
-built: 2026-11-17 10:02
-md5: 160a0a9eb22d58b185b2f18772d66d40
+built: 2026-11-17 20:42
+md5: 7adce18b4526ca1bc737d24552abdf08
