@@ -468,7 +468,7 @@ private fun LoadProfilePopup(name: String, who: String, gameTitle: String?, onDi
     JoeyDialog(onDismiss = onDismiss, hints = listOf(Hint("A", "Select"), Hint("B", "Cancel")), width = 470.dp) {
         Column {
             PopupTitle("Load $name for $who?")
-            PopupNote("$who's buttons, stick, tap to hold and macros (${gameTitle ?: "All games"}) become the profile's. The controller and pak stay.")
+            PopupNote("$who's buttons, stick, tap to hold and macros (${gameTitle ?: "Global"}) become the profile's. The controller and pak stay.")
             ButtonRow(Modifier.padding(horizontal = 10.dp).padding(top = 12.dp, bottom = 2.dp)) {
                 JoeyButton("Cancel", primary = false, onClick = onDismiss)
                 JoeyButton("Load", primary = true, modifier = Modifier.initialFocus(), onClick = onLoad)

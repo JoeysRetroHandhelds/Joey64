@@ -553,7 +553,7 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
         }
     loaded?.let { name ->
         com.joeysretro.joey64.launcher.components.JoeyToast(R.drawable.ic_circle_check, "Profiles", "$name loaded",
-            "Player ${player + 1}, ${targetTitle ?: "All games"}", Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 16.dp))
+            "Player ${player + 1}, ${targetTitle ?: "Global"}", Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 16.dp))
     }
     }
 
