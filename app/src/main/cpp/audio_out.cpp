@@ -85,7 +85,24 @@ bool AudioOut::openStream() {
     const int startMs = mode == 1 ? 10 : mode == 2 ? 60 : kTargetMs;
     grow_ = mode != 1;
     target_ = (size_t)dstRate * startMs / 1000 * 2;
+    startTarget_ = target_; quietWindows_ = 0;
     keep_.store(target_, std::memory_order_relaxed);
+    {
+        const char* fd = getenv("N64_AUDIO_FADE"); fadeOn_ = fd && *fd == '1';
+        const char* sh = getenv("N64_AUDIO_SHRINK"); shrinkOn_ = sh && *sh == '1';
+        const char* fp = getenv("N64_FF_PITCH"); ffPitchOn_ = fp && *fp == '1';
+        if (fadeOn_ || shrinkOn_ || ffPitchOn_)
+            LOGI("audio: dev switches:%s%s%s", fadeOn_ ? " underrun fade (N64_AUDIO_FADE)" : "",
+                 shrinkOn_ ? " target shrinks back (N64_AUDIO_SHRINK)" : "", ffPitchOn_ ? " fast-forward keeps pitch (N64_FF_PITCH)" : "");
+    }
+    last_[0] = last_[1] = 0; fadeIn_ = 0;
+    if (const char* cp = getenv("N64_AUDIO_CAPTURE"); cp && *cp && cap_buf_.empty()) {
+        capPath_ = cp;
+        cap_buf_.assign((size_t)dstRate * 2 * 30, 0.0f);
+        capN_ = 0; capWritten_ = false;
+        LOGI("audio: capturing 30 s of output to %s (N64_AUDIO_CAPTURE)", cp);
+    }
+    ffPos_ = 0; ffLen_ = 0; ffHaveTail_ = false;
     { const char* rd = getenv("N64_RESUME_DROP"); resumeDropOn_ = !(rd && *rd == '0'); }
     resumeDrop_.store(false, std::memory_order_relaxed);
     pos_ = 0.0; prev_[0] = prev_[1] = 0;
@@ -223,12 +240,29 @@ void AudioOut::takeStats(bool keepingUp, double& fillMs, double& targetMs, int& 
         }
     }
     auto ms = [this](double samples) { return samples / 2 * 1000.0 / dstRate_; };
+    if (!cap_buf_.empty() && !capWritten_ && capN_.load(std::memory_order_acquire) == cap_buf_.size()) {
+        if (FILE* fp = fopen(capPath_.c_str(), "wb")) {
+            fwrite(cap_buf_.data(), sizeof(float), cap_buf_.size(), fp);
+            fclose(fp);
+            LOGI("audio: capture written, %d Hz stereo float, %s", dstRate_, capPath_.c_str());
+        } else LOGE("audio: can't write the capture to %s", capPath_.c_str());
+        capWritten_ = true;
+    }
     fillMs = fillCount_ ? ms(fillSum_ / fillCount_) : 0;
     fillSum_ = 0; fillCount_ = 0;
     underruns = underruns_.exchange(0);
     size_t step = (size_t)dstRate_ / 100 * 2; // 10 ms
     if (grow_ && underruns && keepingUp && frames_ > 600 && ms((double)(target_ + step)) <= kMaxTargetMs)
         target_ += step;
+    if (shrinkOn_) {
+        // N64_AUDIO_SHRINK: two quiet windows (10 s), then 5 ms back a window, never below where it started.
+        quietWindows_ = underruns ? 0 : quietWindows_ + 1;
+        if (quietWindows_ >= 2 && target_ > startTarget_) {
+            size_t down = std::min(step / 4 * 2, target_ - startTarget_); // 5 ms, whole stereo frames
+            target_ -= down;
+            LOGI("audio: target back down to %.0f ms after %d s without an underrun", ms((double)target_), quietWindows_ * 5);
+        }
+    }
     keep_.store(target_, std::memory_order_relaxed);
     targetMs = ms((double)target_);
 }
@@ -281,8 +315,37 @@ void AudioOut::writeFast(const int16_t* frames, size_t frameCount, double speed,
     fillSum_ += f; ++fillCount_; // the stats line's fill, as waitForRoom keeps it outside fast-forward
     double err = std::max(-1.0, std::min(1.0, ((double)f - (double)target_) / (double)target_));
     // Below 1: slow motion (approved 2026-11-08), its sound slower and lower.
-    const double step = baseStep_ * std::max(0.1, speed) * (1.0 + 0.5 * err);
     const float k = gain * (1.0f / 32768);
+    if (ffPitchOn_ && speed > 1.0) {
+        // N64_FF_PITCH: keep B source frames (20 ms) of every block of speed x B, the first C (2 ms) crossfaded from the
+        // previous block's frames just after its kept piece; the fill steers the block length (more dropped when the
+        // ring fills), never the pitch. The kept frames go through the normal-rate resampler.
+        const size_t B = (size_t)srcRate_ / 50, C = std::min<size_t>(96, (size_t)srcRate_ / 500);
+        for (size_t i = 0; i < frameCount; ++i) {
+            const int16_t* cur = frames + i * 2;
+            if (ffPos_ == 0) ffLen_ = std::max((double)(B + C), B * speed * (1.0 + 0.5 * err));
+            if (ffPos_ < C) {
+                if (ffHaveTail_) {
+                    float t = (float)(ffPos_ + 1) / (float)(C + 1);
+                    int16_t m[2];
+                    for (int ch = 0; ch < 2; ++ch) m[ch] = (int16_t)(ffTail_[ffPos_ * 2 + ch] * (1.0f - t) + cur[ch] * t);
+                    ffEmit(m, k);
+                } else ffEmit(cur, k);
+            } else if (ffPos_ < B) {
+                ffEmit(cur, k);
+            } else if (ffPos_ < B + C) {
+                ffNext_[(ffPos_ - B) * 2] = cur[0]; ffNext_[(ffPos_ - B) * 2 + 1] = cur[1];
+            }
+            if (++ffPos_ >= (size_t)ffLen_) {
+                std::memcpy(ffTail_, ffNext_, sizeof ffTail_);
+                ffHaveTail_ = true;
+                ffPos_ = 0;
+            }
+        }
+        return;
+    }
+    ffPos_ = 0; ffHaveTail_ = false;
+    const double step = baseStep_ * std::max(0.1, speed) * (1.0 + 0.5 * err);
     for (size_t i = 0; i < frameCount; ++i) {
         const int16_t* cur = frames + i * 2;
         while (pos_ < 1.0) {
@@ -302,6 +365,25 @@ void AudioOut::writeFast(const int16_t* frames, size_t frameCount, double speed,
         pos_ -= 1.0;
         prev_[0] = cur[0]; prev_[1] = cur[1];
     }
+}
+
+void AudioOut::ffEmit(const int16_t* cur, float k) {
+    // One source frame at the normal rate (step_ = baseStep_ with rate control), dropped when the ring is full.
+    while (pos_ < 1.0) {
+        size_t w = w_.load(std::memory_order_relaxed);
+        size_t next = (w + 2) % cap_;
+        if ((w + 1) % cap_ == r_.load(std::memory_order_acquire) || next == r_.load(std::memory_order_acquire)) {
+            pos_ += baseStep_;
+            continue;
+        }
+        ring_[w] = (prev_[0] + (cur[0] - prev_[0]) * (float)pos_) * k;
+        ring_[(w + 1) % cap_] = (prev_[1] + (cur[1] - prev_[1]) * (float)pos_) * k;
+        w_.store(next, std::memory_order_release);
+        fed_.store(true, std::memory_order_relaxed);
+        pos_ += baseStep_;
+    }
+    pos_ -= 1.0;
+    prev_[0] = cur[0]; prev_[1] = cur[1];
 }
 
 void AudioOut::setMix(int volumePct, bool mute, bool mono) {
@@ -329,9 +411,28 @@ aaudio_data_callback_result_t AudioOut::cb(AAudioStream*, void* user, void* data
         if (r == self->w_.load(std::memory_order_acquire)) { // underrun → silence
             if (self->fed_.load(std::memory_order_relaxed)) self->underruns_.fetch_add(1, std::memory_order_relaxed);
             memset(out + i, 0, (samples - i) * sizeof(float));
+            if (self->fadeOn_) {
+                // N64_AUDIO_FADE: from the last frame played down to zero over kFadeFrames, then the next sound fades in.
+                size_t start = i & ~(size_t)1;
+                if (start < i) out[start] = self->last_[0]; // a frame cut between its two samples: finish it
+                size_t n = std::min((size_t)kFadeFrames, (samples - start) / 2);
+                for (size_t j = 0; j < n; ++j) {
+                    float g = 1.0f - (float)(j + 1) / (float)(kFadeFrames + 1);
+                    out[start + j * 2] = self->last_[0] * g;
+                    out[start + j * 2 + 1] = self->last_[1] * g;
+                }
+                self->fadeIn_ = kFadeFrames;
+                self->last_[0] = self->last_[1] = 0.0f;
+            }
             break;
         }
-        out[i] = self->ring_[r];
+        float s = self->ring_[r];
+        if (self->fadeIn_ > 0) {
+            s *= 1.0f - (float)self->fadeIn_ / (float)(kFadeFrames + 1);
+            if (i & 1) --self->fadeIn_;
+        }
+        out[i] = s;
+        if (self->fadeOn_) self->last_[i & 1] = s;
         self->r_.store((r + 1) % self->cap_, std::memory_order_release);
     }
     const float g = self->gain_.load(std::memory_order_relaxed);
@@ -339,6 +440,14 @@ aaudio_data_callback_result_t AudioOut::cb(AAudioStream*, void* user, void* data
         for (size_t i = 0; i + 1 < samples; i += 2) { float m = (out[i] + out[i + 1]) * 0.5f * g; out[i] = out[i + 1] = m; }
     } else if (g != 1.0f) {
         for (size_t i = 0; i < samples; ++i) out[i] *= g;
+    }
+    if (!self->cap_buf_.empty() && self->fed_.load(std::memory_order_relaxed)) {
+        size_t n = self->capN_.load(std::memory_order_relaxed), room = self->cap_buf_.size() - n;
+        if (room) {
+            size_t c = std::min(room, samples);
+            memcpy(self->cap_buf_.data() + n, out, c * sizeof(float));
+            self->capN_.store(n + c, std::memory_order_release);
+        }
     }
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }

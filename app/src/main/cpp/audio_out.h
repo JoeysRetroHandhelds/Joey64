@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <string>
 #include <vector>
 
 // AAudio low-latency output fed by a lock-free SPSC ring buffer of interleaved stereo float
@@ -111,4 +112,31 @@ private:
     double step_ = 1.0;      // source frames per output frame
     double pos_ = 0.0;       // position between prev_ and the next source frame
     int16_t prev_[2] = {0, 0};
+    // Dev switches (2026-11-18, morning report item 7, ideas from altru's design notes, our own code), all off unless set:
+    // N64_AUDIO_FADE=1: an underrun fades the last sample out over kFadeFrames instead of a step to zero, and the sound
+    // after it fades back in (a click each way without).
+    bool fadeOn_ = false;
+    static constexpr int kFadeFrames = 64;
+    float last_[2] = {0, 0};           // the callback's last output frame (before gain)
+    int fadeIn_ = 0;                   // frames of fade-in left after an underrun (callback thread)
+    // N64_AUDIO_SHRINK=1: after 10 s (two stats windows) without an underrun, the grown target comes down 5 ms a window,
+    // to where it started, so one bad scene doesn't keep its extra latency for the whole play.
+    bool shrinkOn_ = false;
+    size_t startTarget_ = 0;
+    int quietWindows_ = 0;
+    // N64_FF_PITCH=1: fast-forward (speed above 1) keeps normal pitch: of every speed x 20 ms of the game's sound, 20 ms
+    // is kept, each kept piece crossfaded over 2 ms into the one before; the fill steers how much is dropped, not the pitch.
+    bool ffPitchOn_ = false;
+    size_t ffPos_ = 0;                 // source frames into the current block
+    double ffLen_ = 0;                 // this block's length in source frames
+    int16_t ffTail_[2 * 96] = {};      // the previous block's frames just after its kept piece (for the crossfade)
+    int16_t ffNext_[2 * 96] = {};
+    bool ffHaveTail_ = false;
+    void ffEmit(const int16_t* f, float k); // one source frame through the normal-rate resampler into the ring
+    // N64_AUDIO_CAPTURE=<file> (dev, 2026-11-18): the callback's output (after gain) for the first 30 s after the game's
+    // first sound, written as raw float stereo at the device rate (a .f32 file) once full, from takeStats.
+    std::vector<float> cap_buf_;
+    std::atomic<size_t> capN_{0};
+    bool capWritten_ = false;
+    std::string capPath_;
 };
