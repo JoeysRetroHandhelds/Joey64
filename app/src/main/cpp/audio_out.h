@@ -122,6 +122,8 @@ private:
     // N64_AUDIO_SHRINK=1: after 10 s (two stats windows) without an underrun, the grown target comes down 5 ms a window,
     // to where it started, so one bad scene doesn't keep its extra latency for the whole play.
     bool shrinkOn_ = false;
+    int growOnceMs_ = 0;               // N64_AUDIO_GROW_ONCE (test only)
+    bool growOnceDone_ = false;
     size_t startTarget_ = 0;
     int quietWindows_ = 0;
     // N64_FF_PITCH=1: fast-forward (speed above 1) keeps normal pitch: of every speed x 20 ms of the game's sound, 20 ms

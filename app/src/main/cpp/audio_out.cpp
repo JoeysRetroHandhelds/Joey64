@@ -90,6 +90,9 @@ bool AudioOut::openStream() {
     {
         const char* fd = getenv("N64_AUDIO_FADE"); fadeOn_ = fd && *fd == '1';
         const char* sh = getenv("N64_AUDIO_SHRINK"); shrinkOn_ = sh && *sh == '1';
+        // N64_AUDIO_GROW_ONCE=<ms> (test only): the target grows by this once, as if underruns had grown it, so the shrink
+        // can be measured where a game doesn't underrun by itself.
+        const char* go = getenv("N64_AUDIO_GROW_ONCE"); growOnceMs_ = go ? atoi(go) : 0; growOnceDone_ = false;
         const char* fp = getenv("N64_FF_PITCH"); ffPitchOn_ = fp && *fp == '1';
         if (fadeOn_ || shrinkOn_ || ffPitchOn_)
             LOGI("audio: dev switches:%s%s%s", fadeOn_ ? " underrun fade (N64_AUDIO_FADE)" : "",
@@ -254,6 +257,12 @@ void AudioOut::takeStats(bool keepingUp, double& fillMs, double& targetMs, int& 
     size_t step = (size_t)dstRate_ / 100 * 2; // 10 ms
     if (grow_ && underruns && keepingUp && frames_ > 600 && ms((double)(target_ + step)) <= kMaxTargetMs)
         target_ += step;
+    if (growOnceMs_ > 0 && !growOnceDone_ && keepingUp && frames_ > 600) {
+        size_t add = (size_t)dstRate_ * growOnceMs_ / 1000 * 2;
+        if (ms((double)(target_ + add)) <= kMaxTargetMs) target_ += add;
+        growOnceDone_ = true;
+        LOGI("audio: target grown to %.0f ms for the test (N64_AUDIO_GROW_ONCE)", ms((double)target_));
+    }
     if (shrinkOn_) {
         // N64_AUDIO_SHRINK: two quiet windows (10 s), then 5 ms back a window, never below where it started.
         quietWindows_ = underruns ? 0 : quietWindows_ + 1;
