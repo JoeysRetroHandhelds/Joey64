@@ -7,8 +7,9 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Touch controls' settings: `files/controls/touch/all.json` and `games/<save name>.json` (a whole copy, made on a
- * game's first change; removed again when it matches All games). In `controls/`, so backups and Game settings'
+ * Touch controls' settings: `files/controls/touch/all.json` and `games/<save name>.json` (a whole set with "own", the
+ * rows the game changed: only those are the game's, every other row follows All games, as Controls' files; removed
+ * again when it matches All games). In `controls/`, so backups and Game settings'
  * Controls part carry it.
  */
 class TouchStore(private val dir: File) {
@@ -29,19 +30,25 @@ class TouchStore(private val dir: File) {
         val removed = (old.toSet() - new.toSet()) - renames.keys
         if (renames.isEmpty() && removed.isEmpty()) return
         for (save in listOf<String?>(null) + gamesWithOwn()) {
-            val t = (if (save == null) read(allFile) else read(gameFile(save)))?.let { TouchSettings.fromJson(it) } ?: continue
+            val t = (if (save == null) read(allFile)?.let { TouchSettings.fromJson(it) } else game(save)) ?: continue
             val fixed = t.withMacros(renames, removed, macrosFor(save).toSet())
             if (fixed != t) { save(save, fixed); JLog.i(TAG, "touch controls: macro buttons follow a macro change (${save ?: "All games"})") }
         }
     }
     fun saveAll(t: TouchSettings) = write(allFile, t.toJson())
 
-    fun game(saveName: String): TouchSettings? = read(gameFile(saveName))?.let { TouchSettings.fromJson(it) }
+    /** A game's touch controls: All games' with the game's own rows; a file from before "own" is the game's whole. */
+    fun game(saveName: String): TouchSettings? = read(gameFile(saveName))?.let { o ->
+        val t = TouchSettings.fromJson(o)
+        val own = o.optJSONArray("own") ?: return@let t
+        (0 until own.length()).map { own.optString(it) }.fold(all()) { s, r -> s.rowFrom(r, t) }
+    }
     fun forGame(saveName: String?): TouchSettings = saveName?.let { game(it) } ?: all()
 
     /** A game's settings: removed when they're All games' again. */
     fun saveGame(saveName: String, t: TouchSettings) {
-        if (t.changedFrom(all()).isEmpty()) removeGame(saveName) else write(gameFile(saveName), t.toJson())
+        val own = t.changedFrom(all())
+        if (own.isEmpty()) removeGame(saveName) else write(gameFile(saveName), t.toJson().put("own", org.json.JSONArray(own.sorted())))
     }
     fun removeGame(saveName: String) { val f = gameFile(saveName); if (!f.delete() && f.exists()) JLog.e(TAG, "can't remove $saveName's touch controls") }
 

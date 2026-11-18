@@ -164,6 +164,23 @@ data class PlayerSetup(
         if (cHold != other.cHold) add("CHold")
     }
 
+    /** This setup with [rows] ([differences]' names) as [from] has them: a game's own rows over All games'. */
+    fun withRowsFrom(from: PlayerSetup, rows: Collection<String>): PlayerSetup = rows.fold(this) { s, r ->
+        when (r) {
+            "Stick" -> s.copy(stick = from.stick)
+            "DeadZone" -> s.copy(deadZone = from.deadZone)
+            "Pak" -> s.copy(pak = from.pak, gbGame = from.gbGame, gbSave = from.gbSave)
+            "RumbleOn" -> s.copy(rumbleOn = from.rumbleOn)
+            "RumbleStrength" -> s.copy(rumbleStrength = from.rumbleStrength)
+            "Tap" -> s.copy(latch = from.latch)
+            "Macros" -> s.copy(macros = from.macros)
+            "Turbo" -> s.copy(turbo = from.turbo, turboSpeed = from.turboSpeed)
+            "CHold" -> s.copy(cHold = from.cHold)
+            in StickFeel.ROWS -> s.copy(feel = s.feel.withRow(r, from.feel))
+            else -> N64Button.entries.firstOrNull { it.name == r }?.let { s.withInputs(it, from.inputs(it)) } ?: s
+        }
+    }
+
     fun toJson(): JSONObject = JSONObject().apply {
         put("device", when (device) {
             DeviceChoice.BuiltIn -> JSONObject().put("kind", "builtin")

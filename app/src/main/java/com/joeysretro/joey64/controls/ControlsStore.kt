@@ -9,8 +9,13 @@ import java.io.File
  * Where Controls lives: Joey64's own `files/controls/` (both the launcher and the game screen read
  * it; the game screen runs while the launcher is paused, so they never write at once).
  *  - `all.json`: All games, the four players.
- *  - `games/<save name>.json`: a game's own controls, a whole copy made from All games on its first
- *    change (approved mockups 8 and 9). Which controller each player has is always All games'.
+ *  - `games/<save name>.json`: a game's own controls (approved mockups 8 and 9): a whole set, and in "own" each
+ *    player's rows the game changed. Only those are the game's; every other row is All games' as it is now, so a
+ *    change on All games reaches every game (Joey 2026-11-17: it was a whole copy, and a game kept All games' old
+ *    values as changes). A file from before has no "own": its own rows are the ones that differ from All games and
+ *    from the default (a row it was copied with that All games changed since was still the default, Joey's Stick
+ *    feel Range and Curve).
+ *    Which controller each player has is always All games'.
  *  - `hotkeys.json`: the hotkey button and the hotkeys.
  * Written whole (`.part`, then renamed). A file that can't be read is logged and the defaults used.
  */
@@ -52,8 +57,16 @@ class ControlsStore(private val dir: File) {
     }
 
     /** A game's own controls, or null when it uses All games. */
-    fun game(saveName: String): ControlsSet? = read(gameFile(saveName))?.let { ControlsSet.fromJson(it) }
-    fun saveGame(saveName: String, set: ControlsSet) = write(gameFile(saveName), set.toJson())
+    /** A game's controls: All games' with the game's own rows (see the class's note); null when it has none. */
+    fun game(saveName: String): ControlsSet? = read(gameFile(saveName))?.let { o -> resolve(ControlsSet.fromJson(o), o.optJSONArray("own"), all()) }
+
+    /** Saves [set] as [saveName]'s: its own rows are the ones that differ from All games; none, and the file goes. */
+    fun saveGame(saveName: String, set: ControlsSet) {
+        val a = all()
+        val own = List(4) { i -> set.players[i].copy(device = a.players[i].device).differences(a.players[i]) }
+        if (own.all { it.isEmpty() }) { removeGame(saveName); return }
+        write(gameFile(saveName), set.toJson().put("own", org.json.JSONArray().apply { own.forEach { put(org.json.JSONArray(it.sorted())) } }))
+    }
     fun removeGame(saveName: String) { if (!gameFile(saveName).delete() && gameFile(saveName).exists()) JLog.e(TAG, "can't remove $saveName's controls") }
 
     /** The games with their own controls, by save name. */
@@ -69,6 +82,7 @@ class ControlsStore(private val dir: File) {
         val g = saveName?.let { game(it) } ?: return a
         return ControlsSet(List(4) { i -> g.players[i].copy(device = a.players[i].device) })
     }
+
 
     /** Profiles (Controls extras), `profiles/<name>.json`, newest first. */
     fun profiles(): List<Profile> {
@@ -132,6 +146,13 @@ class ControlsStore(private val dir: File) {
     }
 
     companion object {
+        /** [g]'s players over [all]'s: each takes only its own rows ([own]'s; for a file without it, see the class's note). */
+        fun resolve(g: ControlsSet, own: org.json.JSONArray?, all: ControlsSet): ControlsSet = ControlsSet(List(4) { i ->
+            val mine = g.players[i]; val base = all.players[i]
+            val rows = own?.optJSONArray(i)?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }
+                ?: (mine.copy(device = base.device).differences(base) intersect mine.differences(ControlsSet.defaults().players[i].copy(device = mine.device)))
+            base.withRowsFrom(mine, rows).copy(device = mine.device)
+        })
         private const val TAG = "Joey64Controls"
         /** A save name as a file name: path separators and other unsafe characters become '_'. */
         fun safe(name: String) = name.replace(Regex("""[\\/:*?"<>|\u0000-\u001f]"""), "_").take(150)
