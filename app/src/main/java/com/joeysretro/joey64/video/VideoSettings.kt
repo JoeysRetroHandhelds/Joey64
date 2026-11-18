@@ -55,8 +55,10 @@ enum class VideoKey(val key: String, private val base: String) {
     Renderer("renderer", "auto"),
     Driver("driver", "auto"),
     Pacing("pacing", "lowest"),
-    ViAa("vi_aa", "on"),
-    ViBilinear("vi_bilinear", "on"),
+    // "auto" (Look Auto, the default since 2026-11-17, Joey: "Yes" to Sharp when upscaled): off at 2x and up, on at
+    // Native (1x); [VideoSettings.filterOn] / [VideoApply.of] resolve it. "on" / "off" are a pick (Original, Sharp, a row).
+    ViAa("vi_aa", "auto"),
+    ViBilinear("vi_bilinear", "auto"),
     DitherFilter("dither_filter", "on"),
     Divot("divot", "on"),
     GammaDither("gamma_dither", "on"),
@@ -142,6 +144,7 @@ object VideoChoices {
         VideoChoice("steady", "Steady", "Each frame shows for the same time on 120 Hz screens. More lag"),
         VideoChoice("timed", "Steady, less lag", "Steady, with frames timed to the screen", experimental = true))
     val look = listOf(
+        VideoChoice("auto", "Auto", "Sharp at 2x and up, Original at Native"),
         VideoChoice("original", "Original", "The N64's own soft picture"),
         VideoChoice("sharp", "Sharp", "Edge smoothing and soft scaling off"),
         VideoChoice("sharper", "Sharper", "Dither smoothing off too, so the dither grain shows"))
@@ -184,16 +187,31 @@ object VideoChoices {
 data class VideoSettings(val values: Map<VideoKey, String>) {
     operator fun get(k: VideoKey): String = values[k] ?: k.default
     fun on(k: VideoKey) = get(k) == "on"
+    /** A filter row as it plays: "auto" (Look Auto's edge smoothing and soft scaling) is on only at Native (1x), [scale] the resolution in use. */
+    fun filterOn(k: VideoKey, scale: Int = int(VideoKey.Resolution)) = get(k).let { if (it == AUTO) scale < 2 else it == "on" }
     fun int(k: VideoKey) = get(k).toIntOrNull() ?: k.default.toInt()
 
     /** The Look preset these filter rows match, or "custom". */
     val look: String get() = LOOKS.entries.firstOrNull { (_, v) -> VideoKey.LOOK_KEYS.all { get(it) == v.getValue(it) } }?.key ?: "custom"
 
+    /** What Look Auto gives at [scale]: "sharp" at 2x and up, else "original". */
+    fun autoLook(scale: Int = int(VideoKey.Resolution)) = if (scale >= 2) "sharp" else "original"
+
+    /** The Look's name; Auto says what it gives at this Resolution ("Auto · Sharp"), [at] adds the Resolution ("Auto · Sharp at 4x"). */
+    fun lookLabel(at: Boolean = false): String {
+        if (look != "auto") return VideoChoices.look.firstOrNull { it.value == look }?.label ?: "Custom"
+        val gives = VideoChoices.look.first { it.value == autoLook() }.label
+        val res = int(VideoKey.Resolution)
+        return "Auto · $gives" + if (at) " at " + (if (res == 1) "Native" else "${res}x") else ""
+    }
+
     companion object {
+        const val AUTO = "auto"
         val DEFAULTS = VideoSettings(emptyMap())
 
         /** What each Look preset sets the filter rows to (the dev switches sharp and sharp2). */
         val LOOKS: Map<String, Map<VideoKey, String>> = linkedMapOf(
+            "auto" to VideoKey.LOOK_KEYS.associateWith { "on" } + mapOf(VideoKey.ViAa to AUTO, VideoKey.ViBilinear to AUTO),
             "original" to VideoKey.LOOK_KEYS.associateWith { "on" },
             "sharp" to VideoKey.LOOK_KEYS.associateWith { "on" } + mapOf(VideoKey.ViAa to "off", VideoKey.ViBilinear to "off"),
             "sharper" to VideoKey.LOOK_KEYS.associateWith { "on" } + mapOf(VideoKey.ViAa to "off", VideoKey.ViBilinear to "off", VideoKey.DitherFilter to "off"),
@@ -226,9 +244,10 @@ data class VideoApply(
     val env: Map<String, String>,
 ) {
     companion object {
-        fun of(v: VideoSettings, parallel: Boolean): VideoApply {
+        /** [scale]: the resolution the game plays at (a netplay room plays at 1x), for Look Auto. */
+        fun of(v: VideoSettings, parallel: Boolean, scale: Int = v.int(VideoKey.Resolution)): VideoApply {
             val opts = LinkedHashMap<String, String>()
-            fun tf(k: VideoKey) = if (v.on(k)) "True" else "False"
+            fun tf(k: VideoKey) = if (v.filterOn(k, scale)) "True" else "False"
             if (parallel) {
                 opts["mupen64plus-parallel-rdp-upscaling"] = "${v.int(VideoKey.Resolution)}x"
                 opts["mupen64plus-parallel-rdp-vi-aa"] = tf(VideoKey.ViAa)

@@ -44,7 +44,7 @@ object ResNote {
     }
 
     /** Whether [note] gets the "Use 2x and the Sharp look" line, shown while the setting isn't already 2x + Sharp. */
-    fun sharpLink(note: String?, resolution: String, look: String) = note == GPU4X && !(resolution == "2" && look == "sharp")
+    fun sharpLink(note: String?, resolution: String, look: String) = note == GPU4X && !(resolution == "2" && (look == "sharp" || look == "auto"))
 
     /** 2.2 GB, in bytes, as ActivityManager's totalMem counts them. */
     const val RAM_LIMIT = 2_200L * 1024 * 1024

@@ -14,7 +14,7 @@ class VideoSettingsTest {
     @Test fun defaultsAreTodaysPicture() {
         val v = VideoSettings.DEFAULTS
         assertEquals(1, v.int(VideoKey.Resolution))
-        assertEquals("original", v.look)
+        assertEquals("auto", v.look)
         val a = VideoApply.of(v, parallel = true)
         // The core's own defaults, so a user who never opens Video plays as before; deinterlace is ours (Weave, Joey 2026-11-10).
         assertEquals("1x", a.coreOptions["mupen64plus-parallel-rdp-upscaling"])
@@ -45,6 +45,25 @@ class VideoSettingsTest {
         val sharper = VideoSettings(VideoSettings.LOOKS.getValue("sharper"))
         assertEquals("False", VideoApply.of(sharper, true).coreOptions["mupen64plus-parallel-rdp-dither-filter"])
         assertEquals("custom", VideoSettings(mapOf(VideoKey.Divot to "off")).look)
+    }
+
+    @Test fun lookAutoIsSharpWhenUpscaled() {
+        // Look Auto (Joey 2026-11-17): Sharp at 2x and up, Original at Native; a picked Look keeps its rows.
+        for ((res, tf) in listOf("1" to "True", "2" to "False", "4" to "False", "8" to "False")) {
+            val o = VideoApply.of(VideoSettings(mapOf(VideoKey.Resolution to res)), true).coreOptions
+            assertEquals(res, tf, o["mupen64plus-parallel-rdp-vi-aa"])
+            assertEquals(res, tf, o["mupen64plus-parallel-rdp-vi-bilinear"])
+            assertEquals(res, "True", o["mupen64plus-parallel-rdp-dither-filter"])
+        }
+        // A netplay room plays at 1x whatever is asked: Original there.
+        assertEquals("True", VideoApply.of(VideoSettings(mapOf(VideoKey.Resolution to "4")), true, scale = 1).coreOptions["mupen64plus-parallel-rdp-vi-aa"])
+        val original = VideoSettings(mapOf(VideoKey.Resolution to "4") + VideoSettings.LOOKS.getValue("original"))
+        assertEquals("original", original.look)
+        assertEquals("True", VideoApply.of(original, true).coreOptions["mupen64plus-parallel-rdp-vi-aa"])
+        assertEquals("sharp", VideoSettings(mapOf(VideoKey.Resolution to "2")).autoLook())
+        assertEquals("original", VideoSettings.DEFAULTS.autoLook())
+        // One row changed away from Auto is Custom.
+        assertEquals("custom", VideoSettings(mapOf(VideoKey.ViAa to "on")).look)
     }
 
     @Test fun glidenGetsItsResolutionFactorOnly() {

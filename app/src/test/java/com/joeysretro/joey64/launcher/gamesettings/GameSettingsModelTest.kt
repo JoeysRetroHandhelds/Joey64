@@ -48,7 +48,7 @@ class GameSettingsModelTest {
         assertEquals(2, s.count(GamePart.Video)) // Look counts as one, though it sets five filter rows
         assertEquals(listOf(
             GameChange(GamePart.Video, "Resolution", "2x", "Native (1x)", "res"),
-            GameChange(GamePart.Video, "Look", "Sharp", "Original", "filters:look"),
+            GameChange(GamePart.Video, "Look", "Sharp", "Auto · Original", "filters:look"),
             GameChange(GamePart.Audio, "Volume", "60%", "100%", "Volume")), s.changes)
         assertEquals(setOf(GamePart.Video, GamePart.Audio), model().parts(banjo))
     }

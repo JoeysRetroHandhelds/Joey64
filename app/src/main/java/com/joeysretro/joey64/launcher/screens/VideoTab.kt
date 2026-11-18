@@ -262,7 +262,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
             (when (k) { VideoKey.Brightness -> "Brightness"; VideoKey.Contrast -> "Contrast"; VideoKey.Saturation -> "Saturation"; else -> "Gamma" }) to
                 VideoSettings.colourLabel(k, v.int(k)) })
         focused == "shp" -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOf("Sharpening" to sharpenValue(v)))
-        focused == "filt" -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOf("Look" to lookLabel(v)))
+        focused == "filt" -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOf("Look" to lookLabel(v, at = true)))
         focused == "tex" -> texInfo
         focused == "crop" -> com.joeysretro.joey64.launcher.components.PanelInfo(title, help, lines = listOf("Trim the game's border" to VideoChoices.label(VideoKey.Trim, v[VideoKey.Trim]),
             "Crop edges" to com.joeysretro.joey64.video.GameCrop.label(gameCode, v)))
@@ -361,7 +361,7 @@ fun VideoTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((Contr
         is VPopup.Filters -> FiltersPopup(v, p.row, { dot(it) }, onDismiss = { popup = null },
             onLook = { popup = VPopup.Look },
             onChoice = { k, row -> popup = VPopup.Choice(k, VPopup.Filters(row)) },
-            onToggle = { k -> set(k, if (k == VideoKey.Deinterlace) (if (v[k] == "bob") "weave" else "bob") else if (v.on(k)) "off" else "on") })
+            onToggle = { k -> set(k, if (k == VideoKey.Deinterlace) (if (v[k] == "bob") "weave" else "bob") else if (v.filterOn(k)) "off" else "on") })
         is VPopup.Extra -> {
             val key = if (p.kind == ExtraKind.Widescreen) VideoKey.Widescreen else VideoKey.Fps
             val x = extras
@@ -385,7 +385,7 @@ private val COLOUR_ROW_KEYS = COLOUR_KEYS + VideoKey.ColourBlind
 private val SHADER_KEYS = listOf(VideoKey.Shader, VideoKey.ShaderParams, VideoKey.ShaderScale, VideoKey.SlangParams)
 private val SIDES_KEYS = listOf(VideoKey.Sides, VideoKey.SidesImage, VideoKey.SidesPlace, VideoKey.SidesRa, VideoKey.SidesRaOther)
 private val OVERLAY_KEYS = listOf(VideoKey.Overlay, VideoKey.OverlayImage, VideoKey.OverlayOpacity)
-private fun lookLabel(v: VideoSettings) = VideoChoices.look.firstOrNull { it.value == v.look }?.label ?: "Custom"
+private fun lookLabel(v: VideoSettings, at: Boolean = false) = v.lookLabel(at)
 
 private sealed class VPopup {
     /** [row]: the tab row it opened from, whose description is the popup's subtitle (review sheet L9). */
@@ -718,11 +718,12 @@ private fun FiltersPopup(v: VideoSettings, startRow: String, own: (VideoKey) -> 
                          onChoice: (VideoKey, String) -> Unit, onToggle: (VideoKey) -> Unit) {
     var row by remember { mutableStateOf(startRow) }
     val native = v.int(VideoKey.Resolution) == 1
-    val look = VideoChoices.look.firstOrNull { it.value == v.look }?.label ?: "Custom"
+    val look = lookLabel(v)
     @Composable
     fun toggle(id: String, label: String, k: VideoKey) {
         val dim = native && k in VideoKey.UPSCALE_ONLY
-        JoeyRow(label, Modifier.initialFocus(startRow == id), value = VideoChoices.label(k, v[k]), enabled = !dim, sideways = true, dot = own(k),
+        JoeyRow(label, Modifier.initialFocus(startRow == id),
+            value = if (v[k] == VideoSettings.AUTO) (if (v.filterOn(k)) "On" else "Off") else VideoChoices.label(k, v[k]), enabled = !dim, sideways = true, dot = own(k),
             onFocused = { if (it) row = id }) { if (k == VideoKey.Supersample) onChoice(k, id) else onToggle(k) }
     }
     JoeyDialog(onDismiss = onDismiss, width = 680.dp, hints = listOf(Hint("A", "Change"), Hint("B", "Back"))) {
@@ -744,7 +745,9 @@ private fun FiltersPopup(v: VideoSettings, startRow: String, own: (VideoKey) -> 
             Spacer(Modifier.height(6.dp))
             val upscaleNote = if (native) " Only with Resolution 2x or more." else ""
             when (row) {
-                "look" -> DescriptionLine("Look", "Original is the N64's own soft picture. Sharp turns off edge smoothing and soft scaling. Sharper also turns off dither smoothing, so the dither grain shows.")
+                "look" -> DescriptionLine("Look", if (native) "At Native, Auto keeps the N64's own edge smoothing and soft scaling: without them edges are jagged at this size."
+                    else "Auto is Sharp at 2x and up, Original at Native, where edge smoothing hides jagged edges. Original is the N64's own soft "
+                    + "picture. Sharp turns off edge smoothing and soft scaling; Sharper, dither smoothing too.")
                 "aa" -> DescriptionLine("Edge smoothing", "The N64's anti-aliasing on the edges of 3D shapes.")
                 "bil" -> DescriptionLine("Soft scaling", "The N64's smooth scaling of the picture to the TV. Off is sharper.")
                 "dith" -> DescriptionLine("Dither smoothing", "Blurs away the dither pattern games use for colour. Off shows the grain.")

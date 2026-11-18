@@ -189,7 +189,7 @@ class GameSettingsModel(private val video: VideoStore, private val emu: EmuStore
     }
 
     private fun colour(v: VideoSettings) = if (COLOUR.all { v[it] == it.default }) "Default" else "Changed"
-    private fun look(v: VideoSettings) = VideoChoices.look.firstOrNull { it.value == v.look }?.label ?: "Custom"
+    private fun look(v: VideoSettings) = v.lookLabel()
 
     private companion object {
         val COLOUR = listOf(VideoKey.Brightness, VideoKey.Contrast, VideoKey.Saturation, VideoKey.Gamma)
