@@ -1377,6 +1377,16 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             if (e[k] == emuAtStart[k]) continue
             out += Triple("e:" + k.name, startRowName(k.name), com.joeysretro.joey64.emulation.EmuChoices.label(k, e[k]))
         }
+        // A Transfer Pak picked or changed in game (approved paksmenu mockup 2026-11-17, screen 7): its Game Boy game
+        // loads only when the game starts. Going back to what started, or to no Transfer Pak, needs nothing.
+        tpakAtStart?.let { was ->
+            val now = controlsStore.forGame(saveName).players
+            for (i in 0..3) {
+                val key = com.joeysretro.joey64.controls.PakSummary.transferKey(now[i])
+                if (key.isEmpty() || key == was[i]) continue
+                out += Triple("t:$i", "Player ${i + 1}'s Transfer Pak", now[i].gbGame?.let { com.joeysretro.joey64.controls.GameBoyFiles.title(it.name) } ?: "")
+            }
+        }
         val start = audioAtStart
         if (start != null) {
             val a = com.joeysretro.joey64.audio.AudioStore(this).forGame(saveName)
@@ -1409,7 +1419,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         for ((id, _, value) in pending) restartAsked[id] = value
         val names = pending.map { (_, name, value) -> "$name ($value)" }
         val list = if (names.size == 1) names[0] else names.dropLast(1).joinToString(", ") + " and " + names.last()
-        overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Restart("$list ${if (names.size == 1) "applies" else "apply"} when the game next starts.")
+        // Only a Transfer Pak change: the approved line (paksmenu mockup screen 7).
+        val sub = if (pending.all { it.first.startsWith("t:") }) "The Transfer Pak's Game Boy game loads when the game starts."
+            else "$list ${if (names.size == 1) "applies" else "apply"} when the game next starts."
+        overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Restart(sub)
         return true
     }
 
@@ -2040,6 +2053,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun transferPak(saveName: String): List<Pair<String, String>>? {
         if (saveName.isEmpty()) return null
         val set = try { controlsStore.forGame(saveName) } catch (e: Exception) { return null }
+        tpakAtStart = set.players.map { com.joeysretro.joey64.controls.PakSummary.transferKey(it) }
         val paks = set.players.mapIndexed { i, p ->
             val game = p.gbGame
             if (p.device == DeviceChoice.None || p.pak != Pak.Transfer || game == null) return@mapIndexed "" to ""
@@ -2619,6 +2633,17 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             reloadControls()
             if (menuOpen) overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Menu(com.joeysretro.joey64.launcher.ingame.MenuRow.Controls)
         }
+        override fun openPaks() {
+            val st = states ?: return
+            overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Paks(st.saveName)
+        }
+        override fun closePaks() {
+            reloadControls()
+            if (menuOpen) overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Menu(com.joeysretro.joey64.launcher.ingame.MenuRow.Paks)
+        }
+        // What each player's pak is now (reloadControls keeps [paks] resolved), null for a player with no controller.
+        override val paksLabel: String get() = com.joeysretro.joey64.controls.PakSummary.label(
+            controls.players.mapIndexed { i, p -> if (p.device == DeviceChoice.None) null else paks[i] })
         override fun backToMenu(from: com.joeysretro.joey64.launcher.ingame.MenuRow) {
             overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Menu(from)
         }
@@ -3655,6 +3680,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         JLog.i(TAG, "controls: changed in game, " + controls.players.mapIndexed { i, p -> "P${i + 1} ${deviceLabel(p.device)} (${paks[i].name})" }.joinToString(", "))
     }
     private val paks = Array(4) { Pak.Controller }
+    /** Each player's Transfer Pak as the game started with it (PakSummary.transferKey); null before the start read it. */
+    @Volatile private var tpakAtStart: List<String>? = null
     private var lastRom: String? = null
 
     // ---- Controller disconnected (approved problem screens, scratchpad build_problems2.py, 2026-11-08, screen 4) ------

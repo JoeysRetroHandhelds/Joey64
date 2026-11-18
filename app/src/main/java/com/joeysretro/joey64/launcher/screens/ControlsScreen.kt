@@ -871,7 +871,7 @@ private fun faceFor(dev: android.view.InputDevice?): AutoMap.FaceCodes? = when {
     else -> PadDevices.face(dev)
 }
 
-private fun deviceName(d: DeviceChoice) = when (d) {
+internal fun deviceName(d: DeviceChoice) = when (d) {
     DeviceChoice.BuiltIn -> "Built-in controls"
     DeviceChoice.None -> "None"
     is DeviceChoice.Pad -> d.name
@@ -924,7 +924,7 @@ private fun withHold(setup: PlayerSetup, code: Int?, face: AutoMap.FaceCodes?): 
     return s.copy(cHold = code?.let { PadInput.Key(it) })
 }
 
-private fun pakValue(p: Pak, auto: Pak?, setup: PlayerSetup? = null) = when {
+internal fun pakValue(p: Pak, auto: Pak?, setup: PlayerSetup? = null) = when {
     p == Pak.Auto && auto != null -> "Auto · ${auto.label}"
     // "Transfer Pak · Pokémon Gold (USA)" on the page (approved paks mockup screen 4a).
     p == Pak.Transfer && setup != null -> "Transfer Pak · " + (setup.gbGame?.let { GameBoyFiles.title(it.name) } ?: "No game")
@@ -947,9 +947,9 @@ private fun rumbleStrengthWorks(context: android.content.Context, dev: android.v
 }
 
 /** A Controller-Pak-only game's greyed Rumble Pak (PakDb.resolve). */
-private const val NO_RUMBLE = "This game has no Rumble Pak support: it gets the Controller Pak"
+internal const val NO_RUMBLE ="This game has no Rumble Pak support: it gets the Controller Pak"
 
-private fun pakDetail(p: Pak) = when (p) {
+internal fun pakDetail(p: Pak) = when (p) {
     Pak.Auto -> "The Rumble Pak for games that use one, else the Controller Pak"
     Pak.Controller -> "For games that save to the pak"
     Pak.Rumble -> "Vibrates the controller, or this device"

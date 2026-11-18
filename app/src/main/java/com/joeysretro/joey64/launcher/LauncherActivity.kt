@@ -458,12 +458,19 @@ private fun LauncherApp(model: LibraryModel, importModel: ImportModel, fzModel: 
                                         com.joeysretro.joey64.launcher.screens.GameSettingsScreen(gameSettingsFor!!, onHints = { settingsHints = it }) { backFromGamePage { model.closeGameSettings(back = true) } }
                                     }
                                 }
+                                // Saves | Screenshots, one page with two tabs (approved paksmenu mockup 2026-11-17, screen 2).
                                 savesFor != null -> androidx.compose.runtime.key(savesFor) {
-                                    com.joeysretro.joey64.launcher.screens.SavesScreen(savesFor!!, onHints = { settingsHints = it },
-                                        onPlay = { which, casual -> model.playWith(savesFor!!.game, which, casual) { intent -> context.startActivity(intent) } }) { backFromGamePage { model.closeSaves(back = true) } }
+                                    com.joeysretro.joey64.launcher.screens.SavesTabsHost(savesFor!!, 0, { model.savesTab(it) }, { settingsHints = it }) { hints, tabs ->
+                                        com.joeysretro.joey64.launcher.screens.SavesScreen(savesFor!!, onHints = hints,
+                                            onPlay = { which, casual -> model.playWith(savesFor!!.game, which, casual) { intent -> context.startActivity(intent) } },
+                                            tabs = tabs) { backFromGamePage { model.closeSaves(back = true) } }
+                                    }
                                 }
                                 screenshotsFor != null -> androidx.compose.runtime.key(screenshotsFor) {
-                                    com.joeysretro.joey64.launcher.screens.ScreenshotsScreen(screenshotsFor!!, onHints = { settingsHints = it }) { backFromGamePage { model.closeScreenshots(back = true) } }
+                                    com.joeysretro.joey64.launcher.screens.SavesTabsHost(screenshotsFor!!, 1, { model.savesTab(it) }, { settingsHints = it }) { hints, tabs ->
+                                        com.joeysretro.joey64.launcher.screens.ScreenshotsScreen(screenshotsFor!!, onHints = hints, tabs = tabs,
+                                            onEmpty = { model.savesTab(0) }) { backFromGamePage { model.closeScreenshots(back = true) } }
+                                    }
                                 }
                                 cheatsFor != null -> androidx.compose.runtime.key(cheatsFor) {
                                     com.joeysretro.joey64.launcher.screens.CheatsScreen(cheatsFor!!, onHints = { settingsHints = it }) { backFromGamePage { model.closeCheats(back = true) } }

@@ -85,7 +85,11 @@ private sealed interface ShotPopup {
  * Share (Android's share sheet) and Delete (asks, Keep it focused).
  */
 @Composable
-fun ScreenshotsScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onClose: () -> Unit) {
+fun ScreenshotsScreen(g: SavesGame, onHints: (List<Hint>) -> Unit,
+                      /** The Saves | Screenshots tab row under the header (approved paksmenu mockup 2026-11-17, screen 2). */
+                      tabs: (@Composable () -> Unit)? = null,
+                      /** The last one deleted: with the tabs, back to Saves rather than the library. */
+                      onEmpty: (() -> Unit)? = null, onClose: () -> Unit) {
     val context = LocalContext.current
     val c = JoeyTheme.colors
     val s = JoeyTheme.spacing
@@ -114,7 +118,7 @@ fun ScreenshotsScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onClose: () -
     // After each read (a delete changes the grid): land on the page again, not the rail.
     LaunchedEffect(l) { if (l != null) landing?.arm() }
     // Nothing left (the last one deleted): back to the library.
-    LaunchedEffect(l) { if (l != null && l.isEmpty()) onClose() }
+    LaunchedEffect(l) { if (l != null && l.isEmpty()) (onEmpty ?: onClose)() }
 
     fun share(shot: GameScreenshots.Shot) {
         popup = null
@@ -128,7 +132,11 @@ fun ScreenshotsScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onClose: () -
 
     val now = System.currentTimeMillis()
     Column(Modifier.fillMaxSize().padding(horizontal = s.margin).padding(top = 14.dp, bottom = 8.dp)) {
-        PageHeader("Screenshots") { InfoChip("${com.joeysretro.joey64.launcher.components.gameName(g.game.title)} · ${l?.size ?: 0}", R.drawable.ic_camera) }
+        if (tabs != null) {
+            PageHeader("Saves") { InfoChip(com.joeysretro.joey64.launcher.components.gameName(g.game.title), R.drawable.ic_device_floppy) }
+            tabs()
+            Spacer(Modifier.height(12.dp))
+        } else PageHeader("Screenshots") { InfoChip("${com.joeysretro.joey64.launcher.components.gameName(g.game.title)} · ${l?.size ?: 0}", R.drawable.ic_camera) }
         if (l == null || l.isEmpty()) return@Column
         // As many across as fit, like the covers: tiles at least 180 dp wide.
         // Each picture's size in pixels, read with its tile: the description line shows it once it's in.

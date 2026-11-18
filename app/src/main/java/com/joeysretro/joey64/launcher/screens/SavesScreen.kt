@@ -103,7 +103,9 @@ private fun shortName(t: String) = t.substringBefore(" (").ifBlank { t }
  * picture, size and date. A on a state: Play from here, Delete (asks). States have no Rename (the drawing has none).
  */
 @Composable
-fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (load: String?, casual: Boolean) -> Unit, onClose: () -> Unit) {
+fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (load: String?, casual: Boolean) -> Unit,
+                /** The Saves | Screenshots tab row under the header (approved paksmenu mockup 2026-11-17, screen 2). */
+                tabs: (@Composable () -> Unit)? = null, onClose: () -> Unit) {
     val context = LocalContext.current
     val c = JoeyTheme.colors
     val s = JoeyTheme.spacing
@@ -155,6 +157,7 @@ fun SavesScreen(g: SavesGame, onHints: (List<Hint>) -> Unit, onPlay: (load: Stri
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().padding(horizontal = s.margin).padding(top = 14.dp, bottom = 8.dp)) {
         PageHeader("Saves") { InfoChip(com.joeysretro.joey64.launcher.components.gameName(g.game.title), R.drawable.ic_device_floppy) }
+        tabs?.invoke()
         Spacer(Modifier.height(12.dp))
         if (d == null) return@Column
         val hasSave = d.saves.isNotEmpty()

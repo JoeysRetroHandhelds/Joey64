@@ -62,6 +62,8 @@ sealed interface PauseScreen {
     data class Picker(val save: Boolean, val slots: List<SlotView>, val focus: Int) : PauseScreen
     /** Controls over the paused game (Phase 4, mockup 11), set to the game [saveName]. B goes back to the menu. */
     data class Controls(val saveName: String) : PauseScreen
+    /** Paks over the paused game (approved paksmenu mockup 2026-11-17, screen 6), set to [saveName]. B goes back to the menu. */
+    data class Paks(val saveName: String) : PauseScreen
     /** Cheats over the paused game (Phase 6) for [game]. B goes back to the menu; the game takes the changes on resume. */
     /** The game's achievements over the paused game (Phase 7), on the row with [focusId] when a tap opened it. B goes back to the menu. */
     /** [toGame]: opened by the Achievements hotkey, so B goes back to the game. */
@@ -147,7 +149,7 @@ object GpuTrialCard {
 /** What the Controller disconnected popup's rows do. */
 enum class DisconnectChoice { BuiltIn, Touch, WithoutThem, Quit }
 
-enum class MenuRow { Resume, Save, Load, GameSettings, Controls, Cheats, Hardcore, Achievements }
+enum class MenuRow { Resume, Save, Load, GameSettings, Controls, Paks, Cheats, Hardcore, Achievements }
 
 /** One cell of the slot picker. [savedAt] null: nothing in the slot. [picture]: the PNG beside the state, if any. */
 data class SlotView(val slot: Int, val name: String, val savedAt: Long?, val picture: ImageBitmap?)
@@ -167,6 +169,12 @@ interface PauseActions {
     fun restartNow()
     fun restartLater()
     fun openControls()
+    /** Paks (approved paksmenu mockup 2026-11-17, screens 5-6): the card over the paused game. */
+    fun openPaks() {}
+    /** Back from Paks to the menu; Controller, Rumble Pak and None take effect when the game resumes. */
+    fun closePaks() {}
+    /** The menu's Paks value: "Rumble Pak", or "P1 Rumble · P2 Transfer". */
+    val paksLabel: String get() = ""
     /** Back from Controls to the menu; what changed there takes effect when the game resumes. */
     fun closeControls()
     fun openCheats()
@@ -237,6 +245,10 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
     }
     if (screen is PauseScreen.Controls) {
         com.joeysretro.joey64.launcher.screens.InGameControls(screen.saveName, title) { actions.closeControls() }
+        return
+    }
+    if (screen is PauseScreen.Paks) {
+        com.joeysretro.joey64.launcher.screens.PaksPopup(screen.saveName, com.joeysretro.joey64.launcher.components.gameName(title)) { actions.closePaks() }
         return
     }
     if (screen is PauseScreen.Cheats) {
@@ -339,6 +351,9 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
                 JoeyOption("Game settings", Modifier.initialFocus(screen.from == MenuRow.GameSettings),
                     value = androidx.compose.runtime.remember(screen) { actions.gameSettingsLabel } + "  ›") { actions.openGameSettings() }
                 JoeyOption("Controls", Modifier.initialFocus(screen.from == MenuRow.Controls), value = "›") { actions.openControls() }
+                // Approved paksmenu mockup 2026-11-17, screen 5: after Controls; nothing else moves.
+                JoeyOption("Paks", Modifier.initialFocus(screen.from == MenuRow.Paks),
+                    value = androidx.compose.runtime.remember(screen) { actions.paksLabel } + "  ›") { actions.openPaks() }
                 if (room) NetBlockedRow("Cheats")
                 else if (hardcore == true) com.joeysretro.joey64.launcher.components.JoeyRow("Cheats", Modifier.initialFocus(screen.from == MenuRow.Cheats),
                     value = "›", enabled = false, lock = true) {}
@@ -380,7 +395,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
                     detail = "Keeps where you are, then starts again from there") { actions.restartNow() }
                 com.joeysretro.joey64.launcher.components.JoeyRow("Later", detail = "Keep playing as it is") { actions.restartLater() }
             }
-            is PauseScreen.Controls, is PauseScreen.Cheats, is PauseScreen.Achievements, is PauseScreen.GameSettings, PauseScreen.SignIn,
+            is PauseScreen.Controls, is PauseScreen.Paks, is PauseScreen.Cheats, is PauseScreen.Achievements, is PauseScreen.GameSettings, PauseScreen.SignIn,
             is PauseScreen.Disconnected, is PauseScreen.NewPad, is PauseScreen.NoSpace, is PauseScreen.NetPaused, is PauseScreen.NetOutOfStep, is PauseScreen.NetLeft,
             is PauseScreen.GpuTry, is PauseScreen.GpuNone, PauseScreen.HardcoreOn -> {}
         }

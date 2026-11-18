@@ -908,11 +908,21 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
     fun closeSaves(back: Boolean = false) { _savesFor.value = null; pageClosed(back) }
     fun openScreenshots(game: LibraryGame, failed: () -> Unit = {}) = openWithSaveName(game, "screenshots", _screenshotsFor, failed)
     fun closeScreenshots(back: Boolean = false) { _screenshotsFor.value = null; pageClosed(back) }
+    /** Saves' tab row (approved paksmenu mockup 2026-11-17, screen 2): 0 Saves, 1 Screenshots, the same game. */
+    fun savesTab(tab: Int) {
+        val g = _savesFor.value ?: _screenshotsFor.value ?: return
+        if (tab == 1) { _savesFor.value = null; _screenshotsFor.value = g } else { _screenshotsFor.value = null; _savesFor.value = g }
+    }
 
     /** The options' Saves and Screenshots values: the game's states ("3 states") and its screenshots; null when it has no readable file. */
     data class SavesCounts(val states: Int, val screenshots: Int) {
         val statesLabel get() = when (states) { 0 -> "No save states"; 1 -> "1 save state"; else -> "$states save states" }
+        /** The options' Saves row since Screenshots became its tab (approved paksmenu mockup 2026-11-17, screen 1). */
+        val optionsLabel get() = statesLabel + when (screenshots) { 0 -> ""; 1 -> " · 1 screenshot"; else -> " · $screenshots screenshots" }
     }
+
+    /** The game's save name (what its saves and settings files are named after); null when it has no readable file. */
+    suspend fun saveNameOf(game: LibraryGame): String? = withContext(Dispatchers.IO) { launcher.saveNameFor(game) }
 
     suspend fun savesCounts(game: LibraryGame): SavesCounts? = withContext(Dispatchers.IO) {
         val app = getApplication<Application>()

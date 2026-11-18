@@ -89,6 +89,14 @@ fun GamePopups(game: LibraryGame, popup: GamePopup, model: LibraryModel, onPopup
     var from by remember { mutableStateOf<GamePopup?>(null) }
     // Read again after a Box art choice, so the popup shows the new cover.
     var version by remember { mutableIntStateOf(0) }
+    // Paks (approved paksmenu mockup 2026-11-17, screens 1 and 3): its card takes this one's place, B comes back to the row.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var paksOpen by remember(game.id) { mutableStateOf(false) }
+    var paksBack by remember(game.id) { mutableStateOf(false) }
+    val saveName by produceState<String?>(null, game.id) { value = model.saveNameOf(game) }
+    val paksValue by produceState<String?>(null, game.id, saveName, paksOpen) {
+        value = saveName?.let { n -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { paksLabel(context, n) } }
+    }
     val details by produceState<GameDetails?>(null, game.id, version) { value = model.details(game) }
     val inDetails = popup == GamePopup.Details
     // Achievements only while signed in to RetroAchievements (approved: no signed-out state).
@@ -111,6 +119,11 @@ fun GamePopups(game: LibraryGame, popup: GamePopup, model: LibraryModel, onPopup
     val versions = model.arranged.collectAsState().value?.versions?.get(game.id)
     // New collection and Change box art take this card's place, and B comes back to it (F2 audit 4-5, Joey
     // 2026-11-12): one card at a time. Back on Add to collection focus lands on New collection…; on Details, the cover.
+    if (paksOpen) {
+        val n = saveName
+        if (n == null) paksOpen = false
+        else { PaksPopup(n, com.joeysretro.joey64.launcher.components.gameName(game.title)) { paksOpen = false; paksBack = true }; return }
+    }
     if (naming) {
         NamePopup("New collection", "", "${com.joeysretro.joey64.launcher.components.gameName(game.title)} goes in it", null, model, onDismiss = { naming = false; backToNew = true }) { name ->
             model.newCollection(name, game)
@@ -149,7 +162,7 @@ fun GamePopups(game: LibraryGame, popup: GamePopup, model: LibraryModel, onPopup
             else PopupTitle(com.joeysretro.joey64.launcher.components.gameName(game.title))
             when (popup) {
                 GamePopup.Options -> {
-                    JoeyOption("Play", modifier = Modifier.initialFocus(from == null && back == null)) { onPopup(null); onPlay() }
+                    JoeyOption("Play", modifier = Modifier.initialFocus(from == null && back == null && !paksBack)) { onPopup(null); onPlay() }
                     // Approved mockup 3: which copy this is, and the game's other copies.
                     versions?.let { v ->
                         val label = model.versionLabels(v).getOrNull(v.copies.indexOfFirst { it.id == game.id })?.ifEmpty { null }
@@ -166,27 +179,19 @@ fun GamePopups(game: LibraryGame, popup: GamePopup, model: LibraryModel, onPopup
                     if (gameSettings != null || !settingsRead) JoeyOption("Game settings", modifier = at("settings"),
                         value = gameSettings?.let { "$it  ›" } ?: "›") {
                         model.openGameSettings(game) { onPopup(null) }; model.openedFromOptions(game.id, "settings") }
+                    // Approved paksmenu mockup 2026-11-17, screen 1: under Game settings; only once the game's file is known.
+                    if (saveName != null) JoeyOption("Paks", modifier = Modifier.initialFocus(paksBack && from == null),
+                        value = (paksValue ?: "") + "  ›") { paksOpen = true }
                     com.joeysretro.joey64.launcher.components.PopupDivider()
                     JoeyOption("Cheats", modifier = at("cheats"), value = "›") { model.openCheats(game) { onPopup(null) }; model.openedFromOptions(game.id, "cheats") }
                     // no onPopup(null): see openCheats
                     if (signedIn) JoeyOption("Achievements", modifier = at("achievements"), value = "›") {
                         model.openAchievements(game); model.openedFromOptions(game.id, "achievements") }
-                    // Saves always opens (on the empty save when there's none); Screenshots is grey with none.
-                    if (counts == null && !countsRead) {
-                        // Still reading: the two rows hold their places.
-                        JoeyOption("Saves", modifier = at("saves"), value = "›") {
-                            model.openSaves(game) { onPopup(null) }; model.openedFromOptions(game.id, "saves") }
-                        JoeyOption("Screenshots", value = "", enabled = false) {}
-                    }
-                    counts?.let { n ->
-                        JoeyOption("Saves", modifier = at("saves"), value = "${n.statesLabel}  ›") {
-                            model.openSaves(game) { onPopup(null) }; model.openedFromOptions(game.id, "saves") }
-                        // Back from Screenshots after deleting the last one, the row is greyed: focus then starts on Play.
-                        JoeyOption("Screenshots", modifier = at("screenshots").takeIf { n.screenshots > 0 } ?: Modifier,
-                            value = if (n.screenshots > 0) "${n.screenshots}  ›" else "None", enabled = n.screenshots > 0) {
-                            if (n.screenshots > 0) { model.openScreenshots(game) { onPopup(null) }; model.openedFromOptions(game.id, "screenshots") }
-                        }
-                    }
+                    // Saves always opens (on the empty save when there's none). Screenshots is its second tab (approved
+                    // paksmenu mockup 2026-11-17, screens 1-2): the row says both counts.
+                    if (counts != null || !countsRead) JoeyOption("Saves", modifier = at("saves").then(at("screenshots")),
+                        value = (counts?.optionsLabel?.let { "$it  ›" } ?: "›")) {
+                        model.openSaves(game) { onPopup(null) }; model.openedFromOptions(game.id, "saves") }
                     com.joeysretro.joey64.launcher.components.PopupDivider()
                     JoeyOption("Add to collection", modifier = Modifier.initialFocus(from == GamePopup.Collections), value = "›") {
                         from = GamePopup.Collections; onPopup(GamePopup.Collections)
