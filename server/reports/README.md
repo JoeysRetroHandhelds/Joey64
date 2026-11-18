@@ -108,6 +108,9 @@ wrangler d1 execute joey64-reports --remote --file queries/missing-covers.sql
 
 `--local` runs it on the database `test/local-run.sh` made.
 
+Session logs: since 2026-11-18 the app sends them gzipped in base64 behind `gz1:` (`ReportJson.packLog`), so a
+report holds several; `python -I devtools/report-log.py` (`--last N`, `--md5`, `--out <folder>`) prints them unpacked.
+
 ## Deploy
 
 `wrangler deploy`, after `npm test`, `sh test/local-run.sh` and `sh test/local-state.sh` (POST /v1/state with joey64-data's wanted list served on this PC). Schema changes: new tables and indexes go in

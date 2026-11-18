@@ -57,19 +57,20 @@ class NetReportsTest {
         assertFalse(n.has("name"))
         assertFalse(n.has("end"))
         assertFalse(s.has("maskNames"))
-        assertEquals("a\n b", s.getString("log"))
+        assertTrue(s.getString("log").startsWith(ReportJson.PACKED))
+        assertEquals("a\n b", ReportJson.unpackLog(s.getString("log")))
         assertNull(ReportJson.session(JSONObject(base.toString()).put("netplay", JSONObject().put("role", "x")), null)!!.optJSONObject("netplay"))
     }
 
     @Test fun excerptKeepsTheRoomLinesAndHidesNames() {
-        val lines = (1..400).map { if (it == 10) "I playtogether: Joey Smith (Odin2) joined as player 2" else if (it == 20) "I netplay: connected to 8.8.8.8" else "line $it" } +
+        val lines = (1..600).map { if (it == 10) "I playtogether: Joey Smith (Odin2) joined as player 2" else if (it == 20) "I netplay: connected to 8.8.8.8" else "line $it" } +
             "E core: crash in /storage/emulated/0/ROMs/Joey Smith/mk.z64"
         val x = ReportSender.excerpt(lines, listOf("Joey Smith"))
-        assertTrue(x.startsWith("I playtogether: <player> (Odin2) joined as player 2\nI netplay: connected to <public address>\n...\nline 152"))
+        assertTrue(x.startsWith("I playtogether: <player> (Odin2) joined as player 2\nI netplay: connected to <public address>\n...\nline 202"))
         assertFalse(x.contains("Joey Smith"))
         assertFalse(x.contains("8.8.8.8"))
         assertTrue(x.endsWith("E core: crash in <path>"))
-        assertTrue(x.length <= ReportJson.MAX_LOG)
+        assertTrue(x.length <= ReportJson.MAX_RAW_LOG)
     }
 
     @Test fun excerptKeepsEarlierDipsAndFitsWithThemFirst() {
@@ -88,9 +89,28 @@ class NetReportsTest {
         assertTrue(x.startsWith("I joey64host: stats: 59.0 emu fps, run 30.1 ms\nI joey64host: slow frames: 12.0 s 45.0 ms\nI joey64host: clocks: cpu 1843/3187, gpu 401/680\n...\nline "))
         assertFalse(x.contains("hitch: 1 stutters"))
         assertTrue(x.endsWith("line 600 $pad"))
-        assertTrue(x.length <= ReportJson.MAX_LOG)
+        assertTrue(x.length <= ReportJson.MAX_RAW_LOG)
         // The tail is cut at a line start.
         assertTrue(x.substringAfter("...\n").startsWith("line "))
+    }
+
+    @Test fun packedLogsFitAndComeBack() {
+        // A real-looking excerpt at the raw limit packs to well under the server's 16,000, and unpacks to the same text.
+        val lines = (1..400).map { "11-18 17:44:${it % 60} 29163 29202 I joey64host: stats: ${59 + it % 2}.${it % 10} emu fps, run ${it % 7}.${it % 13} ms, wait 0.00 ms, fill 46/30 ms, $it underruns" }
+        val raw = ReportJson.logText(lines.joinToString("\n"))
+        val packed = ReportJson.packLog(raw)
+        assertTrue(packed.startsWith(ReportJson.PACKED))
+        assertTrue("packed ${packed.length}", packed.length < ReportJson.MAX_LOG / 3)
+        assertEquals(raw, ReportJson.unpackLog(packed))
+        assertFalse(Regex("[\\u0000-\\u0008\\u000b-\\u001f\\u007f]").containsMatchIn(packed))
+        // Text that doesn't pack (random) loses lines from the front until it fits.
+        val rnd = java.util.Random(1)
+        val noise = (1..2000).joinToString("\n") { (1..20).map { ('!' + rnd.nextInt(90)) }.joinToString("") }
+        val p2 = ReportJson.packLog(noise)
+        assertTrue(p2.length <= ReportJson.MAX_LOG)
+        assertTrue(noise.endsWith(ReportJson.unpackLog(p2)))
+        // A plain log from an older app reads as it is.
+        assertEquals("plain", ReportJson.unpackLog("plain"))
     }
 
     @Test fun whichSessionsSendTheirLog() {

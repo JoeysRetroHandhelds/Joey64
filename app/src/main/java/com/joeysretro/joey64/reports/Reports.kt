@@ -286,7 +286,7 @@ object ReportJson {
             put("ended", stored.optString("ended").takeIf { it in ENDED } ?: "quit")
             // Added 2026-11-14 (server migrations/0006-netplay-log.sql): the room's figures and the log excerpt.
             stored.optJSONObject("netplay")?.let { n -> netplay(n)?.let { put("netplay", it) } }
-            stored.optString("log").takeIf { it.isNotEmpty() }?.let { put("log", logText(it)) }
+            stored.optString("log").takeIf { it.isNotEmpty() }?.let { put("log", packLog(logText(it))) }
         }
     }
 
@@ -308,11 +308,40 @@ object ReportJson {
     fun wantsLog(o: JSONObject, testing: Boolean): Boolean =
         testing || o.optString("ended") in PROBLEM_ENDED || o.has("netplay") || o.optLong("slowFrames", 0) >= DIP_FRAMES
 
-    /** The log excerpt's most characters (server: 16,000). */
+    /** The log field's most characters as the server takes it (validate.js: 16,000). */
     const val MAX_LOG = 16_000
 
-    /** Line breaks and tabs stay; other control characters go; at most [MAX_LOG], the end kept. */
-    fun logText(s: String): String = s.replace("\r", "").replace(Regex("[\\u0000-\\u0008\\u000b-\\u001f\\u007f]"), " ").takeLast(MAX_LOG)
+    /** The excerpt's most characters before [packLog] (Joey 2026-11-18, "Yes, build both"): packed, about a quarter of [MAX_LOG]. */
+    const val MAX_RAW_LOG = 32_000
+
+    /** Line breaks and tabs stay; other control characters go; at most [MAX_RAW_LOG], the end kept. */
+    fun logText(s: String): String = s.replace("\r", "").replace(Regex("[\\u0000-\\u0008\\u000b-\\u001f\\u007f]"), " ").takeLast(MAX_RAW_LOG)
+
+    /** The marker a packed log starts with: gzip, then base64 (devtools/report-log.py unpacks it). */
+    const val PACKED = "gz1:"
+
+    /**
+     * [text] gzipped and in base64 behind [PACKED], so a session's log takes about a quarter of what it did and a report
+     * holds several (the server takes it as it is: printable, at most [MAX_LOG]). Lines come off the front until it fits.
+     */
+    fun packLog(text: String): String {
+        var t = text
+        while (true) {
+            val bytes = java.io.ByteArrayOutputStream()
+            java.util.zip.GZIPOutputStream(bytes).use { it.write(t.toByteArray(Charsets.UTF_8)) }
+            val packed = PACKED + java.util.Base64.getEncoder().encodeToString(bytes.toByteArray())
+            if (packed.length <= MAX_LOG || t.isEmpty()) return packed
+            val cut = t.length / 4
+            t = t.indexOf('\n', cut).let { if (it < 0) "" else t.substring(it + 1) }
+        }
+    }
+
+    /** [packLog] undone (tests; a log without [PACKED] is plain text from an older app). */
+    fun unpackLog(s: String): String {
+        if (!s.startsWith(PACKED)) return s
+        val bytes = java.util.Base64.getDecoder().decode(s.substring(PACKED.length))
+        return java.util.zip.GZIPInputStream(bytes.inputStream()).use { it.readBytes().toString(Charsets.UTF_8) }
+    }
 
     /** The netplay part as the server takes it: known keys only, numbers in range (validate.js). */
     fun netplay(n: JSONObject): JSONObject? {

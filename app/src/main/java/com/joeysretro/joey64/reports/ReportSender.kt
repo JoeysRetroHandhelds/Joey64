@@ -26,8 +26,12 @@ import java.time.ZoneOffset
 object ReportSender {
     private const val TAG = "Joey64Reports"
     const val SERVER = "https://joey64-reports.joeysretrohandhelds.workers.dev"
-    /** Reports a day the server takes from one install (server/reports/src/store.js, PER_INSTALL_DAY). */
-    private const val MAX_REPORTS = 3
+    /**
+     * Reports a day the server takes from one install (server/reports/src/store.js, PER_INSTALL_DAY): one send may post
+     * this many, more than one for a GPU and driver when its sessions don't fit in one (Joey 2026-11-18, "Yes, build
+     * both": one report a day held about 3 sessions with their logs).
+     */
+    internal const val MAX_REPORTS = 6
     private const val MAX_COVERS = 150
 
     private val sending = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -103,17 +107,24 @@ object ReportSender {
         val devicePrefs = ctx.getSharedPreferences("device", Context.MODE_PRIVATE)
         val plan = mutableListOf<Pair<Pair<String, String>, List<Pair<File, JSONObject>>>>()
         if (groups.isEmpty()) plan += (devicePrefs.getString("report_gpu", "").orEmpty().ifEmpty { systemGpu() } to devicePrefs.getString("report_driver", "").orEmpty()) to emptyList()
-        else for (g in groups.take(MAX_REPORTS)) plan += g.key to g.value
+        else for (g in groups) plan += g.key to g.value
 
         val app = AppUpdates.installedVersion(ctx)
         val core = core(ctx)
         val install = ReportPrefs.install(ctx)
         var anySent = false
         var maxExit = 0L
-        for ((i, step) in plan.withIndex()) {
-            val (gpuDriver, group) = step
+        // Each report: one GPU and driver's sessions. What doesn't fit goes in the next report straight after (same GPU and
+        // driver), up to the server's [MAX_REPORTS] a day; the rest wait for the next day.
+        val queue = ArrayDeque(plan)
+        var posted = 0
+        // Covers go after the sessions; those that don't fit ride in the next report with room, or one of their own.
+        var coversLeft = if (once) emptyList() else coverEvents
+        while ((queue.isNotEmpty() || coversLeft.isNotEmpty()) && posted < MAX_REPORTS) {
+            val i = posted
+            val (gpuDriver, group) = queue.removeFirstOrNull() ?: (plan.first().first to emptyList())
             val crashesHere = if (i == 0 && !once) crashes else emptyList()
-            val coversHere = if (i == 0 && !once) coverEvents else emptyList()
+            val coversHere = coversLeft
             val sessionEvents = group.mapNotNull { (f, o) -> ReportJson.session(o, headers[o.optString("md5")])?.let { f to it } }
                 .take(ReportJson.MAX_EVENTS - crashesHere.size - coversHere.size)
             // Crashes, then sessions oldest first, then covers: what doesn't fit waits for the next report, from the end.
@@ -130,20 +141,28 @@ object ReportSender {
             val sentCovers = coversHere.take((keep - crashesHere.size - sessionEvents.size).coerceAtLeast(0))
             val body = ReportJson.report(install, app, core, device, events.take(keep)).toString()
             val code = post(ctx, body)
-            JLog.i(TAG, "reports: sent ${sentSessions.size} sessions" + (if (i == 0) ", ${sentCovers.size} covers, ${sentCrashes.size} crashes" else "") +
+            posted++
+            JLog.i(TAG, "reports: sent ${sentSessions.size} sessions, ${sentCovers.size} covers" + (if (i == 0) ", ${sentCrashes.size} crashes" else "") +
                 (if (keep < events.size) " (${events.size - keep} more wait: over ${MAX_BODY / 1024} KB)" else "") + ": $code")
             if (code == 204 || code == 400 || code == 413) {
                 // 400: the server can't read it, and it won't later either: dropped, not sent every day. 413 (too big even
                 // after the cut above) the same, so one report can't hold up the ones after it for good (code audit 3, M22).
                 if (code != 204) JLog.e(TAG, "reports: the server refused the report ($code): ${lastError ?: ""}")
                 sentSessions.forEach { it.first.delete() }
+                ReportFiles.coversSent(ctx).appendText(sentCovers.joinToString("") { it.second + "\n" })
+                coversLeft = coversLeft.drop(sentCovers.size)
+                // A report that took no covers though some are left (one too big alone): they wait, or this loops.
+                if (sentCovers.isEmpty() && sentSessions.isEmpty()) coversLeft = emptyList()
                 if (i == 0) {
-                    ReportFiles.coversSent(ctx).appendText(sentCovers.joinToString("") { it.second + "\n" })
                     // Every crash went: past every exit so far. Some wait: past the newest that went, so the rest go next.
                     maxExit = if (sentCrashes.size == crashesHere.size) exits.maxOfOrNull { it.timestamp } ?: 0L
                     else sentCrashes.lastOrNull()?.first?.timestamp ?: 0L
                 }
                 anySent = anySent || code == 204
+                // This GPU and driver's sessions that didn't fit: the next report, now.
+                val sentFiles = sentSessions.map { it.first }.toSet()
+                val left = group.filter { it.first !in sentFiles && it.first.exists() }
+                if (code == 204 && sentSessions.isNotEmpty() && left.isNotEmpty()) queue.addFirst(gpuDriver to left)
             } else {
                 failed = true
                 if (isDayLimit(code, lastError)) { dayLimit = true; JLog.i(TAG, "reports: the server's limit for today (${lastError?.trim()}): the rest go tomorrow") }
@@ -235,12 +254,12 @@ object ReportSender {
     }
 
     /** Lines of a log excerpt: the last ones, and before them the room's own lines from earlier in the process. */
-    private const val LOG_TAIL = 250
+    private const val LOG_TAIL = 400
     private const val LOG_NET = 150
     /** Earlier dip lines kept (slow frames, with their stats and clocks lines: 20 dips' worth). */
     private const val LOG_DIPS = 60
-    /** The most the earlier lines take of the excerpt's [ReportJson.MAX_LOG] characters; the tail gets the rest. */
-    private const val HEAD_MAX = 6_000
+    /** The most the earlier lines take of the excerpt's [ReportJson.MAX_RAW_LOG] characters; the tail gets the rest. */
+    private const val HEAD_MAX = 12_000
 
     /**
      * The excerpt of process [pid]'s session log (LogFiles' "-<pid>-app.log") for a problem or netplay session: its last
@@ -272,7 +291,7 @@ object ReportSender {
             if (h.length <= HEAD_MAX) h else h.substring(h.indexOf('\n', h.length - HEAD_MAX).let { if (it < 0) h.length - HEAD_MAX else it + 1 })
         }
         // The tail gets what the head leaves; cut at a line start, so the earlier lines are never the part that's lost.
-        val room = ReportJson.MAX_LOG - (if (head.isEmpty()) 0 else head.length + 5)
+        val room = ReportJson.MAX_RAW_LOG - (if (head.isEmpty()) 0 else head.length + 5)
         val tail = clean(lines.subList(tailFrom, lines.size).joinToString("\n"), names).let { t ->
             if (t.length <= room) t else t.substring(t.indexOf('\n', t.length - room).let { if (it < 0) t.length - room else it + 1 })
         }
