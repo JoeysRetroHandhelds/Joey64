@@ -115,7 +115,9 @@ static void npPauseStart(const char* np) {
             b[3] = seq >> 24; b[4] = seq >> 16; b[5] = seq >> 8; b[6] = (uint8_t)seq;
             // 0 (not known) once no answer came for 3 s (2026-11-15): over the internet a joiner's ping stayed at its
             // last figure for whole games, and the room counted it in the input delay; with 0 it uses its own TCP figure
-            const bool fresh = smooth >= 0 && clk::now() - answeredAt < std::chrono::seconds(3);
+            // Dev N64_NETPLAY_PING_OFF=1: always 0, as a joiner whose pings go unanswered (tests the room's list fallback)
+            static const bool pingOff = getenv("N64_NETPLAY_PING_OFF") && atoi(getenv("N64_NETPLAY_PING_OFF")) != 0;
+            const bool fresh = !pingOff && smooth >= 0 && clk::now() - answeredAt < std::chrono::seconds(3);
             const int pms = fresh ? std::min(65535, (int)(smooth + 0.5)) : 0;
             b[7] = (uint8_t)(pms >> 8); b[8] = (uint8_t)pms;
             b[9] = (uint8_t)name.size(); memcpy(b + 10, name.data(), name.size());

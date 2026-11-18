@@ -310,6 +310,7 @@ struct Room {
     std::string rosterName[4];
     uint16_t rosterPing[4] = {};
     std::chrono::steady_clock::time_point rosterPingAt[4]; // when that player last reported a ping above 0
+    bool rosterFromPath[4] = {};                          // the list shows the room's round trip for that player now
     // The round trip the lateness counts for each player's game (2026-11-15): its own reported ping while it's under 3 s
     // old and above 0, else the kernel's for the room's TCP connection to it (TCP_INFO, also measured on the internet).
     // A joiner's ping froze over the internet in the 2026-11-12 rooms (0 for a whole game, or 92 ms that never changed),
@@ -341,12 +342,24 @@ struct Room {
         auto now = std::chrono::steady_clock::now();
         if (now - rosterAt < std::chrono::seconds(1)) return;
         rosterAt = now;
+        // The ping shown for each player (2026-11-17, queue step 1 (b)): its own while that's above 0 and under 3 s old,
+        // else the round trip the room measures itself (pathMs: TCP_INFO), so a joiner whose own ping froze or went
+        // unanswered shows its real one, not 0 (the 2026-11-12 rooms: 0 for a whole game). The host's own game: 0 then.
+        updatePaths();
         uint8_t out[512]; size_t k = 2; uint8_t cnt = 0;
         for (int i = 0; i < 4; i++) {
             if (!reg[i].id || disconnected[i]) continue;
             const std::string name = cutUtf8(rosterName[i], 40);
             size_t l = name.size();
-            out[k++] = (uint8_t)i; out[k++] = rosterPing[i] >> 8; out[k++] = (uint8_t)rosterPing[i];
+            const bool own = rosterPing[i] > 0 && now - rosterPingAt[i] < std::chrono::seconds(3);
+            const uint16_t ping = own ? rosterPing[i] : (uint16_t)std::clamp((int)std::lround(pathMs[i]), 0, 65535);
+            if (!own != rosterFromPath[i] && (own || ping > 0)) {
+                rosterFromPath[i] = !own;
+                if (own) NLOGI("netplay server: player %d's list ping is its own again (%u ms)", i + 1, ping);
+                else NLOGI("netplay server: player %d's list ping is the room's round trip (%u ms): its own is %s", i + 1, ping,
+                           rosterPing[i] ? "over 3 s old" : "not known");
+            }
+            out[k++] = (uint8_t)i; out[k++] = ping >> 8; out[k++] = (uint8_t)ping;
             out[k++] = (uint8_t)l; memcpy(out + k, name.data(), l); k += l; cnt++;
         }
         out[0] = 7; out[1] = cnt;
