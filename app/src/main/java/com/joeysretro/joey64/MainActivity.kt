@@ -3573,9 +3573,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val md5 = gameMd5
         val rumbleGames by lazy { PakDb.load(this) }
         val cpOnlyGames by lazy { PakDb.loadControllerOnly(this) }
+        val transferGames by lazy { PakDb.loadTransferAuto(this) }
         for (i in 0..3) {
             val p = controls.players[i]
-            val pak = PakDb.resolve(p.pak, rumbleGames, cpOnlyGames, md5)
+            val pak = PakDb.resolve(p.pak, rumbleGames, transferGames, cpOnlyGames, md5)
             if (p.pak == Pak.Rumble && pak == Pak.Controller)
                 JLog.i(TAG, "P${i + 1}: Rumble Pak picked, this game knows only the Controller Pak: Controller Pak")
             paks[i] = pak
@@ -3670,9 +3671,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val md5 = gameMd5
         val rumbleGames by lazy { PakDb.load(this) }
         val cpOnlyGames by lazy { PakDb.loadControllerOnly(this) }
+        val transferGames by lazy { PakDb.loadTransferAuto(this) }
         for (i in 0..3) {
             val p = controls.players[i]
-            val pak = PakDb.resolve(p.pak, rumbleGames, cpOnlyGames, md5)
+            val pak = PakDb.resolve(p.pak, rumbleGames, transferGames, cpOnlyGames, md5)
             // Live: the game is loaded, and setOption writes the option table the emulation thread reads unlocked.
             if (pak != paks[i]) { paks[i] = pak; NativeBridge.setOptionsLive(arrayOf("mupen64plus-pak${i + 1}"), arrayOf(pak.core!!)) }
         }

@@ -71,6 +71,35 @@ for line in open(names, encoding="utf-8"):
         rumble.append(md5); added += 1
 print(f"{added} No-Intro copies added by title")
 
+# The Pokemon Stadium games: Auto is the Transfer Pak, their only pak (tpakauto.tsv; the ini marks only Transferpak=Yes).
+# Rumble lists (rumble-titles.txt) name both, but neither uses one: on a Rumble Pak (Odin 2 Portal 2026-11-17, a core
+# logging every pak write) Pokemon Stadium (USA) and Stadium 2 (USA) wrote only the Transfer Pak's 0xFE / 0x84 at 0x8000
+# through boot, the Game Pak Check and a whole mini-game, never the Rumble Pak's 0x80 or a motor write at 0xC000.
+# Japan's titles are shifted: "Pocket Monsters Stadium 2" / No-Intro "Pokemon Stadium 2 (Japan)" is the West's Pokemon
+# Stadium, "Kin Gin" the West's Stadium 2, and "Pocket Monsters Stadium" / "Pokemon Stadium (Japan)" the 1998 original,
+# which keeps the Controller Pak (not known either way).
+def stadium(name):
+    if re.match(r"Pokemon Stadium 2? ?\((?!Japan|J\))", name) or re.match(r"(Pocket Monsters|Pokemon) Stadium 2 \((Japan|J)\)", name) \
+            or re.match(r"(Pocket Monsters|Pokemon) Stadium Kin Gin \(", name):
+        return "transfer"
+    return None
+
+transfer_auto = set()
+for md5 in entries:
+    s = stadium(field(md5, "GoodName") or "")
+    if s == "transfer": transfer_auto.add(md5)
+for line in open(names, encoding="utf-8"):
+    parts = line.rstrip("\n").split("\t")
+    if len(parts) < 2 or line.startswith("#"): continue
+    md5, s = parts[0].lower(), stadium(parts[1])
+    if s == "transfer": transfer_auto.add(md5)
+rumble = [m for m in rumble if m not in transfer_auto]
+tauto_out = os.path.join(here, "..", "app", "src", "main", "assets", "tpakauto.tsv")
+with open(tauto_out, "w", newline="\n") as f:
+    f.write("# Games whose Auto pak is the Transfer Pak (Pokemon Stadium): made by devtools/make-pakdb.py\n")
+    for md5 in sorted(transfer_auto): f.write(md5 + "\n")
+print(f"{len(transfer_auto)} Transfer Pak Auto games -> {tauto_out}")
+
 with open(out, "w", newline="\n") as f:
     f.write("# Rumble Pak games for Auto pak: made by devtools/make-pakdb.py from mupen64plus.ini (GPLv2+)\n")
     for md5 in sorted(rumble): f.write(md5 + "\n")

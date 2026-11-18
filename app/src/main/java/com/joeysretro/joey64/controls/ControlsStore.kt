@@ -174,9 +174,24 @@ object PakDb {
         JLog.e("Joey64Controls", "can't read pakdb.tsv: $e"); emptySet()
     }.also { rumble = it }
 
+    @Volatile private var transferAuto: Set<String>? = null
+
+    /** Games whose only pak is the Transfer Pak (assets/tpakauto.tsv: Pokemon Stadium; Joey 2026-11-17). */
+    fun loadTransferAuto(context: Context): Set<String> = transferAuto ?: try {
+        context.assets.open("tpakauto.tsv").bufferedReader().useLines { lines ->
+            lines.map { it.trim().lowercase() }.filter { it.length == 32 && !it.startsWith("#") }.toHashSet()
+        }
+    } catch (e: Exception) {
+        JLog.e("Joey64Controls", "can't read tpakauto.tsv: $e"); emptySet()
+    }.also { transferAuto = it }
+
     /** The pak Auto picks for the game with [md5] (null: unknown, the Controller Pak). */
-    fun auto(rumbleGames: Set<String>, md5: String?): Pak =
-        if (md5 != null && md5.lowercase() in rumbleGames) Pak.Rumble else Pak.Controller
+    fun auto(rumbleGames: Set<String>, transferGames: Set<String>, md5: String?): Pak = when {
+        md5 == null -> Pak.Controller
+        md5.lowercase() in transferGames -> Pak.Transfer
+        md5.lowercase() in rumbleGames -> Pak.Rumble
+        else -> Pak.Controller
+    }
 
     @Volatile private var cpOnly: Set<String>? = null
 
@@ -196,8 +211,8 @@ object PakDb {
     fun controllerOnly(controllerOnlyGames: Set<String>, md5: String?) = md5 != null && md5.lowercase() in controllerOnlyGames
 
     /** The pak [picked] gives the game with [md5]: Auto's pick, and the Controller Pak where a Controller-Pak-only game has the Rumble Pak. */
-    fun resolve(picked: Pak, rumbleGames: Set<String>, controllerOnlyGames: Set<String>, md5: String?): Pak = when {
-        picked == Pak.Auto -> auto(rumbleGames, md5)
+    fun resolve(picked: Pak, rumbleGames: Set<String>, transferGames: Set<String>, controllerOnlyGames: Set<String>, md5: String?): Pak = when {
+        picked == Pak.Auto -> auto(rumbleGames, transferGames, md5)
         picked == Pak.Rumble && controllerOnly(controllerOnlyGames, md5) -> Pak.Controller
         else -> picked
     }

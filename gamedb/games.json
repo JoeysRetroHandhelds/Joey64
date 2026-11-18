@@ -454,6 +454,18 @@
       ]
     },
     {
+      "id": "NPO", "title": "Pokemon Stadium (every copy; Japan's Pocket Monsters Stadium 2)",
+      "settings": [
+        {"what": "Auto pak is the Transfer Pak", "where": "assets/tpakauto.tsv (devtools/make-pakdb.py stadium())", "why": "its only pak; rumble lists name it, but on a Rumble Pak it wrote only the Transfer Pak's 0xFE / 0x84 at 0x8000 through boot, the Game Pak Check and Magikarp's Splash, never 0x80 or a motor write (Odin 2 Portal 2026-11-17, stad2, a core logging every pak write)"}
+      ]
+    },
+    {
+      "id": "NP3", "title": "Pokemon Stadium 2 (every copy; Japan's Pocket Monsters Stadium Kin Gin)",
+      "settings": [
+        {"what": "Auto pak is the Transfer Pak", "where": "assets/tpakauto.tsv (devtools/make-pakdb.py stadium())", "why": "its only pak; rumble lists name it, but on a Rumble Pak it wrote only the Transfer Pak's 0xFE / 0x84 at 0x8000 through boot, the Game Pak Check and Pichu's Power Plant, never 0x80 or a motor write (Odin 2 Portal 2026-11-17, stad2)"}
+      ]
+    },
+    {
       "id": "", "crc": "0000000000000000", "md5": "3f348189bfebc8cd94dc15b8e35c5c42", "title": "Turok - Dinosaur Hunter (USA) (Demo) (Kiosk, E3 1997)",
       "fixed": [
         {"what": "hung before its first frame: the dump is 10,019,568 bytes and the game reads past its end, where CPU reads were open bus", "fix": "core rel3 f6ce435 (a dump that is no whole number of MB reads as zeros up to the next power of two, as PI DMA already did); title screen 'Press Start'", "evidence": "Odin 2 Portal 2026-11-13, default settings, scratchpad blk7/seven.sh (seven/*.png); 82-game A/B blk82-<dev> on the Duo, Odin 3, Odin 2 Portal and Flip: 82/82 on both builds"}

@@ -367,9 +367,16 @@ class ControlsTest {
 
     @Test fun autoPakIsRumbleForTheListedGames() {
         val rumble = setOf("5bd1fe107bf8106b2ab6650abecd54d6")
-        assertEquals(Pak.Rumble, PakDb.auto(rumble, "5BD1FE107BF8106B2AB6650ABECD54D6"))
-        assertEquals(Pak.Controller, PakDb.auto(rumble, "3a67d9986f54eb282924fca4cd5f6dff"))
-        assertEquals(Pak.Controller, PakDb.auto(rumble, null))
+        assertEquals(Pak.Rumble, PakDb.auto(rumble, emptySet(), "5BD1FE107BF8106B2AB6650ABECD54D6"))
+        assertEquals(Pak.Controller, PakDb.auto(rumble, emptySet(), "3a67d9986f54eb282924fca4cd5f6dff"))
+        assertEquals(Pak.Controller, PakDb.auto(rumble, emptySet(), null))
+    }
+
+    @Test fun autoPakIsTheTransferPakForTheTransferList() {
+        val transfer = setOf("0e85a098d0f0e8a7eb572a69612a6873")
+        assertEquals(Pak.Transfer, PakDb.auto(emptySet(), transfer, "0E85A098D0F0E8A7EB572A69612A6873"))
+        assertEquals(Pak.Transfer, PakDb.resolve(Pak.Auto, emptySet(), transfer, emptySet(), "0e85a098d0f0e8a7eb572a69612a6873"))
+        assertEquals(Pak.Controller, PakDb.resolve(Pak.Controller, emptySet(), transfer, emptySet(), "0e85a098d0f0e8a7eb572a69612a6873"))
     }
 
     @Test fun controllerPakOnlyGamesNeverGetTheRumblePak() {
@@ -377,11 +384,11 @@ class ControlsTest {
         val only = f.readLines().map { it.trim().lowercase() }.filter { it.length == 32 }.toSet()
         val cruisn = "00A3E885F8D899646228A21D946B2102" // Cruis'n USA (U) (V1.0): "ERROR ACCESSING PAK!" with a Rumble Pak
         val rayman = "03AA4D09FDE77EED9B95BE68E603D233" // Rayman 2 (U): rumble in Nintendo64EVER's list, missing from the ini
-        assertEquals(Pak.Controller, PakDb.resolve(Pak.Rumble, emptySet(), only, cruisn))
-        assertEquals(Pak.Controller, PakDb.resolve(Pak.Auto, emptySet(), only, cruisn))
-        assertEquals(Pak.None, PakDb.resolve(Pak.None, emptySet(), only, cruisn))
-        assertEquals(Pak.Rumble, PakDb.resolve(Pak.Rumble, emptySet(), only, rayman))
-        assertEquals(Pak.Rumble, PakDb.resolve(Pak.Rumble, emptySet(), only, null))
+        assertEquals(Pak.Controller, PakDb.resolve(Pak.Rumble, emptySet(), emptySet(), only, cruisn))
+        assertEquals(Pak.Controller, PakDb.resolve(Pak.Auto, emptySet(), emptySet(), only, cruisn))
+        assertEquals(Pak.None, PakDb.resolve(Pak.None, emptySet(), emptySet(), only, cruisn))
+        assertEquals(Pak.Rumble, PakDb.resolve(Pak.Rumble, emptySet(), emptySet(), only, rayman))
+        assertEquals(Pak.Rumble, PakDb.resolve(Pak.Rumble, emptySet(), emptySet(), only, null))
     }
 
     @Test fun inputNamesForThePage() {

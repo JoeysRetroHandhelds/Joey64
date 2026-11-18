@@ -38,7 +38,7 @@ private data class PakFacts(val md5: String?, val auto: Pak?, val cpOnly: Boolea
 
 private fun pakFacts(context: Context, saveName: String): PakFacts = try {
     val md5 = LibraryDb.get(context).gameWithFile(saveName, GameStates::saveNameOf)?.md5
-    PakFacts(md5, PakDb.auto(PakDb.load(context), md5), PakDb.controllerOnly(PakDb.loadControllerOnly(context), md5),
+    PakFacts(md5, PakDb.auto(PakDb.load(context), PakDb.loadTransferAuto(context), md5), PakDb.controllerOnly(PakDb.loadControllerOnly(context), md5),
         com.joeysretro.joey64.controls.TransferPakDb.groupOf(com.joeysretro.joey64.controls.TransferPakDb.load(context), md5))
 } catch (e: Exception) { JLog.e(TAG, "paks: can't look up $saveName: $e"); PakFacts(null, null, false, null) }
 
@@ -46,8 +46,8 @@ private fun pakFacts(context: Context, saveName: String): PakFacts = try {
 internal fun paksLabel(context: Context, saveName: String): String {
     val set = ControlsStore(context).forGame(saveName)
     val md5 = pakFacts(context, saveName).md5
-    val rumble = PakDb.load(context); val cpOnly = PakDb.loadControllerOnly(context)
-    return PakSummary.label(set.players.map { p -> if (p.device == DeviceChoice.None) null else PakDb.resolve(p.pak, rumble, cpOnly, md5) })
+    val rumble = PakDb.load(context); val cpOnly = PakDb.loadControllerOnly(context); val transfer = PakDb.loadTransferAuto(context)
+    return PakSummary.label(set.players.map { p -> if (p.device == DeviceChoice.None) null else PakDb.resolve(p.pak, rumble, transfer, cpOnly, md5) })
 }
 
 private sealed interface PaksCard {

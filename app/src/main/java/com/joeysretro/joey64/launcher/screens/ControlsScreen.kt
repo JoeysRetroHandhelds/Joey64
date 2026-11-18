@@ -307,7 +307,7 @@ private fun ControlsContent(game: String?, gameTitle: String?, inGame: Boolean, 
             try {
                 val game = LibraryDb.get(context).gameWithFile(t, GameStates::saveNameOf)
                 val md5 = game?.md5
-                autoPak = PakDb.auto(PakDb.load(context), md5)
+                autoPak = PakDb.auto(PakDb.load(context), PakDb.loadTransferAuto(context), md5)
                 cpOnly = PakDb.controllerOnly(PakDb.loadControllerOnly(context), md5)
                 tpakGroup = com.joeysretro.joey64.controls.TransferPakDb.groupOf(com.joeysretro.joey64.controls.TransferPakDb.load(context), md5)
             } catch (e: Exception) { JLog.e(TAG, "Auto pak: can't look up $t: $e") }
@@ -792,7 +792,7 @@ private fun controlsRowHelp(row: String, setup: PlayerSetup, face: AutoMap.FaceC
         "Stick" -> "Stick" to "What moves the N64 stick."
         "DeadZone" -> "Dead zone" to (if (stickless) "This device has no stick." else "How far the stick moves before the game sees it. Raise it if the game moves on its own.")
         "StickFeel" -> "Stick feel" to (if (stickless) "This device has no stick." else "Range, response curve, octagon gate, invert and more. A opens them, with a live preview.")
-        "Pak" -> "Pak" to "What's in the back of the controller: Auto picks the Rumble Pak for games that use it, else the Controller Pak."
+        "Pak" -> "Pak" to "What's in the back of the controller: Auto picks the Rumble Pak for games that use it, the Transfer Pak for Pokémon Stadium, else the Controller Pak."
         "RumbleOn" -> "Rumble on" to "Where the Rumble Pak's shaking goes."
         "RumbleStrength" -> "Rumble strength" to "How hard it shakes. Some motors only have full strength."
         "Tap" -> "Tap to hold" to "Ticked buttons stay held after a tap until the next tap."
@@ -950,7 +950,7 @@ private fun rumbleStrengthWorks(context: android.content.Context, dev: android.v
 internal const val NO_RUMBLE ="This game has no Rumble Pak support: it gets the Controller Pak"
 
 internal fun pakDetail(p: Pak) = when (p) {
-    Pak.Auto -> "The Rumble Pak for games that use one, else the Controller Pak"
+    Pak.Auto -> "The Rumble Pak for games that use one, the Transfer Pak for Pokémon Stadium, else the Controller Pak"
     Pak.Controller -> "For games that save to the pak"
     Pak.Rumble -> "Vibrates the controller, or this device"
     Pak.Transfer -> "Reads a Game Boy game, for the Pokémon Stadium games"
