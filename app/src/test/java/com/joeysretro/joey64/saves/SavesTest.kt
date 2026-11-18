@@ -81,4 +81,18 @@ class SavesTest {
         assertEquals("l", j.getJSONObject("c").getString("t"))
         assertEquals("ss", j.getJSONObject("e").getString("t"))
     }
+
+    @Test fun texturePacksArentSettings() {
+        assertTrue(AppBackup.settingsFile("video/all.json"))
+        assertTrue(AppBackup.settingsFile("video/games/Paper Mario (USA).json"))
+        assertTrue(AppBackup.settingsFile("video/slang/crt/crt-geom.slangp"))
+        assertTrue(AppBackup.settingsFile("controls/all.json"))
+        assertFalse(AppBackup.settingsFile("video/texpacks"))
+        assertFalse(AppBackup.settingsFile("video/texpacks/run/PAPER MARIO_HIRESTEXTURES.hts"))
+        assertFalse(AppBackup.settingsFile("video/texpacks/folders.json"))
+        assertFalse(AppBackup.settingsFile("video/texpacks/conv/x/GOLDENEYE_HIRESTEXTURES.hts"))
+        assertTrue(AppBackup.settingsFile("video/texpacksnot.json"))
+        assertFalse(AppBackup.settingsFile("video/all.json.part"))
+        assertFalse(AppBackup.settingsFile("boxart/x.jpg"))
+    }
 }

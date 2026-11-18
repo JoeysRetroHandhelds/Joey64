@@ -64,6 +64,21 @@ object AppBackup {
     /** Settings folders in Joey64's own storage. */
     private val SETTINGS_DIRS = listOf("video", "emulation", "audio", "controls", "onscreen", SavesStore.DIR,
         com.joeysretro.joey64.achievements.UnlockSound.DIR)
+    /**
+     * Folders under [SETTINGS_DIRS] that aren't settings: texture packs' working files (the pack folders' grants, which
+     * only this device has; the index; `run/`, links to the open .hts; PNG packs converted to a .hts, hundreds of MB; the
+     * packs' pictures). In the Settings part the 0.2.3 settings mirror zipped a 446 MB pack through `run/` in memory
+     * and the launcher ran out of it (reports 63-64, Duo).
+     */
+    private val NOT_SETTINGS = listOf("video/texpacks")
+
+    /** Whether `files/<path>` ([path] relative to files/, '/' separated) goes in and comes out of the Settings part. */
+    fun settingsFile(path: String): Boolean {
+        val seg = path.split('/')
+        if (seg.size < 2 || seg[0] !in SETTINGS_DIRS || path.endsWith(".part")) return false
+        return NOT_SETTINGS.none { path == it || path.startsWith("$it/") }
+    }
+
     /** SharedPreferences that are settings (not the RetroAchievements account: that's SignInStore's). */
     private val PREFS = listOf("ra_settings", "states")
     private val NAME_OK = Regex("""[^/\\]+""")
@@ -104,9 +119,12 @@ object AppBackup {
             if (BackupPart.Settings in parts) {
                 for (dir in SETTINGS_DIRS) {
                     val root = File(context.filesDir, dir)
-                    root.walkTopDown().filter { it.isFile && !it.name.endsWith(".part") }.forEach { f ->
-                        putStream("files/$dir/" + f.relativeTo(root).invariantSeparatorsPath, f.inputStream())
-                    }
+                    // A link is never followed: what it points at isn't a setting (texture packs' run/ links).
+                    root.walkTopDown()
+                        .onEnter { d -> settingsFile("$dir/" + d.relativeTo(root).invariantSeparatorsPath) || d == root }
+                        .filter { it.isFile && !java.nio.file.Files.isSymbolicLink(it.toPath()) &&
+                            settingsFile("$dir/" + it.relativeTo(root).invariantSeparatorsPath) }
+                        .forEach { f -> putStream("files/$dir/" + f.relativeTo(root).invariantSeparatorsPath, f.inputStream()) }
                 }
                 if (withCheats) for (f in kindFiles(DataKind.Cheats)) putStream("data/${DataKind.Cheats.dir}/${f.name}", data.openRead(listOf(DataKind.Cheats.dir, f.name)))
                 for (p in PREFS) put("prefs/$p.json", prefsToJson(context.getSharedPreferences(p, Context.MODE_PRIVATE).all).toString(1).toByteArray())
@@ -182,7 +200,7 @@ object AppBackup {
                             }
                         }
                         BackupPart.Settings !in parts -> {}
-                        seg.size >= 3 && seg[0] == "files" && seg[1] in SETTINGS_DIRS -> {
+                        seg.size >= 3 && seg[0] == "files" && settingsFile(seg.drop(1).joinToString("/")) -> {
                             val f = seg.drop(1).fold(context.filesDir) { d, s -> File(d, s) }
                             f.parentFile?.mkdirs()
                             val part = File(f.parentFile, f.name + ".part")
