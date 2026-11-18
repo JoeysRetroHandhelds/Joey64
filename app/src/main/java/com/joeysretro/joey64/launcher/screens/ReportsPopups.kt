@@ -78,9 +78,12 @@ fun SendReportsPopup(on: Boolean, onDismiss: () -> Unit, onSet: (Boolean) -> Uni
             var result by remember { mutableStateOf<String?>(null) }
             var sentAt by remember { mutableStateOf(com.joeysretro.joey64.reports.ReportPrefs.lastSentAt(ctx)) }
             val sentDay = remember(sentAt) { com.joeysretro.joey64.reports.ReportPrefs.sentDayLabel(com.joeysretro.joey64.reports.ReportPrefs.lastSentDay(ctx)) }
-            androidx.compose.runtime.LaunchedEffect(result) { if (result != null && result != "Sending…") { kotlinx.coroutines.delay(4_000L); result = null } }
+            // The day limit's second half goes on the grey line: the value is one line of 220 dp at most (the Duo cut
+            // "Sent enough for today · the rest go tomorrow" at "the rest g…").
+            var resultLine by remember { mutableStateOf<String?>(null) }
+            androidx.compose.runtime.LaunchedEffect(result) { if (result != null && result != "Sending…") { kotlinx.coroutines.delay(4_000L); result = null; resultLine = null } }
             JoeyRow("Send now", enabled = on, value = result,
-                detail = if (!on) "Turn reports on first" else if (sentAt == 0L) sentDay?.let { "Last sent $it" } ?: "Nothing sent yet"
+                detail = if (!on) "Turn reports on first" else resultLine ?: if (sentAt == 0L) sentDay?.let { "Last sent $it" } ?: "Nothing sent yet"
                     else "Last sent " + com.joeysretro.joey64.launcher.ingame.SlotDates.withTime(sentAt, System.currentTimeMillis())
                         .replaceFirstChar { it.lowercase() }) {
                 if (on && result != "Sending…") {
@@ -88,10 +91,13 @@ fun SendReportsPopup(on: Boolean, onDismiss: () -> Unit, onSet: (Boolean) -> Uni
                     scope.launch {
                         val out = com.joeysretro.joey64.reports.ReportSender.maybeSend(ctx, force = true)
                         sentAt = com.joeysretro.joey64.reports.ReportPrefs.lastSentAt(ctx)
+                        resultLine = if (out == com.joeysretro.joey64.reports.ReportSender.Outcome.DayLimit) "The rest go tomorrow" else null
                         result = when (out) {
                             com.joeysretro.joey64.reports.ReportSender.Outcome.Sent -> "Sent"
                             com.joeysretro.joey64.reports.ReportSender.Outcome.NothingToSend -> "Nothing to send"
                             com.joeysretro.joey64.reports.ReportSender.Outcome.Failed -> "Couldn't send, no internet"
+                            // Joey 2026-11-17: "Yes, that wording"
+                            com.joeysretro.joey64.reports.ReportSender.Outcome.DayLimit -> "Sent enough for today"
                             null -> "Already sending"
                         }
                     }

@@ -236,4 +236,15 @@ class ReportsTest {
         // One event too big even alone still goes (and the 413 drops it), so it can't hold up the rest.
         assertEquals(1, ReportSender.fitting(empty, listOf(JSONObject().put("pad", "x".repeat(70_000)), JSONObject())))
     }
+
+    @Test fun dayLimitIsToldApartFromOtherRefusals() {
+        // the server's 429 bodies (server/reports/src/index.js)
+        assertTrue(ReportSender.isDayLimit(429, "enough for today"))
+        assertTrue(ReportSender.isDayLimit(429, "full for today\n"))
+        assertTrue(ReportSender.isDayLimit(429, "enough from this address today"))
+        assertFalse(ReportSender.isDayLimit(429, "slow down"))
+        assertFalse(ReportSender.isDayLimit(429, null))
+        assertFalse(ReportSender.isDayLimit(503, "enough for today"))
+        assertFalse(ReportSender.isDayLimit(-1, null))
+    }
 }

@@ -35,7 +35,13 @@ object ReportSender {
     fun today(): String = LocalDate.now(ZoneOffset.UTC).toString()
 
     /** What Send now says after a press (approved feedback1 screen 7). */
-    enum class Outcome { Sent, NothingToSend, Failed }
+    /** DayLimit: the server took its day's share (429 "enough for today", "full for today", "enough from this address
+     *  today"); the rest wait for the next UTC day. Send now said "no internet" for it (Thor 2026-11-17, report 57). */
+    enum class Outcome { Sent, NothingToSend, Failed, DayLimit }
+
+    /** A 429 body that means a limit for the rest of the server's day (src/index.js), not "slow down". */
+    internal fun isDayLimit(code: Int, body: String?): Boolean =
+        code == 429 && body != null && body.trim().let { it.endsWith("today") }
 
     /** [force]: send now even if a report went today (Send reports › Send now, and debug builds). */
     suspend fun maybeSend(ctx: Context, force: Boolean = false): Outcome? = withContext(Dispatchers.IO) {
@@ -53,6 +59,7 @@ object ReportSender {
     private fun send(ctx: Context, once: Boolean = false): Outcome {
         var anyEvents = false
         var failed = false
+        var dayLimit = false
         val exits = exits(ctx)
         sweepOpen(ctx, exits)
         val pending = ReportFiles.pending(ctx).listFiles { f -> f.name.endsWith(".json") }.orEmpty().sortedBy { it.name }
@@ -122,13 +129,17 @@ object ReportSender {
                     else sentCrashes.lastOrNull()?.first?.timestamp ?: 0L
                 }
                 anySent = anySent || code == 204
-            } else { failed = true; break }
+            } else {
+                failed = true
+                if (isDayLimit(code, lastError)) { dayLimit = true; JLog.i(TAG, "reports: the server's limit for today (${lastError?.trim()}): the rest go tomorrow") }
+                break
+            }
         }
         if (maxExit > 0) ReportPrefs.setExitsAfter(ctx, maxOf(maxExit, ReportPrefs.exitsAfter(ctx).takeIf { it != Long.MAX_VALUE } ?: 0L))
         // Only a report the server took uses up the day. A check with nothing to send marked it too, so a game finished
         // later that day waited for the next one: a tester's first report never came the day they played (2026-11-11).
         if (anySent) ReportPrefs.setLastSentDay(ctx, today())
-        return when { failed -> Outcome.Failed; anySent -> Outcome.Sent; !anyEvents -> Outcome.NothingToSend; else -> Outcome.Sent }
+        return when { dayLimit -> Outcome.DayLimit; failed -> Outcome.Failed; anySent -> Outcome.Sent; !anyEvents -> Outcome.NothingToSend; else -> Outcome.Sent }
     }
 
     /** The server takes at most 64 KB a report (server/reports/src/validate.js, MAX_BYTES); a report stays under this. */
