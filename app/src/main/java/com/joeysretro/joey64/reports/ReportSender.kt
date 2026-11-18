@@ -60,6 +60,14 @@ object ReportSender {
         } catch (e: Exception) { JLog.w(TAG, "reports: $e"); Outcome.Failed } finally { sending.set(false) }
     }
 
+    /** The GPU as the system's Vulkan driver names it, for a report sent before any game has run here: the game screen
+     *  writes report_gpu, so a first report (covers only) went with none (report 24, an Odin 2, 2026-11-14). No driver
+     *  has run yet, so the driver stays empty. The game screen probes the same way in this process at every start. */
+    private fun systemGpu(): String = try {
+        if (com.joeysretro.joey64.MainActivity.gameRunning) "" else
+            com.joeysretro.joey64.NativeBridge.probeVulkan(false).split('|', limit = 6).getOrNull(4).orEmpty().replace("(TM) ", "")
+    } catch (e: Throwable) { JLog.w(TAG, "reports: no GPU name ($e)"); "" }
+
     private fun send(ctx: Context, once: Boolean = false): Outcome {
         var anyEvents = false
         var failed = false
@@ -92,7 +100,7 @@ object ReportSender {
             .entries.sortedByDescending { e -> e.value.maxOf { it.first.name } }
         val devicePrefs = ctx.getSharedPreferences("device", Context.MODE_PRIVATE)
         val plan = mutableListOf<Pair<Pair<String, String>, List<Pair<File, JSONObject>>>>()
-        if (groups.isEmpty()) plan += (devicePrefs.getString("report_gpu", "").orEmpty() to devicePrefs.getString("report_driver", "").orEmpty()) to emptyList()
+        if (groups.isEmpty()) plan += (devicePrefs.getString("report_gpu", "").orEmpty().ifEmpty { systemGpu() } to devicePrefs.getString("report_driver", "").orEmpty()) to emptyList()
         else for (g in groups.take(MAX_REPORTS)) plan += g.key to g.value
 
         val app = AppUpdates.installedVersion(ctx)
