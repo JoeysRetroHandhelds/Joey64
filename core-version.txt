@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
 branch: main
-commit: 669f4df30ca5607c5f226fd80d238828676ef5e7 2026-11-17 18:11:08 -0600 Featherlight v1.1 runs: SkipPiDmaPastRdram in the ROM database drops a cart DMA that would ru
+commit: 5e7aa814a3e963e6f5ef35de4207117e5f2213b5 2026-11-17 20:30:21 -0600 Texture packs in copy mode: a replaced tile drawn by a copy-mode texture rectangle (Paper Mar
 uncommitted: none
-built: 2026-11-17 18:08
-md5: e6a6cfe11f709432ea795f0f4c17ab09
+built: 2026-11-17 20:30
+md5: 58a148a9f9a2e6fa7c20b125ff7a9ea5
