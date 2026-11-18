@@ -93,7 +93,33 @@ class LauncherActivity : ComponentActivity() {
     private val fzModel: FzImportModel by viewModels()
     private val updates: UpdateModel by viewModels()
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = keys.dispatch(event)
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean { InputTrace.key(event); return keys.dispatch(event) }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean { InputTrace.touch(ev); return super.dispatchTouchEvent(ev) }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        InputTrace.mark("window focus ${if (hasFocus) "gained" else "lost"}")
+    }
+
+    override fun onPause() {
+        InputTrace.mark("pause")
+        super.onPause()
+    }
+
+    // Input trace (InputTrace): the screen going off and on, and controllers coming and going, around a lid close.
+    private val screenEvents = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context, i: android.content.Intent) {
+            InputTrace.mark(when (i.action) { android.content.Intent.ACTION_SCREEN_OFF -> "screen off"
+                android.content.Intent.ACTION_SCREEN_ON -> "screen on"; else -> "unlocked" })
+        }
+    }
+    private val padEvents = object : android.hardware.input.InputManager.InputDeviceListener {
+        private fun name(id: Int) = android.view.InputDevice.getDevice(id)?.let { "'${it.name}' id $id" } ?: "id $id"
+        override fun onInputDeviceAdded(id: Int) = InputTrace.mark("input device added ${name(id)}")
+        override fun onInputDeviceRemoved(id: Int) = InputTrace.mark("input device removed id $id")
+        override fun onInputDeviceChanged(id: Int) = InputTrace.mark("input device changed ${name(id)}")
+    }
 
     // A controller's stick moved: its hints again (a TV remote has no stick).
     override fun dispatchGenericMotionEvent(event: android.view.MotionEvent): Boolean {
@@ -117,6 +143,7 @@ class LauncherActivity : ComponentActivity() {
     // goes on, and PNG packs still to convert start (a pack that waited for room is tried again).
     override fun onResume() {
         super.onResume()
+        InputTrace.mark("resume")
         val app = applicationContext
         Thread {
             com.joeysretro.joey64.video.TexConvert.playing(app, null)
@@ -143,6 +170,8 @@ class LauncherActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        try { unregisterReceiver(screenEvents) } catch (_: IllegalArgumentException) {}
+        getSystemService(android.hardware.input.InputManager::class.java)?.unregisterInputDeviceListener(padEvents)
         raFake?.let { unregisterReceiver(it) }
         debugShow?.let { unregisterReceiver(it) }
         super.onDestroy()
@@ -155,6 +184,15 @@ class LauncherActivity : ComponentActivity() {
         // The session log (files/logs) starts here when the app opens to the launcher, so first run, the
         // import and library reads are in what a tester sends, not only what happens once a game is up.
         LogFiles.start(this, intent)
+        InputTrace.mark("library opened")
+        // system broadcasts only (screen on / off, unlocked), so not exported
+        val screenFilter = android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_SCREEN_OFF); addAction(android.content.Intent.ACTION_SCREEN_ON)
+            addAction(android.content.Intent.ACTION_USER_PRESENT)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(screenEvents, screenFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        else registerReceiver(screenEvents, screenFilter)
+        getSystemService(android.hardware.input.InputManager::class.java)?.registerInputDeviceListener(padEvents, null)
         texOpen(intent)
         // Thermal fallback moved from Video to Emulation (2026-11-08): the store moves an older Video file's
         // value over as it opens, before Video can write that file again without it.

@@ -497,6 +497,7 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
                 return@launch
             }
             _recovery.value = RecoveryOffer(game, minutesBefore(app, r.saveName, r.savedAt), r.saveName)
+            InputTrace.mark("recovery card up for ${game.title} (Continue focused)")
         }
     }
 
@@ -983,7 +984,7 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
         if (com.joeysretro.joey64.launcher.layout.Tv.isTv(app) && !com.joeysretro.joey64.launcher.layout.Tv.controllerConnected(app)) {
             JLog.i(TAG, "${game.title}: a TV with no controller connected, asking for one")
             _needsController.value = NeedsController(game, intent)
-        } else { started(game); start(intent) }
+        } else { InputTrace.beforeStart(game.title); started(game); start(intent) }
     }
 
     /** Android TV (approved mockup 2026-11-09, screen 6): Play on a TV with only the remote. */

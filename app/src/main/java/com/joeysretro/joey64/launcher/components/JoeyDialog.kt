@@ -441,6 +441,8 @@ private fun PopupCard(entry: PopupEntry, active: Boolean) {
                     if (!isActive) return@onPreviewKeyEvent false
                     val native = event.nativeKeyEvent
                     val p = latest
+                    // a card's own window: its keys never reach the activity's dispatchKeyEvent (InputTrace)
+                    com.joeysretro.joey64.launcher.InputTrace.key(native, "card")
                     com.joeysretro.joey64.launcher.layout.RemoteKeys.note(native, isTv)
                     if (native.action == KeyEvent.ACTION_DOWN && native.keyCode in DPAD_MOVES) movedAt[0] = landing.armedAt
                     // A TV remote's OK: a press on release, Hold OK is Start (TV mockup screen 5).
