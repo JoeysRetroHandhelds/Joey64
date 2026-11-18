@@ -247,4 +247,12 @@ class ReportsTest {
         assertFalse(ReportSender.isDayLimit(503, "enough for today"))
         assertFalse(ReportSender.isDayLimit(-1, null))
     }
+
+    @Test fun slowDownIsToldApart() {
+        assertTrue(ReportSender.isSlowDown(429, "slow down"))
+        assertTrue(ReportSender.isSlowDown(429, "slow down\n"))
+        assertFalse(ReportSender.isSlowDown(429, "enough for today"))
+        assertFalse(ReportSender.isSlowDown(429, null))
+        assertFalse(ReportSender.isSlowDown(503, "slow down"))
+    }
 }

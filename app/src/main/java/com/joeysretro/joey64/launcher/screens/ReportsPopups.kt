@@ -91,13 +91,19 @@ fun SendReportsPopup(on: Boolean, onDismiss: () -> Unit, onSet: (Boolean) -> Uni
                     scope.launch {
                         val out = com.joeysretro.joey64.reports.ReportSender.maybeSend(ctx, force = true)
                         sentAt = com.joeysretro.joey64.reports.ReportPrefs.lastSentAt(ctx)
-                        resultLine = if (out == com.joeysretro.joey64.reports.ReportSender.Outcome.DayLimit) "The rest go tomorrow" else null
+                        resultLine = when (out) {
+                            com.joeysretro.joey64.reports.ReportSender.Outcome.DayLimit -> "The rest go tomorrow"
+                            com.joeysretro.joey64.reports.ReportSender.Outcome.SlowDown -> "Try again in a minute"
+                            else -> null
+                        }
                         result = when (out) {
                             com.joeysretro.joey64.reports.ReportSender.Outcome.Sent -> "Sent"
                             com.joeysretro.joey64.reports.ReportSender.Outcome.NothingToSend -> "Nothing to send"
                             com.joeysretro.joey64.reports.ReportSender.Outcome.Failed -> "Couldn't send, no internet"
                             // Joey 2026-11-17: "Yes, that wording"
                             com.joeysretro.joey64.reports.ReportSender.Outcome.DayLimit -> "Sent enough for today"
+                            // The per-minute 429 (Joey 2026-11-17: "Yes, word it").
+                            com.joeysretro.joey64.reports.ReportSender.Outcome.SlowDown -> "Sending too often"
                             null -> "Already sending"
                         }
                     }
