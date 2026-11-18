@@ -72,6 +72,44 @@ class NetReportsTest {
         assertTrue(x.length <= ReportJson.MAX_LOG)
     }
 
+    @Test fun excerptKeepsEarlierDipsAndFitsWithThemFirst() {
+        // 600 long lines: the tail alone is far over 16,000 characters, so the head must survive the cut.
+        val pad = "x".repeat(120)
+        val lines = (1..600).map { i ->
+            when (i) {
+                40 -> "I joey64host: stats: 59.0 emu fps, run 30.1 ms"
+                41 -> "I joey64host: hitch: 1 stutters"
+                42 -> "I joey64host: slow frames: 12.0 s 45.0 ms"
+                43 -> "I joey64host: clocks: cpu 1843/3187, gpu 401/680"
+                else -> "line $i $pad"
+            }
+        }
+        val x = ReportSender.excerpt(lines, emptyList())
+        assertTrue(x.startsWith("I joey64host: stats: 59.0 emu fps, run 30.1 ms\nI joey64host: slow frames: 12.0 s 45.0 ms\nI joey64host: clocks: cpu 1843/3187, gpu 401/680\n...\nline "))
+        assertFalse(x.contains("hitch: 1 stutters"))
+        assertTrue(x.endsWith("line 600 $pad"))
+        assertTrue(x.length <= ReportJson.MAX_LOG)
+        // The tail is cut at a line start.
+        assertTrue(x.substringAfter("...\n").startsWith("line "))
+    }
+
+    @Test fun whichSessionsSendTheirLog() {
+        val quit = JSONObject().put("ended", "quit")
+        assertFalse(ReportJson.wantsLog(quit, testing = false))
+        assertTrue(ReportJson.wantsLog(quit, testing = true))
+        assertTrue(ReportJson.wantsLog(JSONObject().put("ended", "crash"), testing = false))
+        assertTrue(ReportJson.wantsLog(JSONObject(quit.toString()).put("netplay", JSONObject()), testing = false))
+        assertFalse(ReportJson.wantsLog(JSONObject(quit.toString()).put("slowFrames", 9), testing = false))
+        assertTrue(ReportJson.wantsLog(JSONObject(quit.toString()).put("slowFrames", 10), testing = false))
+    }
+
+    @Test fun whatsSentSaysEveryGameOnlyInTestBuilds() {
+        val pub = com.joeysretro.joey64.launcher.screens.whatsSent("0.2.5")
+        val test = com.joeysretro.joey64.launcher.screens.whatsSent("0.2.5.1")
+        assertFalse(pub.contains("every game"))
+        assertTrue(test.contains("This test build sends that log for every game"))
+    }
+
     @Test fun excerptHidesWholeNamesOnly() {
         val x = ReportSender.excerpt(listOf("I Joey64: Joey joined", "I room: Joey's turn, joey64x"), listOf("Joey"))
         assertEquals("I Joey64: <player> joined\nI room: <player>'s turn, joey64x", x)

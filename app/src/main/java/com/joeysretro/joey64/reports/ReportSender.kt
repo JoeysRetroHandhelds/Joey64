@@ -77,9 +77,11 @@ object ReportSender {
         sweepOpen(ctx, exits)
         val pending = ReportFiles.pending(ctx).listFiles { f -> f.name.endsWith(".json") }.orEmpty().sortedBy { it.name }
         val sessions = pending.mapNotNull { f -> try { f to JSONObject(f.readText()) } catch (e: Exception) { f.delete(); null } }
-        // A session that ended badly, or played in a netplay room, takes its process's log excerpt with it (Joey
-        // 2026-11-14), read now while LogFiles still has it ("<time>-<pid>.json" names the process).
-        for ((f, o) in sessions) if (!o.has("log") && (o.optString("ended") in ReportJson.PROBLEM_ENDED || o.has("netplay"))) {
+        // A session that ended badly, played in a netplay room or had dips takes its process's log excerpt with it (Joey
+        // 2026-11-14, dips 2026-11-15), and in a testing build every session does (Joey 2026-11-12 night: "can it be any
+        // session, at least for the beginning?"); read now while LogFiles still has it ("<time>-<pid>.json" names the process).
+        val testing = com.joeysretro.joey64.launcher.update.Releases.isTesting(com.joeysretro.joey64.BuildConfig.VERSION_NAME)
+        for ((f, o) in sessions) if (!o.has("log") && ReportJson.wantsLog(o, testing)) {
             val pid = f.nameWithoutExtension.substringAfter('-').toIntOrNull() ?: continue
             val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
             logExcerpt(ctx, pid, names)?.let { o.put("log", it); try { ReportFiles.write(f, o.toString()) } catch (e: Exception) { } }
@@ -235,10 +237,14 @@ object ReportSender {
     /** Lines of a log excerpt: the last ones, and before them the room's own lines from earlier in the process. */
     private const val LOG_TAIL = 250
     private const val LOG_NET = 150
+    /** Earlier dip lines kept (slow frames, with their stats and clocks lines: 20 dips' worth). */
+    private const val LOG_DIPS = 60
+    /** The most the earlier lines take of the excerpt's [ReportJson.MAX_LOG] characters; the tail gets the rest. */
+    private const val HEAD_MAX = 6_000
 
     /**
      * The excerpt of process [pid]'s session log (LogFiles' "-<pid>-app.log") for a problem or netplay session: its last
-     * [LOG_TAIL] lines, after up to [LOG_NET] earlier netplay lines. Paths, public addresses and the room's player names
+     * [LOG_TAIL] lines, after up to [LOG_NET] earlier netplay lines and [LOG_DIPS] earlier dip lines. Paths, public addresses and the room's player names
      * ([names]) are taken out; null when the log is gone.
      */
     private fun logExcerpt(ctx: Context, pid: Int, names: List<String>): String? {
@@ -250,12 +256,36 @@ object ReportSender {
     /** [logExcerpt] without the file: pure, unit tested. */
     internal fun excerpt(lines: List<String>, names: List<String>): String {
         val tailFrom = maxOf(0, lines.size - LOG_TAIL)
-        val net = lines.subList(0, tailFrom).filter { it.contains("netplay", true) || it.contains("playtogether", true) }.takeLast(LOG_NET)
-        var text = (net + (if (net.isNotEmpty()) listOf("...") else emptyList()) + lines.subList(tailFrom, lines.size)).joinToString("\n")
+        val early = lines.subList(0, tailFrom)
+        // Before the tail: the room's lines, and each earlier dip (its "slow frames:" line with the stats line before it
+        // and the clocks line after it: where the time went, and the clocks then).
+        val keep = sortedSetOf<Int>()
+        early.indices.filter { early[it].contains("netplay", true) || early[it].contains("playtogether", true) }.takeLast(LOG_NET).forEach { keep += it }
+        val dips = sortedSetOf<Int>()
+        for (i in early.indices) if (early[i].contains("slow frames:")) {
+            dips += i
+            ((i - 1) downTo maxOf(0, i - 4)).firstOrNull { early[it].contains("stats:") }?.let { dips += it }
+            if (i + 1 < early.size && early[i + 1].contains("clocks:")) dips += i + 1
+        }
+        dips.toList().takeLast(LOG_DIPS).forEach { keep += it }
+        val head = clean(keep.map { early[it] }.joinToString("\n"), names).let { h ->
+            if (h.length <= HEAD_MAX) h else h.substring(h.indexOf('\n', h.length - HEAD_MAX).let { if (it < 0) h.length - HEAD_MAX else it + 1 })
+        }
+        // The tail gets what the head leaves; cut at a line start, so the earlier lines are never the part that's lost.
+        val room = ReportJson.MAX_LOG - (if (head.isEmpty()) 0 else head.length + 5)
+        val tail = clean(lines.subList(tailFrom, lines.size).joinToString("\n"), names).let { t ->
+            if (t.length <= room) t else t.substring(t.indexOf('\n', t.length - room).let { if (it < 0) t.length - room else it + 1 })
+        }
+        return ReportJson.logText(if (head.isEmpty()) tail else "$head\n...\n$tail")
+    }
+
+    /** Names (whole ones only), paths and public addresses out of a part of an excerpt. */
+    private fun clean(s: String, names: List<String>): String {
+        var text = s
         // Whole names only (review 2026-11-15: a plain replace made "Joey64" "<player>64" for a player called Joey).
         for (n in names.map { it.trim() }.filter { it.length >= 2 }.sortedByDescending { it.length })
             text = text.replace(Regex("(?<![\\p{L}\\p{N}_])" + Regex.escape(n) + "(?![\\p{L}\\p{N}_])"), "<player>")
-        return ReportJson.logText(com.joeysretro.joey64.LogMask.addresses(scrub(text)))
+        return com.joeysretro.joey64.LogMask.addresses(scrub(text))
     }
 
     private fun summary(ctx: Context, x: ApplicationExitInfo): String {

@@ -301,6 +301,13 @@ object ReportJson {
     /** Endings that send the log excerpt with the session. */
     val PROBLEM_ENDED = setOf("stuck", "crash", "anr", "killed", "signal", "gone")
 
+    /** Slow frames (over 33 ms, libretro_host noteFrameTime) that make a session one with dips: it sends the log excerpt. */
+    const val DIP_FRAMES = 10L
+
+    /** A session that sends its log excerpt: a problem ending, a netplay room, dips, or any session in a testing build. */
+    fun wantsLog(o: JSONObject, testing: Boolean): Boolean =
+        testing || o.optString("ended") in PROBLEM_ENDED || o.has("netplay") || o.optLong("slowFrames", 0) >= DIP_FRAMES
+
     /** The log excerpt's most characters (server: 16,000). */
     const val MAX_LOG = 16_000
 

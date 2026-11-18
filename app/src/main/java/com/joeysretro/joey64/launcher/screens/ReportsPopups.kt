@@ -44,7 +44,7 @@ Netplay games
   • Whether you hosted or joined, how many players, input delay, ping, how often and how long the game waited, whether the games went out of step, players who left, and how the room ended. No names, room codes or addresses
 
 Problems
-  • For a game that crashed, froze or was closed by Android, and for netplay games: the last lines of Joey64's own log for that game, with folders, names and outside addresses taken out
+  • For a game that crashed, froze, was closed by Android or stuttered, and for netplay games: the last lines of Joey64's own log for that game and its lines about each stutter, with folders, names and outside addresses taken out
 
 Box art
   • Games with no cover, or whose cover you changed: the game's ID and file name
@@ -55,7 +55,12 @@ Crashes
 Never sent: your name, accounts or RetroAchievements sign-in, folders, ROMs, saves, location. The server sees your IP address to stop floods. It keeps only a scrambled part of it, for one day."""
 
 @Composable
-fun WhatsSentPopup(onDismiss: () -> Unit) = TextBoxPopup("What's sent", null, WHATS_SENT, onDismiss)
+fun WhatsSentPopup(onDismiss: () -> Unit) = TextBoxPopup("What's sent", null, whatsSent(com.joeysretro.joey64.BuildConfig.VERSION_NAME), onDismiss)
+
+/** [WHATS_SENT], and in a testing build (ReportSender sends every session's log there) the line that says so. */
+internal fun whatsSent(version: String): String =
+    if (!com.joeysretro.joey64.launcher.update.Releases.isTesting(version)) WHATS_SENT
+    else WHATS_SENT.replace("outside addresses taken out\n", "outside addresses taken out\n  • This test build sends that log for every game\n")
 
 /** Screen 2: Off or On, What's sent, Report ID (Reset makes a new random one). */
 @Composable
