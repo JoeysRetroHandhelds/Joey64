@@ -9,6 +9,12 @@ package com.joeysretro.joey64.video
  * into its own frame (both renderers, every VI filter; README Full-run fixes (f1)). Normal (8 lines) hides it, Thin
  * leaves a sliver. CZL is the USA and Japan code, NZL Europe's and LodgeNet's.
  *
+ * Beetle Adventure Racing! (tester report, Joey 2026-11-21: "needs crop fix like we did for dk64"): in a race the game
+ * draws its own black frame inside its picture, 14.0-17.1 lines of 240 (bottom 14.0, left 14.7, right 16.8, top 17.1;
+ * Odin 3 Portal at 1x), so Exact 14 lines, the most that cuts no race picture. Its menus and title fill more of the
+ * screen: 14 lines trims the film strip's outer edges there, no text. NNS is the USA and Europe code; Japan's NB8
+ * isn't measured yet.
+ *
  * Donkey Kong 64 (Joey 2026-11-15: "Yes", build it like OoT): the game draws its own black border inside its picture
  * (the VI area trims only 1%, so Trim the game's border can't take it off): 21-28 px of 960 at the sides and 26 of 720
  * top and bottom, about 8 lines of 240, so Normal. NDO is every region's code.
@@ -50,6 +56,7 @@ object GameCrop {
         "NL2" to 8, // Top Gear Rally 2 (Japan)
         "NME" to 4, // Mace - The Dark Age (USA)
         "NNL" to 8, // NBA Live 2000 (USA) (En,Fr,De,Es)
+        "NNS" to 14, // Beetle Adventure Racing! (USA, Europe)
         "NP2" to 4, // Chou Kuukan Nighter Pro Yakyuu King 2 (Japan)
         "NP6" to 4, // Jikkyou Powerful Pro Yakyuu 6 (Japan) (Rev 1)
         "NPA" to 4, // Jikkyou Powerful Pro Yakyuu 2000 (Japan) (Rev 1)

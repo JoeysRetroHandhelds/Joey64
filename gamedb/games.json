@@ -183,6 +183,13 @@
       "notes": ["breaks with plain async parallel-RDP (no smart sync); fine on the default"]
     },
     {
+      "id": "NNS", "title": "Beetle Adventure Racing!",
+      "settings": [
+        {"what": "Crop edges Exact 14 lines by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt (code NNS: USA and Europe)", "why": "in a race the game draws its own black frame inside its picture, 14.0-17.1 lines of 240 (Odin 3 Portal 1x, bottom 14.0 the smallest), like Donkey Kong 64; 14 is the most that cuts no race picture; menus lose only the film strip's outer edges. Tester report via Joey 2026-11-21: \"needs crop fix like we did for dk64\""}
+      ],
+      "notes": ["Tester (8 Gen 3, 4x, 0.2.5): menus lag; Odin 3 Portal 4x menus run 59.7 fps but show 2-6 fewer pictures a second (4+ refresh gaps), under investigation"]
+    },
+    {
       "id": "NB7", "title": "Banjo-Tooie",
       "settings": [
         {"what": "Widescreen's \"When a game has one\" gives the 16:9 picture (no code): the game has a 16:9 mode of its own, drawn squeezed for a widescreen TV; the player sets it in the game (its options)", "where": "GameExtras.kt OwnWidescreen + ExtrasOn.withOwnMode (2026-11-10, Joey: \"Yes, use it\")", "why": "a 16:9 mode made for a stretched TV only needs the picture stretched; not in Hardcore"},

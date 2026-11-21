@@ -16,6 +16,11 @@ class GameCropTest {
         assertEquals("Normal (this game's default)", GameCrop.label("NDOE", unset))
     }
 
+    @Test fun beetleAdventureRacingGetsExact14() {
+        for (code in listOf("NNSE", "NNSP")) assertEquals(code, 14, GameCrop.of(code, unset))
+        assertEquals("Exact, 14 lines (this game's default)", GameCrop.label("NNSE", unset))
+    }
+
     @Test fun theCropSheetsSizes() {
         assertEquals(4, GameCrop.of("NPWJ", unset)) // Pilotwings 64 (Japan): Thin, every region
         assertEquals(4, GameCrop.of("NPWE", unset))
