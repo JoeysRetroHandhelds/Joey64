@@ -272,6 +272,10 @@ std::atomic<bool> g_optionsDirty{true};
 EglContext g_egl;
 VkContext g_vk;
 AudioOut g_audio;
+// The core's RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK (its automatic frame skip, N64_FRAMESKIP=2): told the
+// audio ring's fill each frame after the audio wait; not called while fast-forwarding, benchmarking, paused or rewinding,
+// and told inactive in slow motion.
+retro_audio_buffer_status_callback_t g_audioStatusCb = nullptr;
 std::mutex g_surfaceMutex;
 ANativeWindow* g_pendingWindow = nullptr;
 std::atomic<bool> g_surfaceChanged{false};
@@ -845,6 +849,11 @@ bool environment(unsigned cmd, void* data) {
         return true;
     case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS:
         return true;
+    case RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK: {
+        auto* c = static_cast<const retro_audio_buffer_status_callback*>(data);
+        g_audioStatusCb = c ? c->callback : nullptr;
+        return true;
+    }
     default:
         return false;
     }
@@ -1917,6 +1926,7 @@ void runLoop() {
             auto t0 = std::chrono::steady_clock::now();
             g_audio.setPanelRefreshNs(g_vulkan ? g_vk.refreshNs() : 0);
             if (!slow) { hitch::Span span(hitch::PACE); g_audio.waitForRoom(); }
+            if (g_audioStatusCb) g_audioStatusCb(!slow, g_audio.occupancyPct(), !slow && g_audio.ranDrySinceLastAsked());
             double aw = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             g_statAudioWaitMs += aw;
             traceFrame(aw);
@@ -2220,6 +2230,7 @@ void runLoop() {
     Cheevos::gameUnloaded();
     if (g_hw.context_destroy) g_hw.context_destroy();
     core.unload_game();
+    g_audioStatusCb = nullptr;
     npPauseStop();
     NetplayServer::stop();
     g_netplay = false;

@@ -1,5 +1,6 @@
 #pragma once
 #include <aaudio/AAudio.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <mutex>
@@ -49,6 +50,12 @@ public:
     // T820 report (2026-11-08) drained the ring at 61 emulated fps in windows where half the frames repeat; these
     // tell a game that brings less audio from a device that plays faster than its stated rate.
     void takeRates(double secs, double& inHz, double& outHz);
+    // The ring's fill as a percent of the target (100 = at the target or above), for the core's audio buffer status
+    // callback (its automatic frame skip, N64_FRAMESKIP=2, treats 33 or less as falling behind).
+    unsigned occupancyPct() const { return target_ ? (unsigned)std::min<size_t>(100, fill() * 100 / target_) : 100; }
+    // Whether the ring ran dry since the last call: a game below full speed drains it within each slow frame, so the
+    // fill seen before a frame can still look healthy (Duo at 70% speed: 15 of 20 ms on average, 824 underruns in 5 s).
+    bool ranDrySinceLastAsked() { unsigned n = underrunsTotal_.load(std::memory_order_relaxed); bool dry = n != dryAsked_; dryAsked_ = n; return dry; }
 
 private:
     static constexpr int kTargetMs = 20, kMaxTargetMs = 150;
@@ -79,6 +86,8 @@ private:
     int dstRate_ = 48000;
     size_t target_ = 0;      // samples the ring is kept near (audio latency)
     std::atomic<int> underruns_{0};
+    std::atomic<unsigned> underrunsTotal_{0}; // never reset (ranDrySinceLastAsked)
+    unsigned dryAsked_ = 0;
     // The game has put sound in the ring since open(). Before that the stream plays silence that isn't an
     // underrun (Paper Mario on the Portal 2026-11-14: 80-210 counted in every start's first 5 s).
     std::atomic<bool> fed_{false};

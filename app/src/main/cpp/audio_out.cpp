@@ -436,7 +436,10 @@ aaudio_data_callback_result_t AudioOut::cb(AAudioStream*, void* user, void* data
     for (size_t i = 0; i < samples; ++i) {
         size_t r = self->r_.load(std::memory_order_relaxed);
         if (r == self->w_.load(std::memory_order_acquire)) { // underrun → silence
-            if (self->fed_.load(std::memory_order_relaxed)) self->underruns_.fetch_add(1, std::memory_order_relaxed);
+            if (self->fed_.load(std::memory_order_relaxed)) {
+                self->underruns_.fetch_add(1, std::memory_order_relaxed);
+                self->underrunsTotal_.fetch_add(1, std::memory_order_relaxed);
+            }
             memset(out + i, 0, (samples - i) * sizeof(float));
             if (self->fadeOn_) {
                 // N64_AUDIO_FADE: from the last frame played down to zero over kFadeFrames, then the next sound fades in.
