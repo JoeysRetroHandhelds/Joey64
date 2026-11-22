@@ -96,8 +96,8 @@ android {
         minSdk = 29
         // Android 16 (API 36), Google Play's minimum since 2026-08-31 (Joey64 isn't on Play; kept, Joey 2026-11-16).
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.2.5.1"
+        versionCode = 12
+        versionName = "0.2.6"
         ndk { abiFilters += "arm64-v8a" }
         // 16 KB page alignment for the host and the driver hooks (devices with 16 KB pages can't load 4 KB-aligned
         // libraries; NDK 27 still links at 4 KB by default). The core and librashader get theirs in their own builds.
