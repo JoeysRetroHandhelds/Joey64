@@ -1009,6 +1009,7 @@ void VkContext::collectTiming() {
     VkPastPresentationTimingGOOGLE past[8];
     uint32_t n = 8;
     if (getPastTiming_(device_, swapchain_, &n, past) < 0) return;
+    ++dbgCalls_; dbgEntries_ += (int)n;
     for (uint32_t i = 0; i < n; ++i) {
         hitch::shown(past[i].presentID, (int64_t)past[i].actualPresentTime, (int64_t)past[i].earliestPresentTime, refreshNs_);
         if (presentId_ - past[i].presentID < kTimingRing && past[i].actualPresentTime) {
@@ -1077,11 +1078,11 @@ void VkContext::collectTiming() {
                 }
             }
         }
-        if (presentId_ - past[i].presentID >= kTimingRing) continue; // too old for the ring
+        if (presentId_ - past[i].presentID >= kTimingRing) { ++dbgOld_; continue; } // too old for the ring
         int64_t poll = presentPollNs_[past[i].presentID % kTimingRing];
-        if (!poll || !past[i].actualPresentTime) continue;
+        if (!poll || !past[i].actualPresentTime) { ++dbgNoPoll_; continue; }
         double ms = ((int64_t)past[i].actualPresentTime - poll) / 1e6;
-        if (ms <= 0 || ms > 500) continue;
+        if (ms <= 0 || ms > 500) { ++dbgRange_; continue; }
         latSumMs_ += ms; latCount_++;
         latMaxMs_ = std::max(latMaxMs_, ms);
         // Dev check N64_PRESENT_MARGIN=1 (2026-11-05 recheck): log presentMargin (how long before its display slot the
@@ -1103,7 +1104,9 @@ void VkContext::collectTiming() {
                         (int64_t)(past[i].earliestPresentTime - past[i].desiredPresentTime) > (int64_t)(refreshNs_ * 3 / 4);
             extraLeadNs_ = late ? std::min(extraLeadNs_ + refreshNs_ / 2.0, 2.0 * refreshNs_) : extraLeadNs_ * 0.995;
         }
-        if (lastActual_ && past[i].presentID == lastId_ + 1) {
+        // Steady (swap mode 1) presents each frame twice and only the first carries its poll (skipped above), so
+        // there the frame before is two presents back (2026-11-21: the counter read 0/0/0/0 in Steady).
+        if (lastActual_ && (past[i].presentID == lastId_ + 1 || (swapMode_ == 1 && past[i].presentID == lastId_ + 2))) {
             // Even = the gap is a whole number of game frames (one, or with repeats skipped any number:
             // OoT's 20 fps is 3), within the tolerance of a 120 Hz refresh either way.
             double gap = (int64_t)(past[i].actualPresentTime - lastActual_) / 1e6, frame = 1000.0 / contentHz_;
@@ -1114,6 +1117,7 @@ void VkContext::collectTiming() {
                 ++shownFor_[std::max(1L, std::min(4L, n)) - 1];
             }
         }
+        else ++dbgGap_;
         lastActual_ = past[i].actualPresentTime; lastId_ = past[i].presentID;
     }
 }
@@ -1134,9 +1138,18 @@ std::string VkContext::takeCadence() {
         snprintf(buf, sizeof buf, ", shown 1/2/3/4+ refreshes %d/%d/%d/%d, present every %.2f ms (sd %.2f)",
                  shownFor_[0], shownFor_[1], shownFor_[2], shownFor_[3], mean, sd);
     }
+    static const bool dbg = getenv("N64_TIMING_DEBUG") && *getenv("N64_TIMING_DEBUG") == '1';
+    std::string out = buf;
+    if (dbg) {
+        char d[160];
+        snprintf(d, sizeof d, ", timing debug: %d reads, %d entries, %d too old, %d no poll/time, %d out of range, %d not next",
+                 dbgCalls_, dbgEntries_, dbgOld_, dbgNoPoll_, dbgRange_, dbgGap_);
+        out += d;
+    }
+    dbgCalls_ = dbgEntries_ = dbgOld_ = dbgNoPoll_ = dbgRange_ = dbgGap_ = 0;
     shownFor_[0] = shownFor_[1] = shownFor_[2] = shownFor_[3] = 0;
     callSum_ = callSq_ = 0; callN_ = 0;
-    return buf;
+    return out;
 }
 
 // Skipped frame: submit only what the core handed over (so its semaphores are consumed and the

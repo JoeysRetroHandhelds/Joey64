@@ -192,6 +192,9 @@ private:
     uint32_t latCount_ = 0;
     uint64_t lastActual_ = 0; uint32_t lastId_ = 0; int uneven_ = 0;
     int shownFor_[4] = {};
+    // N64_TIMING_DEBUG=1 (dev): collectTiming calls, entries returned, dropped as too old / no poll or not shown /
+    // out of range, and not following the last one
+    int dbgCalls_ = 0, dbgEntries_ = 0, dbgOld_ = 0, dbgNoPoll_ = 0, dbgRange_ = 0, dbgGap_ = 0;
     int64_t lastCallNs_ = 0; double callSum_ = 0, callSq_ = 0; int callN_ = 0;
     void collectTiming();
     std::mutex timingMutex_;
