@@ -1902,6 +1902,17 @@ void runLoop() {
         // benchmark, paused (a frame advance step), rewind, slow motion.
         hitch::rates(g_av.timing.fps);
         hitch::frame(ff || g_bench || g_paused || rewinding || slow);
+        // Dev (2026-11-22, moving benches): a benchmark logs the time at every 600th frame, so a fixed frame range (the same game
+        // frames every run from a state with scripted input) can be timed.
+        if (g_bench) {
+            static uint32_t lastMark = 0;
+            uint32_t f = g_framesRun.load();
+            if (f / 600 != lastMark / 600) {
+                lastMark = f;
+                LOGI("bench mark: frame %u at %.2f ms", f, std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            }
+        }
         if (!ff && !g_bench && !g_paused && !rewinding) { // paused: a frame advance step, no audio to wait for
             auto t0 = std::chrono::steady_clock::now();
             g_audio.setPanelRefreshNs(g_vulkan ? g_vk.refreshNs() : 0);

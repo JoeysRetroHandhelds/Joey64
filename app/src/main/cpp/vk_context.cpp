@@ -41,8 +41,58 @@ void* systemLibrary() {
     return g_sysLib;
 }
 
+// N64_VK_DIRECT=1 (test switch, 2026-11-22, from WatermelonDS 0.8.0.rc4 openDriverWithAndroidSurface): open the custom
+// driver itself as a Vulkan ICD (loader interface 5, vk_icdGetInstanceProcAddr) so it draws through its own Android
+// surface, with no loader and no adrenotools hooks in between. Mesa drivers for Mali (PanVK) have their own Android
+// surface code but did not start through adrenotools on the RG353P. Any failed check falls back to adrenotools.
+// g_customGipa: set when the driver was opened this way (no exported vkGetInstanceProcAddr then).
+PFN_vkGetInstanceProcAddr g_customGipa = nullptr;
+
+void* openDirect() {
+    const std::string path = g_driverDir + g_driverName;
+    void* h = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (!h) { LOGE("vulkan direct: dlopen %s: %s", path.c_str(), dlerror()); return nullptr; }
+    auto get = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(h, "vk_icdGetInstanceProcAddr"));
+    using Negotiate = VkResult (VKAPI_PTR*)(uint32_t*);
+    auto negotiate = reinterpret_cast<Negotiate>(dlsym(h, "vk_icdNegotiateLoaderICDInterfaceVersion"));
+    if (!negotiate && get) negotiate = reinterpret_cast<Negotiate>(get(VK_NULL_HANDLE, "vk_icdNegotiateLoaderICDInterfaceVersion"));
+    uint32_t version = 5;
+    const char* why = nullptr;
+    if (!get) why = "no vk_icdGetInstanceProcAddr";
+    else if (!negotiate) why = "no vk_icdNegotiateLoaderICDInterfaceVersion";
+    else if (negotiate(&version) != VK_SUCCESS || version != 5) why = "loader interface 5 refused";
+    uint32_t api = 0, n = 0;
+    std::vector<VkExtensionProperties> exts;
+    if (!why) {
+        auto ver = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(get(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));
+        auto en = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(get(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties"));
+        if (!ver || ver(&api) != VK_SUCCESS || api < VK_API_VERSION_1_1) why = "below Vulkan 1.1";
+        else if (!get(VK_NULL_HANDLE, "vkCreateInstance")) why = "no vkCreateInstance";
+        else if (!en || en(nullptr, &n, nullptr) != VK_SUCCESS || !n) why = "no instance extensions";
+        else { exts.resize(n); if (en(nullptr, &n, exts.data()) != VK_SUCCESS) why = "no instance extensions"; else exts.resize(n); }
+    }
+    auto has = [&](const char* name) {
+        for (auto& e : exts) if (!strcmp(e.extensionName, name)) return true;
+        return false;
+    };
+    if (!why && (!has(VK_KHR_SURFACE_EXTENSION_NAME) || !has(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)))
+        why = "no Android surface of its own";
+    if (why) { LOGI("vulkan direct: %s: %s, using adrenotools", g_driverName.c_str(), why); dlclose(h); return nullptr; }
+    g_customGipa = get;
+    LOGI("vulkan direct: %s opened as an ICD (interface 5, Vulkan %u.%u), its own Android surface", g_driverName.c_str(),
+         VK_VERSION_MAJOR(api), VK_VERSION_MINOR(api));
+    return h;
+}
+
 void* customLibrary() {
+    static const bool direct = getenv("N64_VK_DIRECT") && *getenv("N64_VK_DIRECT") == '1';
+    if (!g_customLib && !g_customFailed && !g_driverName.empty() && direct) {
+        g_customGipa = nullptr;
+        g_customLib = openDirect();
+        if (g_customLib) LOGI("vulkan: loaded custom driver %s%s directly", g_driverDir.c_str(), g_driverName.c_str());
+    }
     if (!g_customLib && !g_customFailed && !g_driverName.empty()) {
+        g_customGipa = nullptr;
         g_customLib = adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, g_tmpDir.c_str(), g_hookDir.c_str(),
                                                  g_driverDir.c_str(), g_driverName.c_str(), nullptr, nullptr);
         if (g_customLib) LOGI("vulkan: loaded custom driver %s%s", g_driverDir.c_str(), g_driverName.c_str());
@@ -73,13 +123,13 @@ const VkImageSubresourceRange kColorRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
 void VkContext::setCustomDriver(const char* driverDir, const char* libName, const char* hookDir,
                                 const char* tmpDir) {
     g_driverDir = driverDir; g_driverName = libName; g_hookDir = hookDir; g_tmpDir = tmpDir;
-    g_customLib = nullptr; g_customFailed = false;
+    g_customLib = nullptr; g_customFailed = false; g_customGipa = nullptr;
 }
 
 std::string VkContext::probe(bool custom) {
     void* lib = custom ? customLibrary() : systemLibrary();
     if (!lib) return "";
-    auto gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(lib, "vkGetInstanceProcAddr"));
+    auto gipa = custom && g_customGipa ? g_customGipa : reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(lib, "vkGetInstanceProcAddr"));
     auto create = gipa ? reinterpret_cast<PFN_vkCreateInstance>(gipa(VK_NULL_HANDLE, "vkCreateInstance")) : nullptr;
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     // The probe asks for the loader's own version (up to 1.3), so the features it reads are what the driver has at
@@ -160,7 +210,7 @@ std::string VkContext::probe(bool custom) {
         }
         destroyInst(inst, nullptr);
     }
-    if (out.empty() && custom) { g_customFailed = true; g_customLib = nullptr; }
+    if (out.empty() && custom) { g_customFailed = true; g_customLib = nullptr; g_customGipa = nullptr; }
     LOGI("vulkan probe (%s): %s", custom ? "custom" : "system", out.empty() ? "no usable GPU" : out.c_str());
     return out;
 }
@@ -170,7 +220,8 @@ bool VkContext::loadLibrary() {
     if (!lib_ && !g_driverName.empty()) LOGE("vulkan: custom driver %s unusable, using system driver", g_driverName.c_str());
     if (!lib_) lib_ = systemLibrary();
     if (!lib_) { LOGE("cannot load libvulkan.so"); return false; }
-    gipa_ = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(lib_, "vkGetInstanceProcAddr"));
+    gipa_ = lib_ == g_customLib && g_customGipa ? g_customGipa
+                                                : reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(lib_, "vkGetInstanceProcAddr"));
     if (!gipa_) { LOGE("no vkGetInstanceProcAddr"); return false; }
     vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(gipa_(VK_NULL_HANDLE, "vkCreateInstance"));
     return vkCreateInstance != nullptr;
