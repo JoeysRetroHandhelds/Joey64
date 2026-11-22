@@ -32,6 +32,8 @@ when a new one is out.
   sync" that waits for the GPU only when the game reads back what it drew. Games that need exact framebuffer
   reads (Pokémon Snap's photos, Resident Evil 2) keep them without paying for full synchronous mode everywhere.
   On Adreno, the GPU clock is kept up while a game runs, so frames that wait for the GPU don't run long.
+  With parallel-RDP, the RSP's recompiler does the chip's vector maths in ARM64 code of its own, and upscaled
+  pictures are read back without drawing each frame a second time at the N64's own resolution.
 - **Netplay built for handhelds.** Host a room on your own device and share an 8-character room code. Rooms on
   the same Wi-Fi show up by themselves, and public rooms are listed worldwide. The router's port is opened for
   you (NAT-PMP or UPnP) and input delay adjusts to the connection while you play. No relay server sits in the
@@ -65,8 +67,8 @@ when a new one is out.
   see.
 - Cover size, names under covers, short or full names, and tidy names ("The Legend of Zelda", not "Legend of
   Zelda, The").
-- Per-game Saves page (back up, restore or delete the game's save, play from any state) and Screenshots page
-  (view, share, delete).
+- Per-game Saves page (back up, restore or delete the game's save, play from any state), with the game's
+  screenshots on a tab of their own (view, share, delete).
 - Continue where you quit, or pick where to start from a list of auto save states and slots with their
   pictures.
 
@@ -81,7 +83,8 @@ when a new one is out.
   that has a code for it gets one (or pick a game's version yourself); games with their own 16:9 mode get the
   16:9 picture for it.
 - Crop edges and trim the game's own black border.
-- Look: the N64's filters (VI anti-aliasing, dither filter, bilinear) or sharp presets, deinterlacing,
+- Look: Auto (the N64's filters at native, sharp when upscaled), the N64's filters (VI anti-aliasing, dither
+  filter, bilinear) or sharp presets, deinterlacing,
   supersampling.
 - Colour (brightness, contrast, saturation, gamma), sharpening (AMD CAS or FSR 1), colour-blind help, black
   frame insertion on 120 Hz screens.
@@ -96,12 +99,15 @@ when a new one is out.
   mapped to the N64 layout automatically. On handhelds with an Xbox/Nintendo layout switch (AYN Odin, Retroid
   Pocket, Anbernic RG477M), each N64 button stays on the same physical button either way. Handhelds without
   sticks get the stick on the D-pad and a hold button for the C buttons.
-- Remap every button, per player and per game. Profiles to save and load a mapping.
+- Remap every button, per player and per game; one N64 button can take up to four controls. Profiles to save
+  and load a mapping.
+- A controller that connects for the first time asks which player it is (once, every time, or never).
 - Stick feel: range, response curve, octagon gate like a real N64 stick, invert, swap, dead zone and
   anti-dead zone, trigger threshold, with a live preview.
 - Tap to hold, turbo (5-20 presses a second) and button macros.
 - Paks per player: Controller Pak, Rumble Pak (with strength, on the controller or the device), Transfer Pak,
-  chosen automatically for each game (games that only use the Controller Pak never get a Rumble Pak).
+  chosen automatically for each game (games that only use the Controller Pak never get a Rumble Pak), and
+  changed from the game's options or the pause menu.
 - Touch controls with a layout editor (move, resize, add a D-pad, fast-forward, save or load state, screenshot
   and macro buttons). They hide when a controller is used and come back on a touch.
 - Hotkeys (a hotkey button plus another button, or any button on its own): save and load state, change slot,
@@ -123,8 +129,8 @@ when a new one is out.
   renderer, in a corner or down the side of the picture. Also pop-ups for states, screenshots and hotkeys.
 
 ### Settings and data
-- All games or one game: Video, Emulation, Audio and Controls settings can be set for everything, then changed
-  for a single game. Game settings shows and resets what a game has of its own, and copies it to another game.
+- Global or one game: Video, Emulation, Audio and Controls settings are set for every game (Global), then
+  changed for a single game, which keeps only what you changed. Game settings shows and resets what a game has of its own, and copies it to another game.
 - Data folder: saves, states, screenshots, cheats and backups in Joey64's own storage or any folder you pick,
   moved over for you.
 - Save backups on every start or daily, and a full Joey64 backup (everything, saves only or settings only) to a
@@ -149,7 +155,11 @@ Android 10 or newer, 64-bit ARM (arm64-v8a).
 | AYN Odin 3 Portal | Snapdragon 8 Elite, Adreno 830 |
 | Retroid Pocket Duo | Adreno 722 |
 | Retroid Pocket Flip | Unisoc T618, Mali-G52 |
+| Retroid Pocket 5 | Snapdragon 865, Adreno 650 |
 | Anbernic RG477M | Dimensity 8300, Mali-G615 |
+| Anbernic RG 476H | Unisoc T820, Mali-G57 |
+| Anbernic RG 55G1 | Qualcomm SG4250P, Adreno 613 |
+| Anbernic RG353P | Rockchip RK3566, Mali-G52 |
 | KONKR Pocket Block | MediaTek MT8786, Mali-G52 |
 
 Joey64 may install and run on other Android devices, but nothing has been checked on them yet, and the
@@ -192,6 +202,6 @@ Joey64 is GPL-3.0-or-later (`LICENSE`). The core is GPLv2+ and compiles in GNU l
 AndroidX and Compose libraries are Apache-2.0, so the app as shipped is GPLv3. Third-party notices are in the app
 (Settings › About › Licences) and under `app/src/main/cpp/third_party/`.
 
-Built on mupen64plus and mupen64plus-next, parallel-RDP and parallel-RSP, GLideN64, Mesa Turnip, libadrenotools,
+Built on mupen64plus and mupen64plus-next, parallel-RDP and parallel-RSP (with beebono's aarch64 recompiler), GLideN64, Mesa Turnip, libadrenotools,
 librashader, rcheevos, miniupnpc and libnatpmp. Box art from ScreenScraper; cheat lists and Joey64's own covers
 from [joey64-data](https://github.com/JoeysRetroHandhelds/joey64-data).
