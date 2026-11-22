@@ -3654,8 +3654,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (builtInPlayer >= 0 && PadDevices.builtIn() == null &&
             playerOfDevice.values.none { it == builtInPlayer }) return builtInPlayer
         if (controlsStore.padSeen(dev.descriptor)) return -1
-        // Ask once / Ask every time (approved newpad3 mockup 2026-11-17): the card asks which player it is.
-        if (gameLoaded && overlay != null && controlsStore.connecting().ask != com.joeysretro.joey64.controls.AskWhen.Never) {
+        // Ask once / Ask every time (approved newpad3 mockup 2026-11-17): the card asks which player it is. Not in a
+        // netplay room: the card pauses the game, which stops the room for everyone (release audit 2026-11-22), so
+        // there a new pad takes the first free player as with Don't ask.
+        if (gameLoaded && overlay != null && !inNetRoom() && controlsStore.connecting().ask != com.joeysretro.joey64.controls.AskWhen.Never) {
             offerNewPad(dev.id, event = false); fpsHandler.post { showNextCard() }
             return -1
         }
@@ -3791,6 +3793,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     private fun newPadPending(id: Int) = newPadShown?.first == id || newPadQueue.any { it.first == id }
 
+    /** In a netplay room (joined or hosted this play): no card may pause the game. */
+    private fun inNetRoom() = net.inRoom || roomPlay
+
     private fun offerNewPad(id: Int, event: Boolean) {
         if (!newPadPending(id)) newPadQueue += id to event
     }
@@ -3801,7 +3806,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val d = InputDevice.getDevice(id) ?: return
         if (!PadDevices.isPad(d) || PadDevices.isBuiltIn(d)) return
         notNowThisPlay.remove(d.descriptor)
-        if (com.joeysretro.joey64.controls.NewPads.cardFor(controlsStore, d, event = true) != null) {
+        if (!inNetRoom() && com.joeysretro.joey64.controls.NewPads.cardFor(controlsStore, d, event = true) != null) {
             offerNewPad(id, event = true); showNextCard(); return
         }
         playerOfDevice.remove(id)
@@ -3843,7 +3848,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 touch = !builtIn && p == 0 && touch != null && touchSettings.show != com.joeysretro.joey64.touch.TouchShow.Never, atStart = true)
             return true
         }
-        while (newPadQueue.isNotEmpty()) {
+        while (newPadQueue.isNotEmpty() && !inNetRoom()) {
             val (id, event) = newPadQueue.removeAt(0)
             val d = InputDevice.getDevice(id) ?: continue
             if (d.descriptor in notNowThisPlay) continue

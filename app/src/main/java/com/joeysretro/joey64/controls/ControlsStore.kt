@@ -38,10 +38,16 @@ class ControlsStore(private val dir: File) {
      * got the pad back at its next press), so None stays None for one seen before.
      */
     private val seenFile = File(dir, "seen.txt")
-    // Read each time (a controller's first press in a play, or a save): the launcher and the game screen each have a store.
+    // The launcher and the game screen each have a store, so the file is the truth: kept in memory while its time and size
+    // stay the same (release audit 2026-11-22: it was read whole on the input thread at a controller's first press).
+    @Volatile private var seenCache: Triple<Long, Long, Set<String>>? = null
     private fun seenSet(): Set<String> = try {
         if (!seenFile.isFile) seedSeen()
-        if (seenFile.isFile) seenFile.readLines().filter { it.isNotBlank() }.toSet() else emptySet()
+        if (!seenFile.isFile) emptySet() else {
+            val t = seenFile.lastModified(); val n = seenFile.length()
+            seenCache?.takeIf { it.first == t && it.second == n }?.third
+                ?: seenFile.readLines().filter { it.isNotBlank() }.toSet().also { seenCache = Triple(t, n, it) }
+        }
     } catch (e: Exception) { JLog.e(TAG, "can't read ${seenFile.name}: $e"); emptySet() }
 
     /**

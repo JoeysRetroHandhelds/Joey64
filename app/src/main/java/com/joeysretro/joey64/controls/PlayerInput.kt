@@ -13,7 +13,7 @@ import kotlin.math.sqrt
  */
 class PlayerInput(setup: PlayerSetup) {
     var setup: PlayerSetup = setup
-        set(v) { field = v; keyBits = keyBitsFor(v); cKeys = cKeysFor(v); latchMask = maskOf(v.latch); latchedOn = latchedOn and latchMask }
+        set(v) { field = v; keyBits = keyBitsFor(v); cKeys = cKeysFor(v); inputsOf = inputsFor(v); latchMask = maskOf(v.latch); latchedOn = latchedOn and latchMask }
 
     /**
      * The Swap D-pad hotkey (Joey 2026-11-13): while true, a D-pad that moves the stick ([StickSource.usesDPad]) is the
@@ -31,6 +31,10 @@ class PlayerInput(setup: PlayerSetup) {
     private var keyBits = keyBitsFor(setup)
     // Hold for C buttons: the keys the C buttons use, which press nothing else while the hold key is down.
     private var cKeys = cKeysFor(setup)
+    // Each N64 button's inputs (its own and its extras), by ordinal: made once per setup, since [PlayerSetup.inputs]
+    // builds new lists and [rawButtons] runs at every input event (release audit 2026-11-22).
+    private var inputsOf = inputsFor(setup)
+    private fun inputsFor(s: PlayerSetup): Array<List<PadInput>> = Array(N64Button.entries.size) { s.inputs(N64Button.entries[it]) }
     // Tap to hold: a ticked button's press toggles it, so it stays held until the next press.
     private var latchMask = maskOf(setup.latch)
     private var latchedOn = 0
@@ -116,7 +120,7 @@ class PlayerInput(setup: PlayerSetup) {
         // Each N64 button's own input and its extras (several controls on one button): any of them presses it.
         for (b in N64Button.entries) {
             if (hold != null && b in N64Button.C && !holding) continue
-            val on = setup.inputs(b).any { input ->
+            val on = inputsOf[b.ordinal].any { input ->
                 when (input) {
                     is PadInput.Key -> isHeld(input.code) && !(dpadOnStick && input.code in DPAD_CODES) &&
                         !(holding && b !in N64Button.C && input.code in cKeys)
