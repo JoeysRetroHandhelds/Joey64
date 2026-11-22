@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
 branch: main
-commit: 9ec3cbaa3f85824c4749f08e37b133b4df0a6ce5 2026-11-22 03:56:43 -0600 parallel-RSP CREDITS.txt: keep its CRLF line ends (only the new notice changes)
+commit: 394f00c9b88b3d027120eaf9792e7325589acdaf 2026-11-22 10:46:30 -0600 README: 0.2.6's core (no-storage fallbacks, smart sync row lock, TMEM overlap flush, beebono'
 uncommitted: none
-built: 2026-11-22 03:57
-md5: 68370bc92ae1be45ad7dd10704a005f2
+built: 2026-11-22 10:46
+md5: 920347dca8b07f59533c49eb80b6a157

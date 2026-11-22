@@ -38,4 +38,9 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+Joey64 also includes aarch64 recompiler work from beebono's parallel-rsp fork (branch m64p-aarch64,
+https://github.com/beebono/parallel-rsp): the NEON vector operations, vector and scalar loads and stores, divide
+code, code packing and SP DMA fast paths. It is licensed like upstream parallel-rsp, MIT (above) or LGPLv3.
+
 The LGPL 3.0 text follows.
+
