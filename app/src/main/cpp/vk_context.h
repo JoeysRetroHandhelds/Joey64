@@ -172,6 +172,8 @@ private:
     double extraLeadNs_ = 0;     // timed pacing: lead added after missed slots (timingMutex_)
     double workMaxNs_ = 12e6;    // decaying peak of frame start -> present call
     uint64_t lastTargetNs_ = 0, desiredNs_ = 0;
+    // N64_PACE_LOG=1 (dev): every 300 paced frames, the budget's parts and the acquire waits inside frames
+    int64_t acqSumNs_ = 0, acqMaxNs_ = 0, sleepSumNs_ = 0; int acqN_ = 0, paceN_ = 0, noSleepN_ = 0; double budgetSum_ = 0, stepSumNs_ = 0;
     // Auto pacing (N64_SWAP_INTERVAL=3): Steady until the queue backs up, then timed pacing with the learned grid step.
     bool autoPace_ = false, autoTimed_ = false, autoBack_ = false; // autoBack_: timed pacing didn't pay, Steady for good
     double autoP2dSum_ = 0, steadyP2d_ = 0;
@@ -187,7 +189,8 @@ private:
     int64_t pollNs_ = 0, presentPollNs_[kTimingRing] = {};
     int64_t presentCallNs_[kTimingRing] = {};
     uint8_t aimOdd_[kTimingRing] = {}; // 0 unknown, 1 aimed even, 2 aimed odd
-    uint32_t presentId_ = 0;
+    uint8_t behindAt_[kTimingRing] = {}; bool behind_ = false; // catch-up: the frame started behind its slot (no lead for its lateness)
+    uint32_t presentId_ = 0, leadHoldId_ = 0; // leadHoldId_: late reports up to this present add no more lead
     double latSumMs_ = 0, latMaxMs_ = 0;
     uint32_t latCount_ = 0;
     uint64_t lastActual_ = 0; uint32_t lastId_ = 0; int uneven_ = 0;
