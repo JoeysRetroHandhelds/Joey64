@@ -37,6 +37,16 @@ class ControlsEditorTest {
         assertEquals(listOf("abc", "def"), java.io.File(tmp.root, "seen.txt").readLines())
     }
 
+    @Test fun anUpdateFromBeforeSeenTxtCountsGlobalsControllersAsSeen() {
+        // 0.2.5 had no seen.txt: Global with an 8BitDo on Player 1, then the update (release audit 2026-11-22).
+        ControlsStore(tmp.root).saveAll(ControlsSet.defaults().with(0, AutoMap.byPosition(DeviceChoice.Pad("pad1", "8BitDo"), AutoMap.FaceCodes.POSITION)))
+        java.io.File(tmp.root, "seen.txt").delete()
+        val store = ControlsStore(tmp.root)
+        assertTrue(store.padSeen("pad1"))
+        org.junit.Assert.assertFalse(store.padSeen("other"))
+        assertEquals(listOf("pad1"), java.io.File(tmp.root, "seen.txt").readLines())
+    }
+
     @Test fun aGamesFirstChangeCopiesAllGamesAndDotsTheRow() {
         val store = ControlsStore(tmp.root)
         val e = ControlsEditor(store, "Mario Kart 64 (USA)", byPos)
