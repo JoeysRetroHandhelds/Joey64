@@ -196,10 +196,12 @@ object GpuRules {
         // The stock driver on Adreno 8xx runs parallel-RDP (Odin 3 / Odin 3 Portal, Adreno 830: 82/82 compat at 4x and 8x), so
         // Auto never gives it GLideN64, at any resolution (Joey 2026-11-09: "Glide shouldn't be offered at auto there at all").
         f.vendor == Vendor.ADRENO && f.model in 800..899 -> Pick("parallel", "stock Adreno 8xx: parallel-RDP")
-        // RK3566 (4x Cortex-A55, 1-core Mali-G52; Joey 2026-11-09, "Yes, add the rule"): parallel-RDP held full speed in
-        // no game, the Mali driver's own CPU side took 39% of the CPU; GLideN64 SM64 84 vs 44 fps uncapped, OoT 65 vs 57.
-        // The Flip (A75 big cores) keeps parallel-RDP.
-        f.vendor == Vendor.MALI && littleCoresOnly -> Pick("gliden64", "stock Mali, only little CPU cores (A53/A55): GLideN64")
+        // Little-core Malis (RK3566: 4x Cortex-A55, 1-core Mali-G52) had GLideN64 from 2026-11-09 to 11-22, when
+        // parallel-RDP held full speed in no game there. With the RSP JIT and single-threaded commands it measured level
+        // (RG353P capped 1x, 10 games, geomean 0.996: better in OoT, Paper Mario and Conker and none of GLideN64's 0.7-1 s
+        // hitches, a little slower in GoldenEye, Perfect Dark and SM64), so they get parallel-RDP too (Joey 2026-11-22,
+        // "Yes, switch to parallel"). littleCoresOnly stays in the signature and the log.
+        f.vendor == Vendor.MALI && littleCoresOnly -> Pick("parallel", "stock Mali, only little CPU cores (A53/A55): parallel-RDP")
         f.vendor == Vendor.MALI -> Pick("parallel", "stock Mali: parallel-RDP")
         // The trial's system-driver step (Joey 2026-11-15): parallel-RDP is tried on any stock driver with the features;
         // the trial steps down to GLideN64 when it shows no picture
