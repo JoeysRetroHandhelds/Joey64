@@ -1,6 +1,6 @@
 {
   "about": "Joey64 per-game database: what each game needs, what is wrong with it and where, and what was fixed. Seed for the M3 profile DB. Rules: gamedb/README.md. Update this file in the same commit as any change to a game's status (new problem found, fixed, regressed, setting added or dropped).",
-  "updated": "2026-11-17",
+  "updated": "2026-11-22",
   "games": [
     {
       "id": "NPF", "title": "Pokemon Snap",
@@ -903,6 +903,456 @@
       "id": "", "crc": "75FBDE20A3189B31", "title": "Top Gear Hyper-Bike (USA) (Beta)",
       "settings": [
         {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (no game code in its header: this dump, MD5 b60d26c2c2242bff61f76469fc272d2a)", "why": "junk in the border a TV hid, seen in play: the smallest border over the crop sheet's shots is 14.5 lines, and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop-joey.tsv, f1041 f1041_b9000.png); Joey 2026-11-16 \"51, not menu-only\""}
+      ]
+    },
+    {
+      "id": "NAB", "crc": "27C425D08C2D99C1", "title": "Airboarder 64 (Europe)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NABP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0040); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NTN", "crc": "DFD784ADAE426603", "title": "All Star Tennis '99 (Europe) (En,Fr,De,Es,It)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NTNP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0044); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NBM", "crc": "E340A49C74318D41", "title": "Baku Bomberman (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NBMJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0064); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NBV", "crc": "E73C7C4FAF93B838", "title": "Baku Bomberman 2 (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NBVJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0065); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NBF", "crc": "AB7C101DEC58C8B0", "title": "Bio F.R.E.A.K.S. (Europe)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NBFP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0093); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NBY", "crc": "8F12C09645DC17E1", "title": "Bug's Life, A (Europe)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NBYP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0125); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NCL", "md5": "29b79bf5812e5f9e5ecef073d59f8915", "title": "California Speed (Europe) (Proto)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 29b79bf5812e5f9e5ecef073d59f8915)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0135); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NCB", "crc": "FB3C48D08D28F69F", "title": "Charlie Blast's Territory (Europe)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NCBP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0156); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NCF", "crc": "8E9692B34264BB2A", "title": "Clay Fighter 63 1-3 (Europe)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NCFP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0168); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NCX", "crc": "83CB0B877E325457", "title": "Custom Robo (Japan)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NCXJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0189); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NDU", "crc": "0AA0055B7637DF65", "title": "Daffy Duck Starring as Duck Dodgers (Europe) (En,Fr,De,Es,It,Nl)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NDUP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0193); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NDY", "crc": "FD73F7759724755A", "title": "Diddy Kong Racing (Europe) (En,Fr,De)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NDYP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0209); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NDR", "crc": "BFF7B1C2AEBF148E", "title": "Doraemon - Nobita to 3tsu no Seireiseki (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NDRJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0230); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "", "md5": "6c329dc4cc2fc9a96475e8a30abfe735", "title": "Doubutsu Banchou (Japan) (Proto)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 6c329dc4cc2fc9a96475e8a30abfe735)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0233); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NDU", "crc": "FBB9F1FA6BF88689", "title": "Duck Dodgers Starring Daffy Duck (USA) (En,Fr,Es)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NDUE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0245); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NMX", "crc": "EC0214A9D430D27F", "title": "Excitebike 64 (USA) (LodgeNet)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NMXG: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0267); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NFW", "crc": "B70BAEE53A5005A8", "title": "F-1 World Grand Prix (France)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NFWF: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0278); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NFZ", "crc": "776646F606B9AC2B", "title": "F-Zero X (Europe)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NFZP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0283); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NFR", "crc": "3CECBCB86126BF07", "title": "F1 Racing Championship (Europe) (En,Fr,De,Es,It)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NFRP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0291); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "N9F", "crc": "0198A651FC219D84", "title": "FIFA 99 (Europe) (En,Fr,De,Es,It,Nl,Pt,Sv)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code N9FP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0297); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NGV", "md5": "097189b4c9bf6775e4685951b6e66f24", "title": "Frogger 2 (USA) (Proto 1)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 097189b4c9bf6775e4685951b6e66f24)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0328); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NGC", "md5": "4690cab33d0bc10b62d62cecdcaa50a1", "title": "GT 64 - Championship Edition (USA) (Beta) (1998-05-25)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 4690cab33d0bc10b62d62cecdcaa50a1)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0335); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NG6", "crc": "457B9CD909C55352", "title": "Ganbare Goemon - Dero Dero Douchuu Obake Tenkomori (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NG6J: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0341); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NGM", "crc": "4252A5ADAE6FBF4E", "title": "Goemon's Great Adventure (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NGME: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0363); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NK4", "crc": "CA1BB86F41CCA5C5", "title": "Hoshi no Kirby 64 (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NK4J: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0389); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NHY", "crc": "0DE2CE36D41D29E6", "title": "Hybrid Heaven (Japan)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NHYJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0397); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NIC", "crc": "E436467A82DE8F9B", "title": "Indy Racing 2000 (USA)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NICE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0413); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NFY", "crc": "4F29474F30CB707A", "title": "Kakutou Denshou - F-Cup Maniax (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NFYJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0468); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NK4", "crc": "0D93BA11683868A6", "title": "Kirby 64 - The Crystal Shards (Europe)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NK4P: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0476); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NLL", "crc": "7F30409952CF5276", "title": "Last Legion UX (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NLLJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0489); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NLR", "crc": "964ADD0BB29213DB", "title": "Lode Runner 3-D (Japan)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NLRJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0518); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NKG", "crc": "CDB998BE1024A5C8", "title": "Major League Baseball Featuring Ken Griffey Jr. (Australia)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NKGP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0550); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NMF", "crc": "62E957D07FC15A5D", "title": "Mario Golf (Europe)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NMFP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0553); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NMF", "crc": "734F816BC6A6EB67", "title": "Mario Golf 64 (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NMFJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0556); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NKT", "crc": "2577C7D4D18FAAAE", "title": "Mario Kart 64 (Europe) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NKTP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0558); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NM8", "crc": "839F3AD5406D15FA", "title": "Mario Tennis (Europe)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NM8P: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0580); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NMG", "crc": "28705FA5B509690E", "title": "Monaco Grand Prix - Racing Simulation 2 (Europe) (En,Fr,Es,It)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NMGP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0619); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NGM", "crc": "7F9345D3841ECADE", "title": "Mystical Ninja 2 Starring Goemon (Europe) (En,Fr,De)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NGMP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0635); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NBA", "crc": "36ACBA9BF28D4D94", "title": "NBA in the Zone '98 (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NBAJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0656); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NHO", "crc": "82EFDC30806A2461", "title": "NHL Blades of Steel '99 (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NHOE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0676); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NHL", "crc": "6DFDCDC34DE701C8", "title": "NHL Breakaway 98 (USA)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NHLE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0678); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NH9", "crc": "874621CB0031C127", "title": "NHL Breakaway 99 (Europe)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NH9P: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0679); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NHO", "crc": "A9895CD97020016C", "title": "NHL Pro 99 (Europe)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NHOP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0681); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NUT", "crc": "C5F1DE795D4BEB6E", "title": "Nushi Zuri 64 (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NUTJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0700); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NOB", "crc": "0375CF6756A93FAA", "title": "Ogre Battle 64 - Person of Lordly Caliber (Japan) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NOBJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0708); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NHN", "crc": "7EC22587EF1AE323", "title": "Olympic Hockey 98 (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NHNE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0714); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NCR", "crc": "73ABB1FB9CCA6093", "title": "Penny Racers (USA)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NCRE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0729); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NPL", "crc": "D7A6DCFACCFEB6B7", "title": "Power League 64 (Japan)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NPLJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0780); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NPM", "crc": "F3D27F54C111ACF9", "title": "Premier Manager 64 (Europe)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NPMP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0786); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NMG", "crc": "2877AC2DC3DC139A", "title": "Racing Simulation 2 (Germany)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NMGD: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0805); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NRG", "crc": "2B696CB47B93DCD8", "title": "Razmoket, Les - La Chasse aux Tresors (France)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NRGF: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0819); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NRO", "md5": "436f93c0d8b1650bc308ccf344c08c93", "title": "Road Rash 64 (Europe) (Beta) (1999-10-12)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 436f93c0d8b1650bc308ccf344c08c93)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0835); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NSA", "crc": "222123514046594B", "title": "Sonic Wings Assault (Japan)",
+      "settings": [
+        {"what": "Crop edges Wide (12 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NSAJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Wide is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0906); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NSV", "md5": "e66ed1cc4ab95d0872bb2ebc49b206c4", "title": "SpaceStation Silicon Valley (Japan) (Proto)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 e66ed1cc4ab95d0872bb2ebc49b206c4)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0922); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NRS", "crc": "219191C133183C61", "title": "Star Wars - Rogue Squadron (Europe) (En,Fr,De) (Rev 1)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NRSP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0938); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NEP", "crc": "53ED2DC406258002", "title": "Star Wars Episode I - Racer (Europe) (En,Fr,De)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NEPP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0954); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NSM", "crc": "D6FBA4A86326AA2C", "title": "Super Mario 64 (Japan) (Rev 3) (Shindou Edition)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NSMJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0972); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "", "md5": "fc32007ba03ff2510020e979c7bdad4f", "title": "Sydney 2000 (Europe) (Proto)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 fc32007ba03ff2510020e979c7bdad4f)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f0992); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NTX", "crc": "AEBCDD5415FF834A", "title": "Taz Express (Europe) (En,Fr,De,Es,It,Nl)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NTXP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1002); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NTF", "md5": "035c0700406197104d977c379e410cb7", "title": "Tony Hawk's Pro Skater (USA) (Beta)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 035c0700406197104d977c379e410cb7)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1029); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "", "md5": "6440a67e2c27bd9adedfc60939c2bf1b", "title": "Tony Hawk's Pro Skater 2 (USA) (v012) (Beta) (2001-06-04)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 6440a67e2c27bd9adedfc60939c2bf1b)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1034); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NTF", "crc": "9F8926A50587B409", "title": "Tony Hawk's Skateboarding (Europe)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NTFP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1037); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NGB", "crc": "5F3F49C60DC714B0", "title": "Top Gear Hyper Bike (Europe)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NGBP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1039); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "", "md5": "975d01545d0803f20d1ee61385c28eed", "title": "Top Gear Overdrive (USA) (Beta)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 975d01545d0803f20d1ee61385c28eed)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1045); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NTR", "crc": "0E596247753D4B8B", "title": "Top Gear Rally (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NTRJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1049); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NTB", "crc": "91691C3DF4AC5B4D", "title": "Transformers - Beast Wars Metals 64 (Japan)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NTBJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1062); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NOH", "crc": "4D79D316E8501B33", "title": "Transformers - Beast Wars Transmetals (USA)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NOHE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1063); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NT2", "crc": "2E0E7749B8B49D59", "title": "Turok 2 - Seeds of Evil (Europe) (En,Fr,Es,It)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NT2X: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1082); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NSM", "md5": "a74738d03aca4e51690408d203e86d49", "title": "Twintris (World) (Demo) (Presence of Mind '98) (Unl)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt BY_MD5 (this dump only, MD5 a74738d03aca4e51690408d203e86d49)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1100); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NWV", "crc": "396F5ADD6693ECA7", "title": "WCW Backstage Assault (USA)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NWVE: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1124); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NWM", "crc": "33BE8CD6EC186912", "title": "WCW Mayhem (USA)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NWME: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1126); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NWR", "crc": "650EFA9630DDF9A7", "title": "Wave Race 64 - Kawasaki Jet Ski (Europe) (En,De)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NWRP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1155); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NWG", "crc": "F1301043FD80541A", "title": "Wayne Gretzky's 3D Hockey (Japan)",
+      "settings": [
+        {"what": "Crop edges Normal (8 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NWGJ: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Normal is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1165); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NJ2", "crc": "E43C976505B1C1BE", "title": "Wonder Project J2 - Koruro no Mori no Jozet (Japan)",
+      "settings": [
+        {"what": "Crop edges Widest (16 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code NJ2J: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Widest is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1188); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "N8W", "crc": "F9FC3090FF014EC2", "title": "World Cup 98 (Europe) (En,Fr,De,Es,It,Nl,Sv,Da)",
+      "settings": [
+        {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code N8WP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1189); Joey 2026-11-22 \"Yes, all of them\""}
       ]
     }
   ]

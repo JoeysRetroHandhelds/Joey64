@@ -31,6 +31,18 @@ class GameCropTest {
         assertNull("Dual Heroes: no size fits", GameCrop.lines("NDHJ", unset))
     }
 
+    @Test fun cropPass3GoesByRegion() {
+        assertEquals(16, GameCrop.of("NKTP", unset)) // Mario Kart 64 (Europe): PAL bars, Widest
+        assertNull("Mario Kart 64 (USA) has no bars", GameCrop.lines("NKTE", unset))
+        assertEquals(16, GameCrop.of("NABP", unset)) // Airboarder 64 (Europe) over the Japanese one's Normal
+        assertEquals(8, GameCrop.of("NABJ", unset))
+        assertEquals(8, GameCrop.of("NHOE", unset)) // NHL Blades of Steel '99 (USA) and NHL Pro 99 (Europe) share NHO
+        assertEquals(4, GameCrop.of("NHOP", unset))
+        assertNull("Super Mario 64 (USA): Twintris carries its code, so Twintris goes by MD5", GameCrop.lines("NSME", unset))
+        assertEquals(16, GameCrop.of(GameCrop.keyOf("NSME", "a74738d03aca4e51690408d203e86d49"), unset))
+        assertEquals(4, GameCrop.of("NSMJ", unset)) // Super Mario 64 (Japan) (Shindou Edition): Thin
+    }
+
     @Test fun gamesWithNoCodeGoByMd5() {
         val toonPanic = "b6fd2a048d1f4f324cebc97ba09872bb"
         assertEquals("md5:$toonPanic", GameCrop.keyOf(null, toonPanic.uppercase()))
