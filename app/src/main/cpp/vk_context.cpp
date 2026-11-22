@@ -657,6 +657,17 @@ void VkContext::paceFrame() {
         uint64_t want = earliest;
         if (lastTargetNs_ && lastTargetNs_ + period - step / 2 > want) want = lastTargetNs_ + period - step / 2;
         target = anchor + (want > anchor ? (want - anchor + step - 1) / step : 0) * step;
+    } else {
+        // Refresh grid (2026-11-22, 120 Hz judder; N64_PACE_GRID=0 gives the old aim): the explicit timed path
+        // (N64_SWAP_INTERVAL=2) aimed on the grid of the last display time, so a frame shown a refresh late moved every later
+        // target and the game lost the time (RG 476H game 24: frame gaps 15/27/8 ms with a lost refresh every few cycles, 56.2
+        // emu fps, 199 underruns in 600 frames). Now the next target is the last target + a period, on the refresh grid, as
+        // auto pacing aims. RG 476H judder set: OoT 56.3 -> 60.0, Paper Mario 58.8 -> 60.0, Conker 56.4 -> 60.1 emu fps.
+        static const bool grid = !(getenv("N64_PACE_GRID") && *getenv("N64_PACE_GRID") == '0');
+        if (grid && lastTargetNs_) {
+            uint64_t want = std::max(earliest, lastTargetNs_ + period - refreshNs_ / 2);
+            target = anchor + (want > anchor ? (want - anchor + refreshNs_ - 1) / refreshNs_ : 0) * refreshNs_;
+        }
     }
     if (lastTargetNs_ && target + refreshNs_ / 2 < lastTargetNs_ + period)
         target = lastTargetNs_ + period; // never two frames in one slot
