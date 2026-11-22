@@ -82,7 +82,11 @@ bool AudioOut::openStream() {
     // ~20 ms kept queued (stereo samples) to start; the rest of the ring is slack for slow frames.
     // Settings › Audio's Latency: Low starts at 10 ms and stays, Safe starts at 60.
     const int mode = latencyMode_.load();
-    const int startMs = mode == 1 ? 10 : mode == 2 ? 60 : kTargetMs;
+    // N64_AUDIO_START_MS=<ms> (dev, 2026-11-21): Auto's starting target (Smash idea (b): run-ahead frames swing 11-22 ms
+    // and a 20 ms start crackles until the target has grown).
+    const char* sm = getenv("N64_AUDIO_START_MS");
+    const int autoStart = sm && atoi(sm) > 0 ? std::min(atoi(sm), (int)kMaxTargetMs) : kTargetMs;
+    const int startMs = mode == 1 ? 10 : mode == 2 ? 60 : autoStart;
     grow_ = mode != 1;
     target_ = (size_t)dstRate * startMs / 1000 * 2;
     startTarget_ = target_; quietWindows_ = 0;

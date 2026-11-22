@@ -230,6 +230,8 @@ static void (*g_viTrim)(int*) = nullptr;
 static unsigned (*g_rdpWaits)() = nullptr;
 // Nanoseconds the core has waited for the GPU so far (joey64_rdp_wait_ns; null on an older core), for the stats line.
 static uint64_t (*g_rdpWaitNs)() = nullptr;
+// Dev: the core's joey64_rdp_settle (waits until RDRAM holds everything the RDP drew), for N64_HASH_RAM.
+static void (*g_rdpSettle)() = nullptr;
 static void readViTrim() {
     static const bool off = getenv("N64_VI_TRIM") && *getenv("N64_VI_TRIM") == '0';
     int t[4] = {0, 0, 0, 0};
@@ -1448,6 +1450,11 @@ bool runStateRequest(StateRequest& req, int timeoutMs) {
     return true;
 }
 
+// The big cores pinToBigCores chose, and the fastest of them (the highest capacity, the last on a tie): read from
+// cpu_capacity, not from the thread's affinity, which leaves out cores the phone has parked (see splitBigCores).
+static cpu_set_t g_bigCpus;
+static int g_primeCpu = -1;
+
 // Keep the emulation thread on the big cores (capacity within 80% of the fastest): left to the
 // scheduler it starts on little cores and only migrates as load builds. M4 adds thermal fallback.
 void pinToBigCores() {
@@ -1467,40 +1474,64 @@ void pinToBigCores() {
     for (int i = 0; i < n; ++i)
         if (cap[i] * 10 >= maxCap * 8) { CPU_SET(i, &set); cores += std::to_string(i) + " "; }
     int r = sched_setaffinity(0, sizeof set, &set);
+    g_bigCpus = set;
+    for (int i = 0; i < n; ++i) if (CPU_ISSET(i, &set) && (g_primeCpu < 0 || cap[i] >= cap[g_primeCpu])) g_primeCpu = i;
     LOGI("emu thread pinned to cpus %s(%s)", cores.c_str(), r == 0 ? "ok" : strerror(errno));
 }
 
-// Then the emulation thread gets the last big core to itself and the threads that inherited its
+// Then the emulation thread gets the fastest big core to itself and the threads that inherited its
 // big-core mask (parallel-RDP's worker, threads created later) the other big cores. Mario Tennis on
 // the Flip (2 big cores): 59.7 vs 57.2 fps in a match. Rescanned now and then for new threads.
 // N64_PIN_SPLIT=0 in the environment turns it off.
-void splitBigCores() {
+// The fastest core comes from pinToBigCores (cpu_capacity), not from the thread's affinity (2026-11-21, Gauntlet
+// Legends capped): the affinity the kernel reports leaves out a core the phone has parked, and a capped game's light
+// load at the split often has the prime core parked (Odin 2 Portal: cpu 7, 3187 MHz), so the emulation thread went
+// to cpu 6 alone (a 2.8 GHz core, held at 2477 MHz) for the whole play: 13.6 ms a frame against 9.7 on cpu 7,
+// 58-59 fps. A parked core can't be the only one in a mask (EINVAL): the split then returns false and runLoop tries
+// again every 30 frames until the core is up (Odin 2 Portal: on cpu 7 after 3 tries, 11.4 ms a frame, 60.1 fps).
+// Dev: N64_PIN_PRIME=0 gives the old pick (the last core the affinity shows).
+bool splitBigCores() {
     static cpu_set_t big, rest, one;
     static bool init = false;
+    static int tries = 0;
     if (!init) {
-        CPU_ZERO(&big);
-        if (sched_getaffinity(0, sizeof big, &big) || CPU_COUNT(&big) < 2) return;
+        static const bool oldPick = getenv("N64_PIN_PRIME") && *getenv("N64_PIN_PRIME") == '0';
         int last = -1;
-        for (int i = 0; i < CPU_SETSIZE; ++i) if (CPU_ISSET(i, &big)) last = i;
+        if (!oldPick && g_primeCpu >= 0 && CPU_COUNT(&g_bigCpus) >= 2) {
+            big = g_bigCpus; last = g_primeCpu;
+        } else {
+            CPU_ZERO(&big);
+            if (sched_getaffinity(0, sizeof big, &big) || CPU_COUNT(&big) < 2) return true;
+            for (int i = 0; i < CPU_SETSIZE; ++i) if (CPU_ISSET(i, &big)) last = i;
+        }
         rest = big; CPU_CLR(last, &rest);
         CPU_ZERO(&one); CPU_SET(last, &one);
-        sched_setaffinity(0, sizeof one, &one);
+        if (sched_setaffinity(0, sizeof one, &one) != 0) {
+            if (tries++ < 3 || tries % 60 == 0) LOGI("emu thread: cpu %d is parked (%s), trying again in 0.5 s", last, strerror(errno));
+            return false;
+        }
         LOGI("emu thread on cpu %d alone", last);
         init = true;
     }
     pid_t self = gettid();
     std::string moved;
+    // A mask of big cores only, shown without the parked ones, but not already the rest
+    auto inBigOnly = [&](const cpu_set_t& s) {
+        cpu_set_t a; CPU_AND(&a, &s, &big);
+        return CPU_EQUAL(&a, &s) && !CPU_EQUAL(&s, &rest) && CPU_COUNT(&s) >= CPU_COUNT(&rest);
+    };
     if (DIR* d = opendir("/proc/self/task")) {
         while (dirent* e = readdir(d)) {
             pid_t tid = atoi(e->d_name);
             if (tid <= 0 || tid == self) continue;
             cpu_set_t s; CPU_ZERO(&s);
-            if (sched_getaffinity(tid, sizeof s, &s) == 0 && (CPU_EQUAL(&s, &big) || CPU_EQUAL(&s, &one)) &&
+            if (sched_getaffinity(tid, sizeof s, &s) == 0 && (CPU_EQUAL(&s, &big) || CPU_EQUAL(&s, &one) || inBigOnly(s)) &&
                 sched_setaffinity(tid, sizeof rest, &rest) == 0) moved += std::to_string(tid) + " ";
         }
         closedir(d);
     }
     if (!moved.empty()) LOGI("threads moved off the emu thread's core: %s", moved.c_str());
+    return true;
 }
 
 // The core's worker threads (parallel-RDP's command worker, fence and pipeline threads, ...): they are not named,
@@ -2104,11 +2135,26 @@ void runLoop() {
         static const int hashEvery = getenv("N64_HASH_RAM") ? atoi(getenv("N64_HASH_RAM")) : 0;
         static int hashFrame = 0;
         if (hashEvery > 0 && stateWait == 0 && ++hashFrame % hashEvery == 0) {
+            // Async parallel-RDP copies its drawing into RDRAM on a worker as the GPU finishes: without the settle the
+            // hash raced it (RG353P 2026-11-21: 9 of 9 hashes raced, the RDRAM dumps of two runs identical).
+            if (g_rdpSettle) g_rdpSettle();
             auto* mem = static_cast<const uint32_t*>(core.get_memory_data(RETRO_MEMORY_SYSTEM_RAM));
             size_t words = core.get_memory_size(RETRO_MEMORY_SYSTEM_RAM) / 4;
-            uint64_t h = 1469598103934665603ull;
-            for (size_t i = 0; mem && i < words; i++) h = (h ^ mem[i]) * 1099511628211ull;
-            LOGI("ramhash %d %016llx", hashFrame, (unsigned long long)h);
+            auto hashNow = [&]() {
+                uint64_t x = 1469598103934665603ull;
+                for (size_t i = 0; mem && i < words; i++) x = (x ^ mem[i]) * 1099511628211ull;
+                return x;
+            };
+            // Hash until two in a row match: on the RG353P (Mali, async parallel-RDP) writes still landed after the
+            // settle, so every hash raced while the RDRAM dumps of two runs were identical (2026-11-21).
+            uint64_t h = hashNow();
+            int tries = 1;
+            for (uint64_t prev = ~h; prev != h && tries < 200; tries++) {
+                prev = h;
+                usleep(1000);
+                h = hashNow();
+            }
+            LOGI("ramhash %d %016llx%s", hashFrame, (unsigned long long)h, tries >= 200 ? " (never settled)" : tries > 2 ? " (settled)" : "");
             // N64_HASH_RAM_TWICE=1: hash again at once; a different second hash means the RDP was still writing RDRAM
             // while the host read it (the hash itself races, not the emulation).
             static const bool hashTwice = getenv("N64_HASH_RAM_TWICE") && getenv("N64_HASH_RAM_TWICE")[0] == '1';
@@ -2152,7 +2198,7 @@ void runLoop() {
             perfHint.reportFrame();
         }
         if (split && --splitIn == 0) {
-            splitBigCores(); splitIn = 600;
+            splitIn = splitBigCores() ? 600 : 30; // a parked fastest core: again in half a second
             if (hintMode == 2 && !hintThreadsAdded) { perfHint.addThreads(coreWorkerThreads()); hintThreadsAdded = true; }
         }
     }
@@ -2255,6 +2301,7 @@ JNIEXPORT jboolean JNICALL JNI(loadCore)(JNIEnv* env, jobject, jstring path, jst
     g_viTrim = reinterpret_cast<void (*)(int*)>(dlsym(core.handle, "joey64_vi_trim"));
     g_rdpWaits = reinterpret_cast<unsigned (*)()>(dlsym(core.handle, "joey64_rdp_waits"));
     g_rdpWaitNs = reinterpret_cast<uint64_t (*)()>(dlsym(core.handle, "joey64_rdp_wait_ns"));
+    g_rdpSettle = reinterpret_cast<void (*)()>(dlsym(core.handle, "joey64_rdp_settle"));
     { std::atomic<int>* v = Display::viTrim(); for (int i = 0; i < 4; ++i) v[i] = 0; }
 
     core.set_environment(environment);
