@@ -39,8 +39,22 @@ class ControlsStore(private val dir: File) {
      */
     private val seenFile = File(dir, "seen.txt")
     // Read each time (a controller's first press in a play, or a save): the launcher and the game screen each have a store.
-    private fun seenSet(): Set<String> = try { if (seenFile.isFile) seenFile.readLines().filter { it.isNotBlank() }.toSet() else emptySet() }
-        catch (e: Exception) { JLog.e(TAG, "can't read ${seenFile.name}: $e"); emptySet() }
+    private fun seenSet(): Set<String> = try {
+        if (!seenFile.isFile) seedSeen()
+        if (seenFile.isFile) seenFile.readLines().filter { it.isNotBlank() }.toSet() else emptySet()
+    } catch (e: Exception) { JLog.e(TAG, "can't read ${seenFile.name}: $e"); emptySet() }
+
+    /**
+     * An install updated from a version without `seen.txt` (0.2.5 and before): the controllers Global already gives a
+     * player count as seen, so the new controller card doesn't ask about a pad that already plays (release audit
+     * 2026-11-22: it asked, focused a free player, and A moved the pad off Player 1).
+     */
+    private fun seedSeen() {
+        if (!all.isFile) return
+        val pads = all().players.mapNotNull { (it.device as? DeviceChoice.Pad)?.descriptor?.takeIf { d -> d.isNotEmpty() } }
+        dir.mkdirs(); seenFile.writeText(pads.joinToString("") { it + "\n" })
+        JLog.i(TAG, "seen.txt started from Global: ${pads.size} controllers")
+    }
     fun padSeen(descriptor: String): Boolean = descriptor in seenSet()
     fun markPadSeen(descriptor: String) {
         if (descriptor.isEmpty() || descriptor in seenSet()) return

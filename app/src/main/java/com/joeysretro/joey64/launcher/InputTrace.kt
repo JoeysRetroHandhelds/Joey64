@@ -50,7 +50,11 @@ object InputTrace {
         val act = when (e.action) { KeyEvent.ACTION_DOWN -> "down"; KeyEvent.ACTION_UP -> "up"; else -> "multiple" }
         // held: how long since its press (a key-up whose press came before the sleep shows a long one)
         val held = e.eventTime - e.downTime
-        add("$where key $act ${KeyEvent.keyCodeToString(e.keyCode)} rep ${e.repeatCount} scan ${e.scanCode} held ${held} ms" +
+        // a typing key (a letter, digit or symbol) is never named: it may be part of a password (release audit 2026-11-22)
+        val typing = e.isPrintingKey && !KeyEvent.isGamepadButton(e.keyCode)
+        val name = if (typing) "a typing key" else KeyEvent.keyCodeToString(e.keyCode)
+        val scan = if (typing) "-" else "${e.scanCode}"
+        add("$where key $act $name rep ${e.repeatCount} scan $scan held ${held} ms" +
             "${if (e.isCanceled) " canceled" else ""} flags 0x${Integer.toHexString(e.flags)}, ${dev(e.device)}")
     }
 

@@ -1328,7 +1328,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         @Suppress("DEPRECATION") val d = windowManager.defaultDisplay ?: return null
         val now = d.mode
         val same = d.supportedModes.filter { it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight }
-        val top = same.maxByOrNull { it.refreshRate } ?: return null
+        // only a whole multiple of 60 Hz (120, 180, 240): a 90, 144 or 165 Hz mode shows 60 fps unevenly (release audit
+        // 2026-11-22), so a screen without one is left as it is
+        val fits = same.filter { val k = Math.round(it.refreshRate / 60f); k >= 1 && kotlin.math.abs(it.refreshRate - 60f * k) < 1f }
+        val top = fits.maxByOrNull { it.refreshRate } ?: return null
         return if (same.size > 1) top else null
     }
 
