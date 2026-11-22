@@ -21,7 +21,7 @@ class GpuRulesTest {
         assertEquals(GpuRules.Driver.TURNIP, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 750", null)).value)
         // with Turnip loaded the name is Turnip's
         val t = GpuRules.family(adreno, "Turnip Adreno (TM) 740", null)
-        assertEquals(mapOf("N64_SMOOTHER" to "1", "mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0", "N64_GPU_TURBO" to "3"), env(t))
+        assertEquals(mapOf("PARALLEL_RDP_SINGLE_THREADED_COMMAND" to "1", "N64_RSP_BJIT" to "1", "N64_SMOOTHER" to "1", "mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0", "N64_GPU_TURBO" to "3"), env(t))
         assertEquals(8, GpuRules.upscaleTop(t).value)
         assertEquals("parallel", GpuRules.autoRenderer(true, true, true, t).value)
         assertEquals("gliden64", GpuRules.autoRenderer(true, true, false, f).value)
@@ -30,7 +30,7 @@ class GpuRulesTest {
     @Test fun odin3830() {
         val f = GpuRules.family(adreno, "Adreno (TM) 830", "Adreno830v2")
         assertEquals(GpuRules.Driver.SYSTEM, GpuRules.autoDriver(f).value)
-        assertEquals(mapOf("N64_SMOOTHER" to "1", "mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0", "N64_GPU_TURBO" to "3"), env(f))
+        assertEquals(mapOf("PARALLEL_RDP_SINGLE_THREADED_COMMAND" to "1", "N64_RSP_BJIT" to "1", "N64_SMOOTHER" to "1", "mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0", "N64_GPU_TURBO" to "3"), env(f))
         assertEquals(listOf("N64_KGSL_PRIO"), GpuRules.beforeDriver("Odin3").map { it.key })
         assertTrue(GpuRules.beforeDriver("Retroid Pocket 5").isEmpty())
     }
@@ -62,7 +62,7 @@ class GpuRulesTest {
     @Test fun duo722() {
         val f = GpuRules.family(adreno, "Turnip Adreno (TM) 722", null)
         assertEquals(GpuRules.Driver.ARMSX2, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 722", null)).value)
-        assertEquals(mapOf("mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0", "N64_GPU_TURBO" to "3"), env(f))
+        assertEquals(mapOf("PARALLEL_RDP_SINGLE_THREADED_COMMAND" to "1", "N64_RSP_BJIT" to "1", "mupen64plus-parallel-rdp-synchronous" to "True", "N64_RDP_NATIVE_FIRST" to "1", "N64_RDP_PREBUILD" to "0", "N64_GPU_TURBO" to "3"), env(f))
         assertEquals(2, GpuRules.upscaleTop(f).value)
     }
 
@@ -112,7 +112,7 @@ class GpuRulesTest {
         val f = GpuRules.family(arm, "Mali-G52 MC2", null)
         assertEquals(GpuRules.Vendor.MALI, f.vendor)
         assertEquals(GpuRules.Driver.SYSTEM, GpuRules.autoDriver(f).value)
-        assertEquals(mapOf("N64_EARLY_ACQUIRE" to "30", "PARALLEL_RDP_SINGLE_THREADED_COMMAND" to "1", "N64_RDP_RING_LAZY" to "0",
+        assertEquals(mapOf("N64_EARLY_ACQUIRE" to "30", "PARALLEL_RDP_SINGLE_THREADED_COMMAND" to "1", "N64_RSP_BJIT" to "1", "N64_RDP_RING_LAZY" to "0",
             "N64_DRC_THREAD" to "1", "N64_DRC_JCACHE" to "0"), env(f))
         assertEquals("parallel", GpuRules.autoRenderer(true, true, false, f).value)
         assertEquals(8, GpuRules.upscaleTop(f).value)
@@ -151,7 +151,7 @@ class GpuRulesTest {
         assertEquals(GpuRules.Driver.SYSTEM, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 530", null)).value)
         val other = GpuRules.family(0x1010, "PowerVR B-Series BXM-8-256", null)
         assertEquals(GpuRules.Vendor.OTHER, other.vendor)
-        assertEquals(mapOf("N64_RDP_RING_LAZY" to "0", "N64_DRC_JCACHE" to "0"), env(other))
+        assertEquals(mapOf("N64_RSP_BJIT" to "1", "N64_RDP_RING_LAZY" to "0", "N64_DRC_JCACHE" to "0"), env(other))
         assertEquals("gliden64", GpuRules.autoRenderer(true, false, true, other).value)
     }
 

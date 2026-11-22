@@ -312,6 +312,17 @@ object GpuRules {
         // Single-threaded RDP command processing on Mali (README item 36): Flip +3.7% uncapped, compat 82/82
         // (flip-st). Adreno keeps the ring (Duo mixed: Banjo -6.4%, Paper Mario -5.7%).
         if (mali) add(Setting("PARALLEL_RDP_SINGLE_THREADED_COMMAND", "1", false, "Mali: single-threaded RDP commands"))
+        // With the RSP JIT (below) single-threaded commands win on the Adreno 650 and up too (2026-11-22, bjst, uncapped
+        // 1x, ring vs JIT + single-threaded): Retroid Pocket 5 OoT 200.0 -> 319.6, DK64 239.4 -> 359.6, Conker 188.3 ->
+        // 254.6, Banjo 543.7 -> 597.3 (the JIT alone lost Banjo there: the ring's worker woke for every small batch);
+        // Odin 2 Portal DK64 +24%, Conker +23%, OoT +12%; Odin 3 Portal OoT +29%, Conker +37%; none slower than the ring
+        // alone; moving Smash RP5 164.9 -> 186.9. RG 55G1 (613) mixed (OoT -2%, Conker -3%), so it keeps the ring. Short
+        // compat 21/21 with both on the RP5, Odin 2 Portal, Odin 3 Portal, RG353P and Flip.
+        if (adreno && f.model >= 650) add(Setting("PARALLEL_RDP_SINGLE_THREADED_COMMAND", "1", false, "Adreno 650+: single-threaded RDP commands"))
+        // The RSP JIT (core, beebono's aarch64 parallel-RSP JIT, N64_RSP_BJIT=1; 2026-11-22) on every GPU: uncapped 1x
+        // RG477M Banjo +19%, Conker +18%, DK64 +11%, SM64 +11% (Smash -3%); Flip Conker +17%, Banjo +6%; RG353P Banjo
+        // +25%, capped SM64 52.8 -> 54.9 fps with 72 -> 0 frames over 33 ms; RG 55G1 never slower.
+        add(Setting("N64_RSP_BJIT", "1", false, "RSP JIT"))
         // Lazy waking of parallel-RDP's command worker (core, on unless 0) stays on for Adreno only (Joey 2026-11-07):
         // Portal +4.4%, Duo +3.0%, compat 82/82 on both. Other GPUs were not measured with it.
         if (!adreno) add(Setting("N64_RDP_RING_LAZY", "0", false, "not Adreno: lazy RDP worker off"))
