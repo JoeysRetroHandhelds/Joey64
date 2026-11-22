@@ -82,10 +82,15 @@ bool AudioOut::openStream() {
     // ~20 ms kept queued (stereo samples) to start; the rest of the ring is slack for slow frames.
     // Settings › Audio's Latency: Low starts at 10 ms and stays, Safe starts at 60.
     const int mode = latencyMode_.load();
-    // N64_AUDIO_START_MS=<ms> (dev, 2026-11-21): Auto's starting target (Smash idea (b): run-ahead frames swing 11-22 ms
-    // and a 20 ms start crackles until the target has grown).
+    // With run-ahead Auto starts at 40 ms (Joey 2026-11-21): its frames swing 11-22 ms and a 20 ms start crackled until
+    // the target had grown (Odin 2 Portal, Smash 2x CRT light, run-ahead 1, capped: 0-6 underruns per 5 s after the
+    // first window at 20 ms, none at 40 or 60). Netplay turns run-ahead off, so 20 ms there.
+    // N64_AUDIO_START_MS=<ms> (dev): Auto's starting target.
     const char* sm = getenv("N64_AUDIO_START_MS");
-    const int autoStart = sm && atoi(sm) > 0 ? std::min(atoi(sm), (int)kMaxTargetMs) : kTargetMs;
+    const char* ra = getenv("N64_RUNAHEAD");
+    const bool netplay = (getenv("N64_NETPLAY") && *getenv("N64_NETPLAY")) || (getenv("N64_NETPLAY_SERVE") && *getenv("N64_NETPLAY_SERVE"));
+    const int autoStart = sm && atoi(sm) > 0 ? std::min(atoi(sm), (int)kMaxTargetMs)
+                        : ra && atoi(ra) > 0 && !netplay ? std::min(40, (int)kMaxTargetMs) : kTargetMs;
     const int startMs = mode == 1 ? 10 : mode == 2 ? 60 : autoStart;
     grow_ = mode != 1;
     target_ = (size_t)dstRate * startMs / 1000 * 2;
@@ -111,6 +116,7 @@ bool AudioOut::openStream() {
     }
     ffPos_ = 0; ffLen_ = 0; ffHaveTail_ = false;
     { const char* rd = getenv("N64_RESUME_DROP"); resumeDropOn_ = !(rd && *rd == '0'); }
+    { const char* xf = getenv("N64_AUDIO_XFADE"); xfadeOn_ = !(xf && *xf == '0'); }
     resumeDrop_.store(false, std::memory_order_relaxed);
     pos_ = 0.0; prev_[0] = prev_[1] = 0;
     cap_ = (size_t)dstRate * 2 * 2 / 5; // ~400 ms stereo: room for a game's 100 ms lump on top of the wait's ceiling
@@ -416,7 +422,15 @@ aaudio_data_callback_result_t AudioOut::cb(AAudioStream*, void* user, void* data
         // stereo frames.
         size_t r = self->r_.load(std::memory_order_relaxed), w = self->w_.load(std::memory_order_acquire);
         size_t f = (w + self->cap_ - r) % self->cap_, keep = self->keep_.load(std::memory_order_relaxed);
-        if (f > keep) self->r_.store((r + ((f - keep) & ~(size_t)1)) % self->cap_, std::memory_order_release);
+        if (f > keep) {
+            if (self->xfadeOn_) {
+                // What would have played next, from the old read position: faded out under the kept sound.
+                int n = (int)std::min<size_t>(kXfadeFrames, f / 2);
+                for (int j = 0; j < n * 2; ++j) self->xfade_[j] = self->ring_[(r + j) % self->cap_];
+                self->xfadeN_ = n; self->xfadeAt_ = 0;
+            }
+            self->r_.store((r + ((f - keep) & ~(size_t)1)) % self->cap_, std::memory_order_release);
+        }
         self->resumeDrop_.store(false, std::memory_order_release);
     }
     for (size_t i = 0; i < samples; ++i) {
@@ -440,6 +454,11 @@ aaudio_data_callback_result_t AudioOut::cb(AAudioStream*, void* user, void* data
             break;
         }
         float s = self->ring_[r];
+        if (self->xfadeAt_ < self->xfadeN_) {
+            float t = (float)(self->xfadeAt_ + 1) / (float)(self->xfadeN_ + 1);
+            s = self->xfade_[self->xfadeAt_ * 2 + (i & 1)] * (1.0f - t) + s * t;
+            if (i & 1) ++self->xfadeAt_;
+        }
         if (self->fadeIn_ > 0) {
             s *= 1.0f - (float)self->fadeIn_ / (float)(kFadeFrames + 1);
             if (i & 1) --self->fadeIn_;

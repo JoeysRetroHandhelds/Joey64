@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -460,9 +461,26 @@ void emuThread(uint64_t (*rdpWaitNs)(), unsigned (*rdpWaits)()) {
     const char* off = getenv("N64_HITCH");
     if (off && *off == '0') { g_on = false; LOGI("monitor: off (N64_HITCH=0)"); return; }
 #if defined(__aarch64__)
-    uint64_t f;
-    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(f));
-    g_nsPerTick = f ? 1e9 / (double)f : 1.0;
+    // The timer's rate as CNTFRQ_EL0 reports it, checked once against CLOCK_MONOTONIC over 10 ms (RetroArch 8ceffb1466
+    // and c99a2ca1a0, Joey 2026-11-21: "Add it"): some SoCs' firmware sets it wrong, and every span and stutter would
+    // then be off by that factor. More than 2% apart: the measured rate is used.
+    static double nsPerTick = 0;
+    if (nsPerTick == 0) {
+        uint64_t f;
+        __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(f));
+        auto mono = [] { timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (double)ts.tv_sec * 1e9 + ts.tv_nsec; };
+        const double n0 = mono();
+        const uint64_t c0 = ticks();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        const double n1 = mono();
+        const uint64_t c1 = ticks();
+        const double measured = c1 > c0 ? (double)(c1 - c0) * 1e9 / (n1 - n0) : 0;
+        const bool bad = f == 0 || (measured > 0 && std::fabs(measured / (double)f - 1.0) > 0.02);
+        nsPerTick = bad && measured > 0 ? 1e9 / measured : f ? 1e9 / (double)f : 1.0;
+        LOGI("monitor: timer %.3f MHz (CNTFRQ_EL0 says %.3f MHz, measured %.3f)%s", 1e3 / nsPerTick, f / 1e6, measured / 1e6,
+             bad ? ": the measured rate is used" : "");
+    }
+    g_nsPerTick = nsPerTick;
 #endif
     if (const char* s = getenv("N64_HITCH_MS")) g_stutterSet = atof(s);
     if (const char* s = getenv("N64_HANG_MS")) g_hangMs = std::max(50.0, atof(s));

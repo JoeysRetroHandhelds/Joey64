@@ -609,10 +609,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     // A driver dropped into <external files>/drivers/ (or files/drivers/) overrides the choice.
     // Dev: --es driver system|turnip
 
-    // storage16: 16-bit and 8-bit storage buffers, which parallel-RDP requires (1 both, 0 not both, -1 not asked: before Vulkan 1.1)
+    // storage16: 16-bit and 8-bit storage buffers (1 both, 0 not both, -1 not asked: before Vulkan 1.1). parallel-RDP runs
+    // without them (the core's 32-bit fallback, 2026-11-21), so any Vulkan 1.1 GPU that was asked can run it (canParallel).
     private class VkGpu(val vendor: Int, val major: Int, val minor: Int, val storage16: Int, val name: String, val driver: String = "",
                         /** maxStorageBufferRange in MB (0: not known). */ val storageRangeMb: Int = 0) {
         val vulkan11 get() = major > 1 || (major == 1 && minor >= 1)
+        val canParallel get() = vulkan11 && storage16 >= 0
         val adreno get() = vendor == 0x5143
         val mali get() = vendor == 0x13B5
         override fun toString() = "$name (Vulkan $major.$minor)"
@@ -717,7 +719,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (pickChecked && pickFailed == null && stepDriver != GpuRules.Driver.SYSTEM) {
             val why = when {
                 custom == null -> GpuRules.LOAD
-                !custom.vulkan11 || custom.storage16 != 1 -> GpuRules.PRDP
+                !custom.canParallel -> GpuRules.PRDP
                 else -> null
             }
             if (why != null) {
@@ -731,7 +733,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             }
         }
         // A speed try's driver that doesn't load, or can't run parallel-RDP: failed, and the next start says so.
-        if (speedTry != null && (custom == null || !custom.vulkan11 || custom.storage16 != 1)) {
+        if (speedTry != null && (custom == null || !custom.canParallel)) {
             speedFailNow(if (custom == null) "doesn't load on this GPU" else "can't run parallel-RDP"); return "gliden64"
         }
         speedStartPopup(speedGone)
@@ -751,7 +753,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 stepDriver != GpuRules.Driver.SYSTEM && custom == null -> "doesn't load on this GPU"
                 g == null -> "no Vulkan"
                 !g.vulkan11 -> "no Vulkan 1.1"
-                g.storage16 != 1 -> "no 8- or 16-bit storage"
+                g.storage16 < 0 -> "no Vulkan 1.1 features"
                 else -> null
             }
             if (why != null) { trialFailNow(why); return "gliden64" }
@@ -764,7 +766,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         statsDriver = statsDriverName(lib?.takeIf { custom != null }, dev != null, gpu?.driver.orEmpty())
         driverIdNow = when { custom == null -> "system"; dev != null -> "custom"; else -> stepDriver.id }
         val cpuinfo = try { File("/proc/cpuinfo").readText() } catch (e: Exception) { null }
-        val rendererPick = GpuRules.autoRenderer(gpu != null && gpu.vulkan11, gpu != null && gpu.storage16 == 1, custom != null, gpuFamily,
+        val rendererPick = GpuRules.autoRenderer(gpu != null && gpu.vulkan11, gpu != null && gpu.canParallel, custom != null, gpuFamily,
             GpuRules.littleCoresOnly(cpuinfo), upscale, tryStock = trialPick != null && level < chain.value.size)
         // Past the chain's last driver the trial runs GLideN64 on the system driver.
         val trialGl = trialPick != null && level >= chain.value.size
@@ -778,7 +780,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             speedTry?.let { speed?.failed(it.level, false) }
             speed = null; speedTry = null
         }
-        if (gpu != null && gpu.vulkan11 && gpu.storage16 != 1) JLog.w(TAG, "GPU ${gpu.name}: no 16-bit or 8-bit storage buffers, parallel-RDP can't run")
+        if (gpu != null && gpu.vulkan11 && gpu.storage16 == 0) JLog.i(TAG, "GPU ${gpu.name}: no 16-bit or 8-bit storage buffers, parallel-RDP uses its 32-bit fallback")
         JLog.i(TAG, "GPU: ${gpu ?: "no Vulkan"}, driver ${if (custom != null) lib!!.relativeTo(gpuDriverDir).path else "system"}, " +
             "default renderer ${if (parallel) "parallel" else "gliden64"}")
         // Which rule picked what (README item 38 e: a tester's log says it).
@@ -809,11 +811,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         speedNote()?.let { prefs.putString("speed_note", it) }
         prefs.apply()
         devString("renderer")?.let { return it }
-        // Settings › Video › Renderer: parallel-RDP only where it can start (Vulkan 1.1 with 16- and 8-bit storage), else
+        // Settings › Video › Renderer: parallel-RDP only where it can start (Vulkan 1.1), else
         // the core crashes; it may still draw wrong on a stock Adreno driver, which is the user's choice there.
         return when (video[com.joeysretro.joey64.video.VideoKey.Renderer]) {
             "gliden64" -> "gliden64"
-            "parallel" -> if (gpu != null && gpu.vulkan11 && gpu.storage16 == 1) "parallel"
+            "parallel" -> if (gpu != null && gpu.canParallel) "parallel"
                 else { JLog.w(TAG, "Renderer parallel-RDP picked, but this GPU can't run it: GLideN64"); "gliden64" }
             else -> if (parallel) "parallel" else "gliden64"
         }
@@ -1321,11 +1323,28 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     /** Start-only rows the restart question was already asked about (key to value), so it's asked once per change. */
     private val restartAsked = HashMap<String, String>()
 
+    /** The fastest of the screen's modes at its current size (null when it has only one rate). */
+    private fun topRefreshMode(): android.view.Display.Mode? {
+        @Suppress("DEPRECATION") val d = windowManager.defaultDisplay ?: return null
+        val now = d.mode
+        val same = d.supportedModes.filter { it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight }
+        val top = same.maxByOrNull { it.refreshRate } ?: return null
+        return if (same.size > 1) top else null
+    }
+
     /** Fill the camera cutout (the window reaches behind it only when asked; it matters for Stretch) and Screen orientation. */
     private fun applyWindowVideo() {
         window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode = if (video.on(com.joeysretro.joey64.video.VideoKey.Cutout))
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES else WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+            // Ask for the screen's fastest mode at its current size while the game screen is up (Fractal 0f0cc53b77,
+            // Joey 2026-11-21: "Add it, check devices"): Android keeps many screens at 60 Hz for an app that asks for
+            // nothing, and Steady pacing presents each frame twice at 120 Hz. `--es env N64_TOP_REFRESH=0` (dev) asks
+            // for nothing, as before.
+            if (devString("env")?.contains("N64_TOP_REFRESH=0") != true) topRefreshMode()?.let {
+                if (preferredDisplayModeId != it.modeId) JLog.i(TAG, "display: asking for mode ${it.modeId}, ${it.physicalWidth}x${it.physicalHeight} at ${it.refreshRate} Hz")
+                preferredDisplayModeId = it.modeId
+            }
         }
         requestedOrientation = when (video[com.joeysretro.joey64.video.VideoKey.Orientation]) {
             "portrait" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
@@ -4059,13 +4078,21 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         if (inGame && KeyEvent.isGamepadButton(code) && (p < 0 || !players[p].uses(code))) return true
         if (p < 0 || !players[p].uses(code)) return super.dispatchKeyEvent(event)
         if (inputLat && event.action == KeyEvent.ACTION_DOWN) noteInputLat(event.eventTime, true, 0)
+        // A trigger whose axis has moved on this pad gives the game its axis only (past Stick feel's threshold): its
+        // key copy, which many pads send at the first touch, would press L2 / R2 on a light squeeze (ARMSX2
+        // 00c63a3b54, Joey 2026-11-21: "Add it, test pads"). A release always goes through.
+        val axisTrigger = (code == KeyEvent.KEYCODE_BUTTON_L2 && analogTriggers[event.deviceId]?.and(1) == 1) ||
+            (code == KeyEvent.KEYCODE_BUTTON_R2 && analogTriggers[event.deviceId]?.and(2) == 2)
         when (event.action) {
-            KeyEvent.ACTION_DOWN -> players[p].key(code, true)
+            KeyEvent.ACTION_DOWN -> if (!axisTrigger) players[p].key(code, true)
             KeyEvent.ACTION_UP -> players[p].key(code, false)
         }
         push(p)
         return true
     }
+
+    /** Per input device: bit 1 its left trigger's axis has moved, bit 2 its right one's (a pad's key copies are then left out). */
+    private val analogTriggers = HashMap<Int, Int>()
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.source and InputDevice.SOURCE_JOYSTICK != InputDevice.SOURCE_JOYSTICK ||
@@ -4089,6 +4116,15 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val lt = maxOf(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE))
         val rt = maxOf(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS))
         triggerDepth[0] = lt; triggerDepth[1] = rt
+        val moved = (if (lt > 0.05f) 1 else 0) or (if (rt > 0.05f) 2 else 0)
+        val was = analogTriggers[event.deviceId] ?: 0
+        if (moved and was.inv() != 0) {
+            analogTriggers[event.deviceId] = was or moved
+            JLog.i(TAG, "pad ${event.deviceId}: ${if (moved and 1 != 0 && was and 1 == 0) "L2" else "R2"} has an axis: its key copy left out")
+            // A key copy pressed before its axis moved: let go of it, the axis holds the trigger from now on.
+            if (moved and 1 != 0) input.key(KeyEvent.KEYCODE_BUTTON_L2, false)
+            if (moved and 2 != 0) input.key(KeyEvent.KEYCODE_BUTTON_R2, false)
+        }
         // Adaptive fast-forward: the speed follows the trigger, which the game doesn't see while it's the hotkey.
         val ffAdaptive = ffHeld && hotkeys.ffAdaptive
         if (ffAdaptive) NativeBridge.setFastForwardSpeed(adaptivePercent())

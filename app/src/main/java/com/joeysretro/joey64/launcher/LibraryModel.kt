@@ -1153,6 +1153,15 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
         }
     }
 
+    /** Android 17's local network permission was just granted: the Wi-Fi room search starts again if it runs. */
+    fun netplayLanGranted() {
+        if (netplayLooking > 0) { com.joeysretro.joey64.netplay.PlayTogether.stopBrowsing(); com.joeysretro.joey64.netplay.PlayTogether.browse(getApplication()) }
+    }
+
+    /** Whether the local network permission was asked for already (once per install). */
+    fun netplayLanAsked(): Boolean = netPrefs().getBoolean("lan_asked", false)
+    fun netplayLanAskedNow() { netPrefs().edit().putBoolean("lan_asked", true).apply() }
+
     /** [fromOptions]: opened from the game's options, so B on it opens them again on the Netplay row (A8). */
     fun openNetplay(game: LibraryGame, fromOptions: Boolean = false) { _netplayFor.value = game; netplayFromOptions = fromOptions }
     /** [back]: B (not a room starting), which goes back to the options the popup was opened from. */

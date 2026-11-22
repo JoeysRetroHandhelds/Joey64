@@ -118,6 +118,12 @@ private:
     bool fadeOn_ = false;
     static constexpr int kFadeFrames = 64;
     float last_[2] = {0, 0};           // the callback's last output frame (before gain)
+    // The resume drop's crossfade (PPSSPP a071d82e02, 2026-11-21): the frames that would have played next, faded out
+    // over the first kXfadeFrames after the jump while the kept sound fades in. N64_AUDIO_XFADE=0: a plain jump.
+    static constexpr int kXfadeFrames = 128;
+    bool xfadeOn_ = true;
+    float xfade_[kXfadeFrames * 2] = {};
+    int xfadeN_ = 0, xfadeAt_ = 0;     // frames in xfade_, and how many of them are played (callback thread)
     int fadeIn_ = 0;                   // frames of fade-in left after an underrun (callback thread)
     // N64_AUDIO_SHRINK=1: after 10 s (two stats windows) without an underrun, the grown target comes down 5 ms a window,
     // to where it started, so one bad scene doesn't keep its extra latency for the whole play.

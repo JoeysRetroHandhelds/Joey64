@@ -104,13 +104,14 @@ std::string VkContext::probe(bool custom) {
         if ((r == VK_SUCCESS || r == VK_INCOMPLETE) && n && gpu) {
             VkPhysicalDeviceProperties props;
             getProps(gpu, &props);
-            // parallel-RDP needs 16-bit and 8-bit storage buffers (storageBuffer16BitAccess, storageBuffer8BitAccess);
-            // without either its init fails and the game doesn't start. It runs on a Vulkan 1.1 instance (the core's
+            // parallel-RDP was written for 16-bit and 8-bit storage buffers (storageBuffer16BitAccess, storageBuffer8BitAccess);
+            // since core no-storage-main the core runs without them (32-bit fallback shaders, a few % slower), so the field
+            // now says whether the driver has them natively. It runs on a Vulkan 1.1 instance (the core's
             // application info), so Granite takes 8-bit storage only through VK_KHR_8bit_storage: the driver must list
             // it. The Adreno 610 (Snapdragon 665) has no 16-bit storage on its Qualcomm driver or Turnip. The Adreno 650
             // (Snapdragon 865, RP Mini V2 tester report 2026-11-08) failed Granite's 8-bit check on its Qualcomm driver,
             // the bundled Turnip and four dev Turnips; Mesa sets storage_8bit (feature and extension) only on a7xx
-            // and keeps a6xx at Vulkan 1.3 for it. The field stays one number: 1 only when parallel-RDP can start.
+            // and keeps a6xx at Vulkan 1.3 for it. The field: 1 both native, 0 not both (the core's fallback), -1 not asked.
             int s16 = -1;
             if (getFeatures2 && props.apiVersion >= VK_API_VERSION_1_1) {
                 bool ext8 = false;

@@ -104,9 +104,31 @@ private fun shortGame(title: String) = LibraryArrange.shortTitle(title)
  * Down move between rows, Left and Right along one. Focus opens on Host a room. B from any row: the page goes back to
  * the top and focus moves onto Netplay on the bar (the approved Back order).
  */
+/**
+ * Android 17 (SDK 37) and up: asks once per install for ACCESS_LOCAL_NETWORK, which rooms On this Wi-Fi need there
+ * (Azahar 3e4c09de5a; Joey 2026-11-21: "Add it"). Android's own dialog; a grant starts the room search again.
+ */
+@Composable
+private fun LanPermission(model: LibraryModel) {
+    if (android.os.Build.VERSION.SDK_INT < 37) return
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val perm = "android.permission.ACCESS_LOCAL_NETWORK"
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        com.joeysretro.joey64.JLog.i("Netplay", "local network permission: ${if (granted) "granted" else "refused"}")
+        if (granted) model.netplayLanGranted()
+    }
+    LaunchedEffect(Unit) {
+        if (ctx.checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED && !model.netplayLanAsked()) {
+            model.netplayLanAskedNow()
+            ask.launch(perm)
+        }
+    }
+}
+
 @Composable
 fun NetplayScreen(model: LibraryModel, onHints: (List<Hint>) -> Unit, onClose: () -> Unit) {
     DisposableEffect(Unit) { model.netplayLook(true); onDispose { model.netplayLook(false) } }
+    LanPermission(model)
     val games = model.games.collectAsStateWithLifecycle().value.orEmpty()
     val wifi = PlayTogether.rooms.collectAsStateWithLifecycle().value
     val listed = RoomList.rooms.collectAsStateWithLifecycle().value
@@ -452,6 +474,7 @@ fun NetplayGamePopup(model: LibraryModel) {
     val game = model.netplayFor.collectAsStateWithLifecycle().value ?: return
     val state = PlayTogether.state.collectAsStateWithLifecycle().value
     DisposableEffect(Unit) { model.netplayLook(true); onDispose { model.netplayLook(false) } }
+    LanPermission(model)
     val wifi = PlayTogether.rooms.collectAsStateWithLifecycle().value
     val listed = RoomList.rooms.collectAsStateWithLifecycle().value.orEmpty()
     val pings = PlayTogether.pings.collectAsStateWithLifecycle().value

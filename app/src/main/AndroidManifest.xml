@@ -12,6 +12,8 @@
     <!-- Netplay: rooms on this Wi-Fi find each other by broadcast, which some Wi-Fi drivers drop without a multicast lock. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Android 17 puts this Wi-Fi's devices behind it (rooms On this Wi-Fi); asked on the Netplay page (LanPermission). -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- the low-latency Wi-Fi lock while in a netplay room (MainActivity.netWifiLock) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

@@ -91,14 +91,14 @@
     {
       "name": "TurnipZ (AlexSanz0902)",
       "file": "turnipz/libvulkan_freedreno.so",
-      "used_on": "Adreno 6xx step-down (SD865 builds; Android 11+)",
+      "used_on": "Adreno 6xx Auto first (Android 11+; 2026-11-21: Retroid Pocket 5 650 and RG 55G1 613 the fastest with the core's no-8/16-bit fallback)",
       "repo": "AlexSanz0902/turnip-sd865-z",
       "match": "",
-      "release": "TurnipZ 0.3.0",
-      "shown": "TurnipZ 0.3.0",
-      "tag": "v0.3.0",
-      "md5": "49f9b16af3880dab54e2e0fdac72e8cf",
-      "bundled": "2026-11-15"
+      "release": "TurnipZ 0.4.0",
+      "shown": "TurnipZ 0.4.0",
+      "tag": "v0.4.0",
+      "md5": "d2e09cd1b8b5a7e58e0d1239aec12679",
+      "bundled": "2026-11-21"
     },
     {
       "name": "Turnip K11MCH1",

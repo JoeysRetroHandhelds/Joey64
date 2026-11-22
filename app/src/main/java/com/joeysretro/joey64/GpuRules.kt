@@ -108,10 +108,16 @@ object GpuRules {
             // The Duo's 722: faux123 (Mario Party 2's text boxes), then by the smoke bench (duo-dz): the Duo build, ARMSX2,
             // Gen8 and K11 even with faux123, R2 ~10% slower, Apex and Mr Purple about half
             f.vendor == Vendor.ADRENO && f.model == 722 -> listOf(Driver.FAUX123, Driver.DUO, Driver.TURNIP, Driver.K11, Driver.R2, Driver.APEX, Driver.PURPLE, Driver.SYSTEM)
-            // Adreno 6xx: Mesa gives a6xx no 8-bit storage, so only Mr Purple's T19 (8-bit storage as a Vulkan 1.2
-            // feature, the RP Mini V2 / Flip 2 testers 2026-11-08) can run parallel-RDP (T30 can't: RP Mini V2
-            // 2026-11-16); the rest are checked on the probe, which costs a quick restart each
-            f.vendor == Vendor.ADRENO && f.model in 600..699 -> listOf(Driver.PURPLE19, Driver.PURPLE, Driver.TURNIPZ, Driver.K11, Driver.FAUX123, Driver.R2, Driver.SYSTEM)
+            // Adreno 6xx: since the core's fallback for GPUs without 8-/16-bit storage (2026-11-21) every driver runs
+            // parallel-RDP, so the order is by speed (1x uncapped, games 01/12/23/59). Retroid Pocket 5 (650): TurnipZ
+            // 0.4.0 522/243/214/344 fps, ARMSX2 483/237/221/336, faux123 431/218/206/302, Gen8 424/228/212/304, Mr Purple
+            // T19 245/192/161/113, T30 253/197/167/108. RG 55G1 (613): bundled TurnipZ 0.3.0 68/52/58/52, 0.4.0
+            // 76/53/60/60, system 60/38/50/51; Gen8, T30 and faux123 don't start there (the trial steps past them).
+            // But the 610-640 keep the system driver first: on the 613 TurnipZ 0.3.0 and 0.4.0 both lost the GPU mid-game
+            // in DK64, Paper Mario, Perfect Dark and Conker (short compat 17/21; the system driver 21/21), which the
+            // trial, deciding at the first picture, can't catch
+            f.vendor == Vendor.ADRENO && f.model in 600..649 -> listOf(Driver.SYSTEM, Driver.TURNIPZ, Driver.ARMSX2, Driver.FAUX123, Driver.TURNIP, Driver.PURPLE19, Driver.PURPLE, Driver.K11, Driver.R2)
+            f.vendor == Vendor.ADRENO && f.model in 650..699 -> listOf(Driver.TURNIPZ, Driver.ARMSX2, Driver.FAUX123, Driver.TURNIP, Driver.PURPLE19, Driver.PURPLE, Driver.K11, Driver.R2, Driver.SYSTEM)
             // Other Adreno 7xx, the A32/A33 (G3 Gen 3, G3x Gen 2) and any Adreno with no model known
             // (smoke bench o2p-dz, Odin 2 Portal's 740: R2, faux123 and ARMSX2 even with Gen8, ARMSX2 up to 10% faster;
             // K11 R8 doesn't load there; Apex and Mr Purple about half speed)
@@ -164,8 +170,10 @@ object GpuRules {
         // 1x the two drivers are even (odin3-drv1xcap60: input lag 21.6 vs 22.0 ms, no frame over 33 ms on either), and the
         // stock driver passed compat at 1x (odin3-sys1x-compat, 82/82, 0 black) and on the 2x set (odin3-sys2x-set).
         f.vendor == Vendor.ADRENO && f.model in 800..899 -> Pick(Driver.SYSTEM, "Adreno 8xx: system driver")
-        // Adreno 6xx: only Mr Purple's T19 has the 8-bit storage parallel-RDP needs (Mesa: a7xx only; T30 lost it)
-        f.vendor == Vendor.ADRENO && f.model in 600..699 -> Pick(Driver.PURPLE19, "Adreno 6xx: Mr Purple T19 (8-bit storage)")
+        // Adreno 6xx: TurnipZ, the fastest on the 650 and 613 (see chain); T19 was first only while it was the one
+        // driver with the 8-bit storage parallel-RDP needed there, before the core's fallback (2026-11-21)
+        f.vendor == Vendor.ADRENO && f.model in 600..649 -> Pick(Driver.SYSTEM, "Adreno 610-640: system driver (TurnipZ lost the GPU mid-game on the 613)")
+        f.vendor == Vendor.ADRENO && f.model in 650..699 -> Pick(Driver.TURNIPZ, "Adreno 650+: TurnipZ")
         f.vendor == Vendor.ADRENO && f.model in 700..899 -> Pick(Driver.TURNIP, "Adreno 6xx-8xx: bundled Turnip")
         // An Adreno with no model known (a marketing name not in the table: A32, A33...): Turnip Gen8 first
         f.vendor == Vendor.ADRENO && f.model == 0 -> Pick(Driver.TURNIP, "Adreno, model not known: bundled Turnip")
@@ -176,14 +184,14 @@ object GpuRules {
     }
 
     /**
-     * Auto's renderer: parallel-RDP needs Vulkan 1.1 with 16-bit and 8-bit storage buffers (without them it fails to
-     * start: Adreno 610 has no 16-bit; Adreno 650 has 8-bit only on PurpleVK, as a Vulkan 1.2 core feature), and a driver
-     * known to run it: a custom one, or stock Mali. Else GLideN64.
+     * Auto's renderer: parallel-RDP needs Vulkan 1.1 (canParallel: the driver was asked for its features; without 16-bit
+     * or 8-bit storage buffers the core uses its 32-bit fallback since 2026-11-21: Adreno 610-640 have no 16-bit, the
+     * Adreno 650 no 8-bit on most drivers), and a driver known to run it: a custom one, or stock Mali. Else GLideN64.
      */
-    fun autoRenderer(vulkan11: Boolean, storage16: Boolean, customDriver: Boolean, f: Family,
+    fun autoRenderer(vulkan11: Boolean, canParallel: Boolean, customDriver: Boolean, f: Family,
                      littleCoresOnly: Boolean = false, upscale: Int = 1, tryStock: Boolean = false): Pick<String> = when {
         !vulkan11 -> Pick("gliden64", "no Vulkan 1.1: GLideN64")
-        !storage16 -> Pick("gliden64", "no 16-bit or 8-bit storage buffers: GLideN64")
+        !canParallel -> Pick("gliden64", "no Vulkan 1.1 features: GLideN64")
         customDriver -> Pick("parallel", "custom driver: parallel-RDP")
         // The stock driver on Adreno 8xx runs parallel-RDP (Odin 3 / Odin 3 Portal, Adreno 830: 82/82 compat at 4x and 8x), so
         // Auto never gives it GLideN64, at any resolution (Joey 2026-11-09: "Glide shouldn't be offered at auto there at all").
