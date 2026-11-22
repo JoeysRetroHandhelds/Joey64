@@ -1699,6 +1699,16 @@ void runLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
+        // The core shut down (RETRO_ENVIRONMENT_SHUTDOWN: the game didn't start, or stopped): it runs no more frames,
+        // so neither does this loop; it waits for the stop the game screen sends once it has polled coreShutDown
+        // (release audit 2026-11-22: a core that never started left stop() waiting its whole 3 s, then the process was
+        // ended as stuck). N64_SHUTDOWN_RUN=1 keeps running frames as before.
+        static const bool shutRun = getenv("N64_SHUTDOWN_RUN") && *getenv("N64_SHUTDOWN_RUN") == '1';
+        if (g_coreShutDown && !shutRun) {
+            serveStateRequest(false, true);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
         // Paused: the monitor's open window isn't a frame (release audit 2026-11-17: a pause over 0.5 s logged a HANG).
         const bool wasPaused = g_paused;
         if (wasPaused) { flushSave(); hitch::unmeasured(); }
