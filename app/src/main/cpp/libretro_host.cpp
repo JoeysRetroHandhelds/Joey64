@@ -1705,8 +1705,12 @@ void runLoop() {
         // ended as stuck). N64_SHUTDOWN_RUN=1 keeps running frames as before.
         static const bool shutRun = getenv("N64_SHUTDOWN_RUN") && *getenv("N64_SHUTDOWN_RUN") == '1';
         if (g_coreShutDown && !shutRun) {
+            // The window is still let go of at once (stopt-rp5 2026-11-22: without this, surfaceDestroyed waited its
+            // whole 500 ms for a thread that no longer passed the frame loop's surface step).
+            applySurfaceIfChanged();
             serveStateRequest(false, true);
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::unique_lock<std::mutex> lk(g_pauseMutex);
+            g_pauseCv.wait_for(lk, std::chrono::milliseconds(50), [] { return !g_running || g_surfaceChanged || g_statePending; });
             continue;
         }
         // Paused: the monitor's open window isn't a frame (release audit 2026-11-17: a pause over 0.5 s logged a HANG).
