@@ -210,6 +210,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         statsRenderer = if (renderer == "parallel") "parallel-RDP " + (if (room1x) "1x" else capUpscaling("mupen64plus-parallel-rdp-upscaling",
             vApply.coreOptions["mupen64plus-parallel-rdp-upscaling"] ?: "1x")) else "GLideN64 " + (if (room1x) "1" else vApply.coreOptions["mupen64plus-EnableNativeResFactor"] ?: "1") + "x"
         if (renderer == "parallel") playUpscale = if (room1x) "1x" else capUpscaling(UPSCALE_KEY, vApply.coreOptions[UPSCALE_KEY] ?: "1x")
+        // The game's own Crop edges (Smash 4 lines) from the library's header code, so the held picture goes up cut as the
+        // game will be: it came from the ROM in launchGame, after the picture was placed, and Continue zoomed in a little
+        // as the crop arrived (Joey 2026-11-22, Thor: cut [12, 3, 10, 6] then [28, 15, 26, 18] 170 ms later).
+        gameCode = com.joeysretro.joey64.video.GameCrop.keyOf(launcherString(EXTRA_GAME_CODE), launcherString(EXTRA_MD5))
         applyVideoDisplay()
         applyPicture()
         devSharp = devFlag("sharp2") || devFlag("sharp")
@@ -4511,6 +4515,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         const val EXTRA_TITLE = "com.joeysretro.joey64.TITLE"
         /** The ROM's MD5 (.z64 order), from the launcher: Auto pak looks it up without hashing the ROM again. */
         const val EXTRA_MD5 = "com.joeysretro.joey64.MD5"
+        /** The library's header game code ("NALE"): a game's default Crop edges known before the held picture goes up. */
+        const val EXTRA_GAME_CODE = "com.joeysretro.joey64.GAME_CODE"
         /**
          * Joey64's own restarts and switches (switchGame, Restart now): the ROM's MD5 as it was hashed off the main thread
          * for the start before, so the next start's Auto renderer needn't hash it in onCreate (code audit 3, M18). Unlike
@@ -4541,7 +4547,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         private val NETPLAY_ENV = listOf("N64_NETPLAY", "N64_NETPLAY_SERVE", "N64_NETPLAY_NAME", "N64_NETPLAY_KEYS", "N64_NETPLAY_KEY")
         /** Extras only Joey64's own starts may carry ([fromJoey64]); a start from another app has them dropped. */
         private val LAUNCHER_EXTRAS = listOf(EXTRA_ROM_PATH, EXTRA_SAVE_NAME, EXTRA_LOAD_STATE, EXTRA_SOURCE_URI, EXTRA_SOURCE_NAME,
-            EXTRA_TITLE, EXTRA_MD5, EXTRA_KNOWN_MD5, EXTRA_DD_CART, EXTRA_NETPLAY_HOST, EXTRA_NETPLAY_JOIN, EXTRA_NETPLAY_NAME,
+            EXTRA_TITLE, EXTRA_MD5, EXTRA_GAME_CODE, EXTRA_KNOWN_MD5, EXTRA_DD_CART, EXTRA_NETPLAY_HOST, EXTRA_NETPLAY_JOIN, EXTRA_NETPLAY_NAME,
             EXTRA_NETPLAY_KEYS, EXTRA_NETPLAY_KEY, EXTRA_PLAY_NOTE, EXTRA_CASUAL_STATE, EXTRA_WAS_HARDCORE, EXTRA_HARDCORE_PLAY,
             com.joeysretro.joey64.launcher.library.GameLauncher.EXTRA_IS_DISK, com.joeysretro.joey64.launcher.library.GameLauncher.EXTRA_NEEDS_CART)
         const val STATE_AUTO = "auto"
