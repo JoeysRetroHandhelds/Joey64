@@ -58,8 +58,16 @@ sealed interface PauseScreen {
     }
     /** The menu; [from] is the row focus goes back to (the one that opened the picker). */
     data class Menu(val from: MenuRow = MenuRow.Resume) : PauseScreen
-    /** The slot picker, for Save state ([save]) or Load state, over [slots] (Auto first, then Slots 1-10). */
-    data class Picker(val save: Boolean, val slots: List<SlotView>, val focus: Int) : PauseScreen
+    /**
+     * The slot picker, for Save state ([save]) or Load state, over [slots] (Auto first, then Slots 1-10). [undo]: the undo
+     * row's value under the slots (approved undomenu2 mockup 2026-11-23), null with nothing to undo (no row).
+     */
+    data class Picker(val save: Boolean, val slots: List<SlotView>, val focus: Int, val undo: String? = null) : PauseScreen {
+        companion object {
+            /** The picker's focus on the undo row (no slot has this number). */
+            const val UNDO_ROW = -2
+        }
+    }
     /** Controls over the paused game (Phase 4, mockup 11), set to the game [saveName]. B goes back to the menu. */
     data class Controls(val saveName: String) : PauseScreen
     /** Paks over the paused game (approved paksmenu mockup 2026-11-17, screen 6), set to [saveName]. B goes back to the menu. */
@@ -225,6 +233,8 @@ interface PauseActions {
     /** Back from the picker to the menu. */
     fun backToMenu(from: MenuRow)
     fun pick(save: Boolean, slot: Int)
+    /** The picker's undo row: Undo save state ([save]) or Undo load state; closes the menu and shows the hotkey's pop-up. */
+    fun undo(save: Boolean) {}
 }
 
 /**
@@ -303,6 +313,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
     val hints = when {
         restart != null -> listOf(Hint("A", "Select"), Hint("B", "Later"))
         picker == null -> listOf(Hint("A", "Select"), Hint("B", "Resume"))
+        pickerAt == PauseScreen.Picker.UNDO_ROW -> listOf(Hint("A", "Undo"), Hint("B", "Back"))
         picker.save && com.joeysretro.joey64.states.StateSlots.isAuto(pickerAt) -> listOf(Hint("D-pad", "Move"), Hint("B", "Back"))
         else -> listOf(Hint("A", if (picker.save) "Save" else "Load"), Hint("D-pad", "Move"), Hint("B", "Back"))
     }
@@ -371,7 +382,8 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
                 else JoeyOption(actions.quitLabel) { actions.quit() }
                 }
             }
-            is PauseScreen.Picker -> SlotGrid(screen, now, onFocus = { pickerAt = it }) { actions.pick(screen.save, it) }
+            is PauseScreen.Picker -> SlotGrid(screen, now, onFocus = { pickerAt = it }, onUndo = { actions.undo(screen.save) }) {
+                actions.pick(screen.save, it) }
             // In Hardcore (approved mockup A 2026-11-16, joey64-notes hardcore-restart.png): the line says a restart goes
             // Casual, Later is focused and keeps the change for the next start.
             is PauseScreen.Restart -> if (hardcore == true) Column {
@@ -403,7 +415,7 @@ fun PausePopup(screen: PauseScreen, title: String, saveSlotName: String, now: Lo
 }
 
 @Composable
-private fun SlotGrid(picker: PauseScreen.Picker, now: Long, onFocus: (Int) -> Unit, onPick: (Int) -> Unit) {
+private fun SlotGrid(picker: PauseScreen.Picker, now: Long, onFocus: (Int) -> Unit, onUndo: () -> Unit, onPick: (Int) -> Unit) {
     val c = JoeyTheme.colors
     var focused by remember(picker) { mutableIntStateOf(picker.focus) }
     Column(Modifier.padding(horizontal = 2.dp)) {
@@ -441,6 +453,19 @@ private fun SlotGrid(picker: PauseScreen.Picker, now: Long, onFocus: (Int) -> Un
                     repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
+        }
+        // Approved undomenu2 mockup 2026-11-23: the window's undo, under the slots, only with something to undo (Down from
+        // the bottom row reaches it). Its value: the save it puts back, or the slot it goes back to before.
+        if (picker.undo != null) {
+            PopupDivider()
+            com.joeysretro.joey64.launcher.components.JoeyRow(
+                if (picker.save) "Undo save state" else "Undo load state",
+                value = picker.undo,
+                detail = if (picker.save) "Puts back the save this slot had before" else "Back to where you were before loading",
+                // The header keeps the last slot focused (mockup screen 3): only the hints change.
+                onFocused = { if (it) onFocus(PauseScreen.Picker.UNDO_ROW) },
+                onClick = onUndo,
+            )
         }
     }
 }

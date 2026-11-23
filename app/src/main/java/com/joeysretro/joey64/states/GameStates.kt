@@ -74,6 +74,12 @@ class GameStates(
     /** What Undo save state put back: the slot, and when its old save was from (null: the slot was empty). */
     class UndoneSave(val slot: Int, val savedAt: Long?)
 
+    // The Save state / Load state windows' undo rows (approved undomenu2 mockup 2026-11-23): shown only with something to undo.
+    /** The slot Undo load state goes back to before, or null with nothing to undo. */
+    fun undoLoadSlot(): Int? = undoLoad?.slot
+    /** What Undo save state would put back (the slot, its old save's date or null when it was empty), or null with nothing to undo. */
+    fun undoSavePending(): UndoneSave? = undoSave?.let { UndoneSave(it.slot, it.savedAt) }
+
     /** Goes back to just before the last load by hand: the slot that load was from, or null with nothing to undo. */
     fun undoLoad(): Int? {
         val u = undoLoad ?: return null

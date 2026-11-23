@@ -2751,6 +2751,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
                 }
             }
         }
+        // The Save state / Load state window's undo row: closes the menu, then does what the hotkey does (its pop-up too).
+        override fun undo(save: Boolean) {
+            overlay?.screen = null
+            closeMenu()
+            if (save) hotkeyUndoSave() else hotkeyUndoLoad()
+        }
     }
 
     private fun openPicker(save: Boolean) {
@@ -2760,8 +2766,13 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
             // Save: the slot it saves to. Load: the newest state (the one most likely wanted), else that slot.
             val focus = if (save) currentSlot()
                 else views.filter { it.savedAt != null }.maxByOrNull { it.savedAt!! }?.slot ?: currentSlot()
+            // The window's undo row (approved undomenu2 mockup 2026-11-23): only with something to undo; no Undo load
+            // state in Hardcore (its window is locked there anyway).
+            val undo = if (save) st.undoSavePending()?.let { u -> slotName(u.slot) + " · " + (u.savedAt?.let { slotDate(it) } ?: "empty") }
+                else if (com.joeysretro.joey64.achievements.RaHardcore.on()) null
+                else st.undoLoadSlot()?.let { "Before " + slotName(it).lowercase() }
             runOnUiThread {
-                if (menuOpen && overlay?.screen != null) overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Picker(save, views, focus)
+                if (menuOpen && overlay?.screen != null) overlay?.screen = com.joeysretro.joey64.launcher.ingame.PauseScreen.Picker(save, views, focus, undo)
             }
         }
     }
