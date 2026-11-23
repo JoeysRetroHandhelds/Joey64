@@ -25,7 +25,8 @@
     {
       "id": "NRE", "title": "Resident Evil 2",
       "settings": [
-        {"what": "synchronous parallel-RDP, also in fast-forward", "where": "kSyncRdpGames", "why": "async: black screen"}
+        {"what": "synchronous parallel-RDP, also in fast-forward", "where": "kSyncRdpGames", "why": "async: black screen"},
+        {"what": "frame skip off (Settings › Emulation › Frame skip is ignored; log 'frame skip: off for this game')", "where": "kNoFrameSkipGames (libretro_host.cpp)", "why": "the warning screen reads the last frame back through the CPU; with every other frame's draws left out that buffer was never drawn and the screen went black but for the text (RG353P 2026-11-23, fskre-e1/e2/t1/d1-353 black, fskre-nd1-353 with only scanouts skipped whole)"}
       ],
       "issues": [
         {"status": "open", "devices": "all", "what": "rooms in gameplay (pre-rendered backgrounds + 3D) only checked up to the intro video and save screen; check in-game from a save, also on the Flip", "evidence": "README RE2 gameplay item"}

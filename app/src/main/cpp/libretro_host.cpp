@@ -2720,7 +2720,13 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
       g_npRoomSave = g_netplay && !(last && atoi(last + 1) == 1); }
     // Frame skip (Settings › Emulation, N64_FRAMESKIP 1 every other frame / 2 when behind; parallel-RDP reads it as the
     // game loads): never in a netplay room, where every player must draw the same frames (approved frameskip mockup).
+    // Nor in a game that builds its picture from the last frame through the CPU: Resident Evil 2's warning screen (and its
+    // fades) reads the previous frame back, and with every other frame left undrawn that is a buffer the RDP never drew,
+    // so the screen went black but for the text (RG353P 2026-11-23, fskre-*: black in 3 of 3 runs with draws left out,
+    // whole with only scanouts skipped). The core's texture rule can't see a read that isn't the RDP's.
+    static const char* const kNoFrameSkipGames[] = {"NRE"};
     if (g_netplay && getenv("N64_FRAMESKIP")) { unsetenv("N64_FRAMESKIP"); LOGI("frame skip: off in a netplay room"); }
+    else if (idIn(kNoFrameSkipGames) && getenv("N64_FRAMESKIP")) { unsetenv("N64_FRAMESKIP"); LOGI("frame skip: off for this game (it reads its last picture back)"); }
     else if (const char* fs = getenv("N64_FRAMESKIP"))
         LOGI("frame skip: %s", *fs == '2' ? "when behind" : *fs == '1' ? "every other frame" : "off");
     // The room's address stays out of the session log (code audit 3, p1 L4): its port and this player's number.
