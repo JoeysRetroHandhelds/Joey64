@@ -43,11 +43,15 @@ public:
     bool surfaceLost() const { return surfaceLost_; }
     void retrySwapchain();
     uint64_t refreshNs() const { return refreshNs_; } // panel refresh period (display timing), 0 = unknown
+    bool timedPacing() const { return swapMode_ == 2; } // timed pacing on: the display grid paces the frames, not audio
 
     // Around retro_run: acquire a swapchain image (= sync index) and present it afterwards.
     // endFrame re-presents the last image if the core produced no new one.
     // show = false (fast-forward frame skip): the core's work is submitted but nothing is presented.
     bool beginFrame(bool show = true);
+    // Timed pacing's sleeps since the last call (ms): beginFrame sleeps there, so the host takes them out of the frame's
+    // work (Joey 2026-11-22: Smash on the Thor showed Frame 16.5 ms; every 120 Hz timed frame read about one frame).
+    double takePacedMs() { double ms = pacedNs_ / 1e6; pacedNs_ = 0; return ms; }
     void endFrame();
     void videoRefresh(const void* data, unsigned w, unsigned h); // from retro_video_refresh
     // Paused: shows the last picture again (the in-game Picture panel changed how it is drawn).
@@ -171,7 +175,11 @@ private:
     int64_t frameStartNs_ = 0;   // when the current frame's work began (after the pacing sleep)
     double extraLeadNs_ = 0;     // timed pacing: lead added after missed slots (timingMutex_)
     double workMaxNs_ = 12e6;    // decaying peak of frame start -> present call
+    bool fastPace_ = true; int fastN_ = 0, fastLate_ = 0; // fast pacing (paceFrame); fastLate_ under timingMutex_
+    double qSumNs_ = 0; int qN_ = 0, lateN_ = 0; // pace log: present call -> display, slots missed (timingMutex_)
     uint64_t lastTargetNs_ = 0, desiredNs_ = 0;
+    int64_t pacedNs_ = 0; // timed pacing's sleeps, for takePacedMs
+    int noSleepRun_ = 0, reanchorN_ = 0; // timed pacing: frames in a row that started past their sleep; re-anchors made
     // N64_PACE_LOG=1 (dev): every 300 paced frames, the budget's parts and the acquire waits inside frames
     int64_t acqSumNs_ = 0, acqMaxNs_ = 0, sleepSumNs_ = 0; int acqN_ = 0, paceN_ = 0, noSleepN_ = 0; double budgetSum_ = 0, stepSumNs_ = 0;
     // Auto pacing (N64_SWAP_INTERVAL=3): Steady until the queue backs up, then timed pacing with the learned grid step.

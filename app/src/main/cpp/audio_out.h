@@ -37,6 +37,8 @@ public:
     // The panel's refresh period (0 = unknown), each frame before waitForRoom: smoothing is automatic on panels
     // faster than 60 Hz (see smooth_).
     void setPanelRefreshNs(uint64_t ns);
+    // Each frame before waitForRoom: true while timed pacing paces the frames (see waitForRoom's rate control).
+    void setDisplayPaces(bool on) { displayPaces_ = on; }
     // Device-side output latency in ms (AAudio timestamps: frames written but not yet played),
     // -1 if unknown. AAudio's buffer starts at 2 bursts and grows a burst per xrun.
     double outputLatencyMs();
@@ -114,6 +116,7 @@ private:
     // forces it on/off. smoothMode_: -1 auto, 0 off, 1 on.
     int smoothMode_ = -1;
     bool smooth_ = false;
+    bool displayPaces_ = false; // setDisplayPaces
     size_t lastW_ = 0;       // write index at the last waitForRoom
     double avgWrite_ = -1;   // running average of samples written per frame (-1 = none yet)
     double excess_ = 0;      // fading sum of (written - average), samples

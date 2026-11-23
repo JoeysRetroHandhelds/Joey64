@@ -1956,6 +1956,7 @@ void runLoop() {
         if (!ff && !g_bench && !g_paused && !rewinding) { // paused: a frame advance step, no audio to wait for
             auto t0 = std::chrono::steady_clock::now();
             g_audio.setPanelRefreshNs(g_vulkan ? g_vk.refreshNs() : 0);
+            g_audio.setDisplayPaces(g_vulkan && g_vk.timedPacing());
             if (!slow) { hitch::Span span(hitch::PACE); g_audio.waitForRoom(); }
             if (g_audioStatusCb) g_audioStatusCb(!slow, g_audio.occupancyPct(), !slow && g_audio.ranDrySinceLastAsked());
             double aw = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
@@ -2015,8 +2016,9 @@ void runLoop() {
                 g_statWaitMs += std::chrono::duration<double, std::milli>(t1 - t0).count();
                 auto t2 = std::chrono::steady_clock::now();
                 g_statRunMs += std::chrono::duration<double, std::milli>(t2 - t1).count();
-                double frameMs = std::chrono::duration<double, std::milli>(t2 - t0).count();
-                return frameMs;
+                // Timed pacing sleeps in beginFrame: that wait isn't the frame's work (the graph, Frame, slow frames, workTotals).
+                double frameMs = std::chrono::duration<double, std::milli>(t2 - t0).count() - g_vk.takePacedMs();
+                return frameMs > 0 ? frameMs : 0.01;
             }
             auto t0 = std::chrono::steady_clock::now();
             glBindFramebuffer(GL_FRAMEBUFFER, g_egl.fbo());

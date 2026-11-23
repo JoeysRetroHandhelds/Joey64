@@ -232,6 +232,7 @@ bool VkContext::init(const retro_hw_render_context_negotiation_interface_vulkan*
     lost_ = false;
     autoTimed_ = false; autoSum_ = 0; autoN_ = 0; autoLogSum_ = 0; autoLogN_ = 0; autoFrom_ = 0; // auto pacing starts on Steady
     autoBack_ = false; autoP2dSum_ = 0; autoP2dN_ = 0; steadyP2d_ = 0; timedSeen_ = 0;
+    fastPace_ = true; fastN_ = 0; fastLate_ = 0;
     stepNs_ = 0; stepAge_ = 0; aimNext_ = -1; oddAims_ = oddLate_ = probeLeft_ = sinceProbe_ = 0; oddDead_ = false;
     if (!loadLibrary()) return false;
 
@@ -688,8 +689,28 @@ void VkContext::paceFrame() {
     // The work stays capped at one period: two (so a 20-30 fps game's long new picture starts in time) cost 2.5-6 ms more
     // poll to display for no fewer late pictures (2026-11-22, RG 476H and Odin 2 Portal at 2x, games 01 24 81).
     static const bool catchUp = !(getenv("N64_PACE_CATCHUP") && *getenv("N64_PACE_CATCHUP") == '0');
+    // N64_PACE_BASE_US (dev, 2026-11-22): the fixed part of the lead in microseconds, for the lag hunt.
+    static const int64_t baseUs = getenv("N64_PACE_BASE_US") ? atoll(getenv("N64_PACE_BASE_US")) : -1;
+    // Fast pacing (2026-11-22, N64_PACE_FAST=0 off): a 13.5 ms lead (at most; auto pacing's is 12) and a work peak that falls
+    // back 2% a frame, until the game misses its slots, then the old lead and 0.5% for the rest of the play. Measured,
+    // poll to display: Odin 2 / Odin 3 Portal ~21 -> ~14.5 ms (Conker 46-50 -> 38-40) with 0-6 slots missed; but on the RG
+    // 476H at 2x Ocarina of Time missed 625-675 slots of ~4200 against 117-161 for no less lag, while Conker there gained
+    // 7 ms: a 300-frame window with more than 2 slots missed (not after a long frame) turns it off.
+    static const bool fastOk = !(getenv("N64_PACE_FAST") && *getenv("N64_PACE_FAST") == '0') && baseUs < 0;
+    if (!fastOk) fastPace_ = false;
+    if (fastPace_ && ++fastN_ >= 300) {
+        int late;
+        { std::lock_guard<std::mutex> lk(timingMutex_); late = fastLate_; fastLate_ = 0; }
+        fastN_ = 0;
+        // N64_PACE_FAST_LATE (dev, 2026-11-22): how many missed slots in a window turn it off (2).
+        static const int lateMax = getenv("N64_PACE_FAST_LATE") ? atoi(getenv("N64_PACE_FAST_LATE")) : 2;
+        static const bool lateLog = getenv("N64_PACE_LOG") && *getenv("N64_PACE_LOG") == '1';
+        if (lateLog) LOGI("pacing: fast window, %d slots missed in 300", late);
+        if (late > lateMax) { fastPace_ = false; LOGI("pacing: %d slots missed in 300, back to the longer lead for this game", late); }
+    }
+    const uint64_t oldBase = autoTimed_ ? 12000000ull : 2 * refreshNs_ + 1000000;
     uint64_t budget = (uint64_t)(std::min(workMaxNs_, (double)period) + extra)
-        + (autoTimed_ ? 12000000ull : 2 * refreshNs_ + 1000000);
+        + (baseUs >= 0 ? (uint64_t)baseUs * 1000ull : fastPace_ ? std::min<uint64_t>(13500000ull, oldBase) : oldBase);
     uint64_t earliest = (uint64_t)now + budget;
     uint64_t k = earliest > anchor ? (earliest - anchor + period - 1) / period : 0;
     uint64_t target = anchor + k * period;
@@ -699,6 +720,12 @@ void VkContext::paceFrame() {
     // and the cheap repeats after it make the time up, as the speed cap does. More than 50 ms behind starts over from now.
     uint64_t start = earliest;
     if (catchUp && lastTargetNs_ && earliest < lastTargetNs_ + period + 50000000ull) start = 0;
+    // Re-anchor (2026-11-22, N64_PACE_REANCHOR=0 off): a game running a hair slower than the target march (16.66 ms steps)
+    // slips behind by a little each frame; under 50 ms the catch-up kept aiming at the old grid for good, so no frame slept
+    // and every third present missed its slot from then on (RG 476H Conker, Odin 2 Portal Paper Mario: 12 -> 0 ms sleep over
+    // ~20 s, then 100 of 300 slots missed). A second with no frame able to sleep drops the debt and aims from now.
+    static const bool reanchor = !(getenv("N64_PACE_REANCHOR") && *getenv("N64_PACE_REANCHOR") == '0');
+    if (reanchor && catchUp && noSleepRun_ >= 60) { start = earliest; noSleepRun_ = 0; ++reanchorN_; }
     if (autoTimed_) {
         // Learned grid step: aim at the first refresh at or after the earliest start and half a refresh before the
         // last slot's period, not on the period grid of the last display time (a frame shown a refresh off the even
@@ -740,17 +767,26 @@ void VkContext::paceFrame() {
     behind_ = catchUp && earliest > target; // starts with less than its budget: a miss here isn't a lead problem
     desiredNs_ = target - refreshNs_ / 2; // half a refresh early: the compositor rounds up to the slot
     struct timespec ts{(time_t)((target - budget) / 1000000000ull), (long)((target - budget) % 1000000000ull)};
-    if ((int64_t)(target - budget) > now) { hitch::Span span(hitch::PACE); clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, nullptr); }
+    if ((int64_t)(target - budget) > now) {
+        noSleepRun_ = 0; hitch::Span span(hitch::PACE); clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, nullptr);
+        pacedNs_ += monoNs() - now; // not the frame's work (takePacedMs)
+    }
+    else ++noSleepRun_;
     static const bool paceLog = getenv("N64_PACE_LOG") && *getenv("N64_PACE_LOG") == '1';
     if (paceLog) {
         if ((int64_t)(target - budget) > now) sleepSumNs_ += (int64_t)(target - budget) - now;
         else ++noSleepN_;
         budgetSum_ += (double)budget;
         if (++paceN_ >= 300) {
+            double q; int qn, lates;
+            { std::lock_guard<std::mutex> lk(timingMutex_); q = qN_ ? qSumNs_ / qN_ : 0; qn = qN_; lates = lateN_; qSumNs_ = 0; qN_ = 0; lateN_ = 0; }
             LOGE("pace: %d frames, budget mean %.1f ms (work peak %.1f, extra lead %.1f), sleep mean %.1f ms, %d not slept, "
-                 "acquires %d mean %.2f max %.2f ms, target step mean %.2f ms of %.2f", paceN_, budgetSum_ / paceN_ / 1e6,
+                 "acquires %d mean %.2f max %.2f ms, target step mean %.2f ms of %.2f, present to display %.2f ms (%d), %d slots missed, %d re-anchors",
+                 paceN_, budgetSum_ / paceN_ / 1e6,
                  workMaxNs_ / 1e6, extra / 1e6, sleepSumNs_ / (double)paceN_ / 1e6, noSleepN_, acqN_,
-                 acqN_ ? acqSumNs_ / (double)acqN_ / 1e6 : 0.0, acqMaxNs_ / 1e6, stepSumNs_ / paceN_ / 1e6, (double)period / 1e6);
+                 acqN_ ? acqSumNs_ / (double)acqN_ / 1e6 : 0.0, acqMaxNs_ / 1e6, stepSumNs_ / paceN_ / 1e6, (double)period / 1e6,
+                 q / 1e6, qn, lates, reanchorN_);
+            reanchorN_ = 0;
             paceN_ = 0; budgetSum_ = 0; sleepSumNs_ = 0; acqSumNs_ = 0; acqMaxNs_ = 0; acqN_ = 0; noSleepN_ = 0; stepSumNs_ = 0;
         }
     }
@@ -1038,7 +1074,10 @@ void VkContext::present(bool newImage) {
     VkPresentTimeGOOGLE when{++presentId_, desiredNs_};
     desiredNs_ = 0;
     if (frameStartNs_ > 0) { // track how long frames take, for the pacing budget
-        workMaxNs_ = std::max((double)(monoNs() - frameStartNs_), workMaxNs_ * 0.995);
+        // N64_PACE_DECAY (dev, 2026-11-22): how fast the work peak falls back per frame (0.995: half in ~2.3 s).
+        static const double decayEnv = getenv("N64_PACE_DECAY") ? atof(getenv("N64_PACE_DECAY")) : -1;
+        const double decay = decayEnv > 0 ? decayEnv : fastPace_ ? 0.98 : 0.995;
+        workMaxNs_ = std::max((double)(monoNs() - frameStartNs_), workMaxNs_ * decay);
         frameStartNs_ = 0;
     }
     VkPresentTimesInfoGOOGLE times{VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE};
@@ -1199,7 +1238,18 @@ void VkContext::collectTiming() {
             // the RG477M's lead climbed to 10-13 ms at 2x (games 01, 24) with a few stutters; with them it stays under 1 ms.
             static const bool hold = !(getenv("N64_LEAD_HOLD") && *getenv("N64_LEAD_HOLD") == '0');
             // A frame catch-up started behind its slot (after a long one) was late by design; the catch-up makes it up.
-            if (late && behindAt_[past[i].presentID % kTimingRing]) late = false;
+            const bool behind = behindAt_[past[i].presentID % kTimingRing];
+            if (late && behind) late = false;
+            const bool missed = (int64_t)(past[i].actualPresentTime - past[i].desiredPresentTime) > (int64_t)(refreshNs_ * 3 / 4);
+            // Fast pacing's guard counts every missed slot a catch-up didn't cause, not only frames that came late: on the RG
+            // 476H at 2x Conker missed 9-30 slots a run with the short lead (1-4 with the long one) while no frame was late
+            // by its earliest time (the compositor wanted it sooner), so the late count stayed 0 (lag8u-476, 2026-11-22).
+            if (missed && !behind) ++fastLate_;
+            if (missed) ++lateN_;
+            if (const int64_t c = presentCallNs_[past[i].presentID % kTimingRing]) {
+                const int64_t q = (int64_t)past[i].actualPresentTime - c;
+                if (q > 0 && q < 500000000) { qSumNs_ += (double)q; ++qN_; }
+            }
             if (late && hold && past[i].presentID <= leadHoldId_) late = false;
             else if (late) leadHoldId_ = presentId_;
             extraLeadNs_ = late ? std::min(extraLeadNs_ + refreshNs_ / 2.0, 2.0 * refreshNs_) : extraLeadNs_ * 0.995;

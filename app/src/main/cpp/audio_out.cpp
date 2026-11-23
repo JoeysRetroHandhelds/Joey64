@@ -224,8 +224,14 @@ void AudioOut::waitForRoom() {
     ++frames_;
     double err = std::max(-1.0, std::min(1.0, ((double)f - (double)target_) / (double)target_));
     if (err > -0.1 && err < 0.1) err = 0; // within ~4 ms: the wait loop's own granularity
-    if (waited) { drcI_ *= 0.95; err = std::min(err, 0.0); }
-    else if (err > -0.75 && err < 0.75) drcI_ = std::max(-0.01, std::min(0.01, drcI_ + 0.0001 * err));
+    // Timed pacing (2026-11-22, N64_AUDIO_DRAIN=0 off): the display grid paces the frames, so a wait here means the
+    // audio clock is the slower one and has taken over the pacing: the fill sat at 2x the target (40/20 ms), every
+    // frame waited ~13 ms for audio and timed pacing fell behind its grid for good (Odin 2 Portal: 100 of 300 slots
+    // missed). There a full ring is drained by playing up to 1% faster, the integral learning from it too.
+    static const bool drain = !(getenv("N64_AUDIO_DRAIN") && *getenv("N64_AUDIO_DRAIN") == '0');
+    const bool displayPaces = drain && displayPaces_;
+    if (waited && !displayPaces) { drcI_ *= 0.95; err = std::min(err, 0.0); }
+    else if (err > -0.75 && (err < 0.75 || displayPaces)) drcI_ = std::max(-0.01, std::min(0.01, drcI_ + 0.0001 * err));
     step_ = baseStep_ * (1.0 + std::max(-0.01, std::min(0.01, 0.005 * err + drcI_)));
 }
 
