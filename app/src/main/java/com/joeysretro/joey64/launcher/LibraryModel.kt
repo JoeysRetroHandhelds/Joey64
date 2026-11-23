@@ -66,6 +66,8 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
     /** The "Go online to get box art" popup is up (plan, Phase 2: once per scan that can't connect, never on every launch). */
     val offline: StateFlow<Boolean> = _offline
     private var art: Job? = null
+    /** A scan added games while [art] ran: it runs again when it ends ([fetchArt]). */
+    @Volatile private var artAgain = false
     /** The last cover fetch couldn't connect: the next network that comes up tries again, silently. */
     @Volatile private var waitingForNetwork = false
     private val network = object : ConnectivityManager.NetworkCallback() {
@@ -369,7 +371,11 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
 
     /** Covers for games not looked up yet, when Download box art is on. [newGames]: this scan added games, so an offline popup is due. */
     private suspend fun fetchArt(newGames: Boolean) {
-        if (art?.isActive == true) return
+        // A run lists its games when it starts: games a scan adds meanwhile wait for the next run, which could be a day off
+        // (Look for new games: Once a day / Only when I ask). Players 2026-11-22: "added games while it was scraping and it
+        // broke ... didn't rescrape new ones". So the run goes again for them when it ends.
+        if (art?.isActive == true) { if (newGames) artAgain = true; return }
+        artAgain = false
         if (!settings.settings.first().downloadBoxArt) return
         art = viewModelScope.launch {
             var got = 0
@@ -406,6 +412,12 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
                     prefs.edit().putBoolean("offline_shown", true).apply()
                     _offline.value = true
                 }
+            }
+            // Games added during the run: look them up now, unless ScreenScraper said stop (busy, quota) or there's no
+            // network (the network callback tries again then).
+            if (artAgain && outcome !is BoxArt.Outcome.Offline && !_artPaused.value) {
+                val self = coroutineContext[Job]
+                viewModelScope.launch { self?.join(); fetchArt(newGames = true) }
             }
         }
     }
