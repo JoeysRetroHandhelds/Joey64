@@ -1499,9 +1499,11 @@ void pinToBigCores() {
 // 58-59 fps. A parked core can't be the only one in a mask (EINVAL): the split then returns false and runLoop tries
 // again every 30 frames until the core is up (Odin 2 Portal: on cpu 7 after 3 tries, 11.4 ms a frame, 60.1 fps).
 // Dev: N64_PIN_PRIME=0 gives the old pick (the last core the affinity shows).
+static bool g_splitInit = false; // the emulation thread is on its core alone (splitBigCores)
+static int g_splitCpu = -1;       // that core
 bool splitBigCores() {
     static cpu_set_t big, rest, one;
-    static bool init = false;
+    bool& init = g_splitInit;
     static int tries = 0;
     if (!init) {
         static const bool oldPick = getenv("N64_PIN_PRIME") && *getenv("N64_PIN_PRIME") == '0';
@@ -1521,6 +1523,7 @@ bool splitBigCores() {
         }
         LOGI("emu thread on cpu %d alone", last);
         init = true;
+        g_splitCpu = last;
     }
     pid_t self = gettid();
     std::string moved;
@@ -1540,6 +1543,20 @@ bool splitBigCores() {
         closedir(d);
     }
     if (!moved.empty()) LOGI("threads moved off the emu thread's core: %s", moved.c_str());
+    return true;
+}
+
+// The core parked under the thread (Joey's Thor 2026-11-22, Smash's VS screen): a thread whose one allowed core is parked
+// runs on any core, little ones too: cpu 0-4 at 1.2-2.2 GHz, frames of 30-38 ms, with "on cpu 7 alone" logged before. Found
+// off its core, it gets every big core again at once (never a little one) and the split is tried again later. True: moved.
+bool checkSplitCore() {
+    if (!g_splitInit || g_splitCpu < 0) return false;
+    const int c = sched_getcpu();
+    if (c < 0 || c == g_splitCpu) return false;
+    sched_setaffinity(0, sizeof g_bigCpus, &g_bigCpus);
+    g_splitInit = false;
+    static int n = 0;
+    if (++n <= 5 || n % 100 == 0) LOGI("emu thread: found on cpu %d (cpu %d parked): on the big cores again, %d times", c, g_splitCpu, n);
     return true;
 }
 
@@ -2232,6 +2249,7 @@ void runLoop() {
             perfHint.setTargetNs((ff || g_bench) && hintFfNs > 0 ? hintFfNs : 1000000000LL / 60 / 2);
             perfHint.reportFrame();
         }
+        if (split && checkSplitCore()) splitIn = 30; // back on cpu 7 alone once it's up again
         if (split && --splitIn == 0) {
             splitIn = splitBigCores() ? 600 : 30; // a parked fastest core: again in half a second
             if (hintMode == 2 && !hintThreadsAdded) { perfHint.addThreads(coreWorkerThreads()); hintThreadsAdded = true; }
