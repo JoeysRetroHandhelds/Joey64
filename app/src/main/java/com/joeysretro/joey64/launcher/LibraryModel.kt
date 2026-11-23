@@ -68,6 +68,8 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
     private var art: Job? = null
     /** A scan added games while [art] ran: it runs again when it ends ([fetchArt]). */
     @Volatile private var artAgain = false
+    /** elapsedRealtime before which a launcher resume doesn't start a run: [ART_BUSY_WAIT_MS] after ScreenScraper said busy. */
+    @Volatile private var artRetryAt = 0L
     /** The last cover fetch couldn't connect: the next network that comes up tries again, silently. */
     @Volatile private var waitingForNetwork = false
     private val network = object : ConnectivityManager.NetworkCallback() {
@@ -402,6 +404,7 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
                 _art.value = null
             }
             _artPaused.value = outcome is BoxArt.Outcome.Done && outcome.busy
+            artRetryAt = if (_artPaused.value) android.os.SystemClock.elapsedRealtime() + ART_BUSY_WAIT_MS else 0L
             _artOffline.value = outcome is BoxArt.Outcome.Offline
             _all.value = withContext(Dispatchers.IO) { db.libraryGames() }
             if (got > 0) com.joeysretro.joey64.launcher.boxart.CoverImages.changed()
@@ -751,7 +754,13 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
             val s = settings.settings.first()
             val today = java.time.LocalDate.now().toEpochDay()
             val changed = readFolders != folders.toSet()
-            if (!changed && !LibraryArrange.lookNow(s.lookFor, s.lastLookDay, today)) return@launch
+            if (!changed && !LibraryArrange.lookNow(s.lookFor, s.lastLookDay, today)) {
+                // No read now, so no run after one: a run that stopped (ScreenScraper busy or out of quota, no network, the
+                // launcher closed) carries on here, not at the next read, which Once a day / Only when I ask may leave for
+                // days (box-art audit 2026-11-22). After a busy answer it waits [ART_BUSY_WAIT_MS] first.
+                if (android.os.SystemClock.elapsedRealtime() >= artRetryAt) fetchArt(newGames = false)
+                return@launch
+            }
             if (refresh(folders) && s.lookFor == com.joeysretro.joey64.launcher.library.LookFor.Daily) settings.setLastLookDay(today)
         }
     }
@@ -1483,6 +1492,8 @@ class LibraryModel(app: Application, private val saved: SavedStateHandle) : Andr
         const val KEY_FOCUS = "library_focus"
         const val KEY_SCROLL = "library_scroll"
         const val KEY_SCROLL_OFFSET = "library_scroll_offset"
+        /** After ScreenScraper said busy (closed, too many, today's quota), launcher resumes wait this long to try again. */
+        const val ART_BUSY_WAIT_MS = 30 * 60_000L
     }
 }
 

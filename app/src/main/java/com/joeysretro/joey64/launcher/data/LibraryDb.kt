@@ -764,6 +764,18 @@ class LibraryDb private constructor(context: Context) :
         return n
     }
 
+    /**
+     * A box-art run's result for [gameId], unless the user chose its cover meanwhile (Custom or No box art): a run lists
+     * its games when it starts, and a choice made while it ran was replaced when it got there (box-art audit 2026-11-22).
+     */
+    fun setLookedUpArt(gameId: Long, kind: String, cover: String?, checkedAt: Long) {
+        writableDatabase.transaction {
+            val row = ContentValues().apply { put("kind", kind); put("cover", cover); put("checked_at", checkedAt) }
+            if (update("box_art", row, "game_id = ? AND kind NOT IN (?, ?)", arrayOf(gameId.toString(), ArtKind.Custom.db, ArtKind.Hidden.db)) == 0)
+                insertWithOnConflict("box_art", null, row.apply { put("game_id", gameId) }, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+    }
+
     fun setArt(gameId: Long, kind: String, cover: String?, checkedAt: Long) {
         writableDatabase.insertWithOnConflict("box_art", null, ContentValues().apply {
             put("game_id", gameId)

@@ -160,7 +160,7 @@ class BoxArt(private val context: Context, private val db: LibraryDb) {
             try {
                 dir.mkdirs()
                 keep(covers.picture(row.md5), file(row.md5))
-                db.setArt(row.gameId, ArtKind.Downloaded.db, want, now)
+                db.setLookedUpArt(row.gameId, ArtKind.Downloaded.db, want, now)
                 JLog.i(TAG, "cover for ${row.md5}: Joey64's own")
                 n++
                 onCover()
@@ -265,7 +265,7 @@ class BoxArt(private val context: Context, private val db: LibraryDb) {
             val got = try { download(ScreenScraper.coverUrl(base, fix.id, fix.region, maxWidth), file(g.md5)); true }
                 catch (e: NotAnImage) { JLog.w(TAG, "box art: ${g.fileName}: the listed cover isn't there, looking it up"); false }
             if (got) {
-                db.setArt(g.gameId, ArtKind.Downloaded.db, "screenscraper:${fix.id}:${fix.region}", now)
+                db.setLookedUpArt(g.gameId, ArtKind.Downloaded.db, "screenscraper:${fix.id}:${fix.region}", now)
                 JLog.i(TAG, "cover for ${g.fileName}: game ${fix.id} (${fix.region}, listed)")
                 return Result.Found
             }
@@ -277,13 +277,19 @@ class BoxArt(private val context: Context, private val db: LibraryDb) {
             hashed != null && hashed.fits(term) -> hashed to "MD5"
             else -> byName()?.let { it to "name" } ?: hashed?.let { it to "MD5, the original game" } ?: (null to "")
         }
-        val cover = game?.let { ScreenScraperPick.cover(it, noIntro ?: g.fileName) }
+        val pick = game?.let { ScreenScraperPick.cover(it, noIntro ?: g.fileName) }
+        // A cover whose address answers with something that isn't a picture: the game's other covers, then none (looked
+        // up again in a week). It was Failed, with no row, so the game was looked up again on every run and never got
+        // one (box-art audit 2026-11-22).
+        val cover = if (game == null || pick == null) null else (listOf(pick) + game.covers.filter { it != pick }).firstOrNull { c ->
+            try { download(ScreenScraper.mediaUrl(c.second, maxWidth), file(g.md5)); true }
+            catch (e: NotAnImage) { JLog.w(TAG, "box art: ${g.fileName}: ${game.name}'s ${c.first} cover isn't a picture"); false }
+        }
         if (game == null || cover == null) {
-            db.setArt(g.gameId, "none", "screenscraper", now)
+            db.setLookedUpArt(g.gameId, "none", "screenscraper", now)
             Result.None
         } else {
-            download(ScreenScraper.mediaUrl(cover.second, maxWidth), file(g.md5))
-            db.setArt(g.gameId, ArtKind.Downloaded.db, "screenscraper:${game.id}:${cover.first}", now)
+            db.setLookedUpArt(g.gameId, ArtKind.Downloaded.db, "screenscraper:${game.id}:${cover.first}", now)
             JLog.i(TAG, "cover for ${g.fileName}: ${game.name} (${cover.first}, by $how)")
             Result.Found
         }
