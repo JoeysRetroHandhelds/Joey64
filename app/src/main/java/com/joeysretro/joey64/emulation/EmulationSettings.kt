@@ -23,7 +23,14 @@ enum class EmuKey(val key: String, val default: String) {
      * Hardcore "Allowed", the device note "Yes, show it"): Off, or 1-4 frames, the host's N64_RUNAHEAD. Off by
      * default on every device; nothing turns it on but the user. The host leaves it off in a netplay room.
      */
-    RunAhead("run_ahead", "off");
+    RunAhead("run_ahead", "off"),
+    /**
+     * Frame skip (approved frameskip mockup 2026-11-22, joey64-notes docs/img/frameskip.png; Joey: all three choices,
+     * allowed in Hardcore, the run-ahead box shown): Off, When behind (the host's N64_FRAMESKIP=2: a frame is left
+     * undrawn only while the audio runs low, never two in a row) or Every other frame (N64_FRAMESKIP=1). Off by default
+     * on every device; parallel-RDP only; the host leaves it off in a netplay room.
+     */
+    FrameSkip("frame_skip", "off");
 
     companion object {
         fun of(key: String) = entries.firstOrNull { it.key == key }
@@ -58,6 +65,10 @@ object EmuChoices {
         EmuChoice("2", "2 frames", "About 33 ms less"),
         EmuChoice("3", "3 frames", "About 50 ms less; strong devices only"),
         EmuChoice("4", "4 frames", "About 67 ms less; strong devices only"))
+    val frameSkip = listOf(
+        EmuChoice("off", "Off", "Every picture drawn; a slow game runs slow"),
+        EmuChoice("behind", "When behind", "Skips only while the game falls behind"),
+        EmuChoice("every_other", "Every other frame", "Always half the pictures; for very slow devices"))
 
     fun of(k: EmuKey): List<EmuChoice> = when (k) {
         EmuKey.Overclock -> overclock
@@ -65,6 +76,7 @@ object EmuChoices {
         EmuKey.ExpansionPak -> expansionPak
         EmuKey.Thermal -> thermal
         EmuKey.RunAhead -> runAhead
+        EmuKey.FrameSkip -> frameSkip
     }
 
     fun label(k: EmuKey, value: String): String = of(k).firstOrNull { it.value == value }?.label ?: value
@@ -152,6 +164,11 @@ data class EmuApply(val coreOptions: Map<String, String>, val env: Map<String, S
             if (e[EmuKey.Thermal] == "on") env["N64_THERMAL_GOV"] = "1"
             // Run-ahead: allowed in Hardcore (Joey 2026-11-17); the host turns it off in a netplay room.
             e[EmuKey.RunAhead].toIntOrNull()?.takeIf { it in 1..4 }?.let { env["N64_RUNAHEAD"] = "$it" }
+            // Frame skip: allowed in Hardcore (it only leaves pictures undrawn; Joey 2026-11-22); off in a netplay room (the host).
+            when (e[EmuKey.FrameSkip]) {
+                "behind" -> env["N64_FRAMESKIP"] = "2"
+                "every_other" -> env["N64_FRAMESKIP"] = "1"
+            }
             return EmuApply(opts, env)
         }
     }

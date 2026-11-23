@@ -299,8 +299,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
 
     /**
      * The stats overlay's THIS GAME (approved stats mockup 2, 2026-11-10): the settings that change how this play runs,
-     * only those not at their default, as they are now (the Upscale and shader hotkeys included). Frame skip has no
-     * setting yet (Off, Joey 2026-11-08), so it has no line.
+     * only those not at their default, as they are now (the Upscale and shader hotkeys included).
      */
     private fun statsGame(): List<com.joeysretro.joey64.onscreen.GameSetting> {
         val out = ArrayList<com.joeysretro.joey64.onscreen.GameSetting>()
@@ -312,6 +311,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // Run-ahead: Settings › Emulation's, or --es env N64_RUNAHEAD (libretro_host.cpp: 1-4, off in a netplay room).
         val ahead = android.system.Os.getenv("N64_RUNAHEAD")?.toIntOrNull()?.coerceIn(0, 4) ?: 0
         if (ahead > 0 && !inRoom) add("Run-ahead", "$ahead")
+        // Frame skip: Settings › Emulation's, or --es env N64_FRAMESKIP (the core's parallel-RDP: 1 every other, 2 when
+        // behind; the host drops it in a netplay room).
+        if (parallel && !inRoom) when (android.system.Os.getenv("N64_FRAMESKIP")) {
+            "2" -> add("Frame skip", "when behind"); "1" -> add("Frame skip", "every other frame") }
         extrasOn.shape?.let { (w, h) -> add("Widescreen", "$w:$h") }
         if (extrasOn.fps) add("60 fps", "On")
         val shader = playShader ?: video[com.joeysretro.joey64.video.VideoKey.Shader]
@@ -1423,7 +1426,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private fun startRowName(key: String) = when (key) {
         "Driver" -> "GPU driver"; "Pacing" -> "Frame pacing"; "Thermal" -> "Thermal fallback"; "Supersample" -> "Supersampling"
         "NativeTexLod" -> "Native texture detail"; "NativeTexRect" -> "Native 2D (TEX_RECT)"; "Apps" -> "Play alongside other apps"
-        "Fps" -> "60 fps"; "CpuCore" -> "CPU core"; "ExpansionPak" -> "Expansion Pak"; "RunAhead" -> "Run-ahead"
+        "Fps" -> "60 fps"; "CpuCore" -> "CPU core"; "ExpansionPak" -> "Expansion Pak"; "RunAhead" -> "Run-ahead"; "FrameSkip" -> "Frame skip"
         else -> key
     }
 

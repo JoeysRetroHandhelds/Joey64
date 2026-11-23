@@ -147,7 +147,7 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
         if (fixed(fk)) com.joeysretro.joey64.launcher.components.PanelInfo(title(fk), help)
         else EmuChoices.of(fk).let { chs -> com.joeysretro.joey64.launcher.components.PanelInfo(title(fk), help,
             chs.map { com.joeysretro.joey64.launcher.components.PanelChoice(it.label, it.detail, it.value == e[fk]) },
-            note = runAheadNote.takeIf { fk == EmuKey.RunAhead }) { i -> set(fk, chs[i].value) } }
+            note = when (fk) { EmuKey.RunAhead -> runAheadNote; EmuKey.FrameSkip -> frameSkipNote(e); else -> null }) { i -> set(fk, chs[i].value) } }
     } else speedInfo(focused, hk, game, sameForAll) { f -> setHk(f) }
 
     com.joeysretro.joey64.launcher.components.ListPanel(panel, info, hints, onHints, modifier) {
@@ -184,12 +184,13 @@ fun EmulationTab(target: String?, onHints: (List<Hint>) -> Unit, onControl: (((C
         row(EmuKey.Thermal, "Thermal fallback", if (game) SAME else EmuChoices.label(EmuKey.Thermal, e[EmuKey.Thermal]))
         SectionLabel("Advanced")
         row(EmuKey.RunAhead, "Run-ahead")
+        row(EmuKey.FrameSkip, "Frame skip")
         if (hardcore) row(EmuKey.Overclock, "Overclock", "Normal in Hardcore") else row(EmuKey.Overclock, "Overclock")
         row(EmuKey.CpuCore, "CPU core")
     }
 
     popup?.let { k ->
-        EmuChoicePopup(k, e[k], autoGives(k), onDismiss = { popup = null }) { set(k, it); popup = null }
+        EmuChoicePopup(k, e[k], autoGives(k), frameSkipNote(e).takeIf { k == EmuKey.FrameSkip }, onDismiss = { popup = null }) { set(k, it); popup = null }
     }
     // The narrow screens' popups for the Speed group's choice rows (no panel there).
     speedPopup?.let { id ->
@@ -258,7 +259,13 @@ private fun title(k: EmuKey) = when (k) {
     EmuKey.ExpansionPak -> "Expansion Pak"
     EmuKey.Thermal -> "Thermal fallback"
     EmuKey.RunAhead -> "Run-ahead"
+    EmuKey.FrameSkip -> "Frame skip"
 }
+
+/** The frameskip mockup's box (screen 2): run-ahead's extra frames are what fall behind, so the two don't mix. */
+private fun frameSkipNote(e: com.joeysretro.joey64.emulation.EmuSettings): String? =
+    if (e[EmuKey.FrameSkip] != "off" && e[EmuKey.RunAhead] != "off")
+        "Run-ahead is on: frame skip makes it less smooth still. Turn one off for the best result." else null
 
 private fun describe(k: EmuKey): String = when (k) {
     EmuKey.Overclock -> "A faster N64 CPU removes the slowdown real hardware had. Too fast can break some games' timing. Applies when the game next starts."
@@ -268,11 +275,13 @@ private fun describe(k: EmuKey): String = when (k) {
     EmuKey.RunAhead -> "Runs the game ahead in the background, so a press shows on screen sooner. Each frame is run once more for " +
         "every frame ahead, so it needs a fast device. More frames than the game's own delay can make it skip. Off in netplay rooms. " +
         "Applies when the game next starts."
+    EmuKey.FrameSkip -> "When the game can't keep full speed, leaves some pictures undrawn so the game and its sound stay at " +
+        "the right speed. The picture moves less smoothly. Applies when the game next starts."
 }
 
 /** The approved popup (mockup screens 3 to 5): the choices with their lines, the tick on the one in use, "Auto gives ..." under the title. */
 @Composable
-private fun EmuChoicePopup(k: EmuKey, current: String, autoGives: String?, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+private fun EmuChoicePopup(k: EmuKey, current: String, autoGives: String?, note: String?, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     JoeyDialog(onDismiss = onDismiss, hints = listOf(Hint("A", "Select"), Hint("B", "Close")), width = 500.dp) {
         Column {
             // The row's description (review sheet L9), then "Auto gives ..."; the note below says when it applies.
@@ -280,6 +289,7 @@ private fun EmuChoicePopup(k: EmuKey, current: String, autoGives: String?, onDis
             if (k == EmuKey.RunAhead) { val ctx = LocalContext.current
                 remember { com.joeysretro.joey64.video.ResNote.runAhead(com.joeysretro.joey64.video.ResNote.of(ctx)) }
                     ?.let { com.joeysretro.joey64.launcher.components.DeviceNote(it) } }
+            note?.let { com.joeysretro.joey64.launcher.components.DeviceNote(it) }
             for (ch in EmuChoices.of(k)) {
                 val on = ch.value == current
                 JoeyRow(ch.label, Modifier.initialFocus(on), detail = ch.detail,

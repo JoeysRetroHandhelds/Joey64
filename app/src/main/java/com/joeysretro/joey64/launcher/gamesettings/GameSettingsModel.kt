@@ -126,7 +126,7 @@ class GameSettingsModel(private val video: VideoStore, private val emu: EmuStore
         return EmuKey.entries.filter { it in own }.map { k ->
             GameChange(GamePart.Emulation, when (k) {
                 EmuKey.Overclock -> "Overclock"; EmuKey.CpuCore -> "CPU core"; EmuKey.ExpansionPak -> "Expansion Pak"; EmuKey.Thermal -> "Thermal fallback"
-                EmuKey.RunAhead -> "Run-ahead"
+                EmuKey.RunAhead -> "Run-ahead"; EmuKey.FrameSkip -> "Frame skip"
             }, EmuChoices.label(k, own.getValue(k)), EmuChoices.label(k, all[k]), k.name)
         }
     }

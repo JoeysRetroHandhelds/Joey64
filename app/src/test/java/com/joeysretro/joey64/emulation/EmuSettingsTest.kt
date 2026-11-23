@@ -76,6 +76,21 @@ class EmuSettingsTest {
         assertTrue(EmuKey.RunAhead in EmuKey.AT_START)
     }
 
+    // Frame skip (approved frameskip mockup 2026-11-21): Off by default, the core's N64_FRAMESKIP 2 = when behind,
+    // 1 = every other frame, Hardcore too.
+    @Test fun frameSkipGoesToTheEnvironment() {
+        assertEquals("off", EmuKey.FrameSkip.default)
+        assertNull(apply().env["N64_FRAMESKIP"])
+        assertNull(apply(EmuKey.FrameSkip to "off").env["N64_FRAMESKIP"])
+        assertEquals("2", apply(EmuKey.FrameSkip to "behind").env["N64_FRAMESKIP"])
+        assertEquals("1", apply(EmuKey.FrameSkip to "every_other").env["N64_FRAMESKIP"])
+        assertNull(apply(EmuKey.FrameSkip to "9").env["N64_FRAMESKIP"])
+        assertEquals("2", EmuApply.of(EmuSettings(mapOf(EmuKey.FrameSkip to "behind")), false, hardcore = true).env["N64_FRAMESKIP"])
+        assertEquals(listOf("off", "behind", "every_other"), EmuChoices.of(EmuKey.FrameSkip).map { it.value })
+        assertEquals("When behind", EmuChoices.label(EmuKey.FrameSkip, "behind"))
+        assertTrue(EmuKey.FrameSkip in EmuKey.AT_START)
+    }
+
     @Test fun allGamesHasNoExpansionPak() {
         val e = EmuSettings.resolve(mapOf(EmuKey.ExpansionPak to "off", EmuKey.Overclock to "2x"), null)
         assertEquals("on", e[EmuKey.ExpansionPak])

@@ -2698,6 +2698,11 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
     { const char* np = getenv("N64_NETPLAY"); g_netplay = np && *np;
       const char* last = g_netplay ? strrchr(np, ':') : nullptr;
       g_npRoomSave = g_netplay && !(last && atoi(last + 1) == 1); }
+    // Frame skip (Settings › Emulation, N64_FRAMESKIP 1 every other frame / 2 when behind; parallel-RDP reads it as the
+    // game loads): never in a netplay room, where every player must draw the same frames (approved frameskip mockup).
+    if (g_netplay && getenv("N64_FRAMESKIP")) { unsetenv("N64_FRAMESKIP"); LOGI("frame skip: off in a netplay room"); }
+    else if (const char* fs = getenv("N64_FRAMESKIP"))
+        LOGI("frame skip: %s", *fs == '2' ? "when behind" : *fs == '1' ? "every other frame" : "off");
     // The room's address stays out of the session log (code audit 3, p1 L4): its port and this player's number.
     if (g_netplay) { const char* np = getenv("N64_NETPLAY"); const char* tail = strchr(np, ':');
         LOGI("netplay: on (port and player %s): state loads, Reset, rewind, fast-forward, slow motion, frame advance and cheat changes are off",
