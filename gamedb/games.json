@@ -222,7 +222,8 @@
     {
       "id": "NSM", "crc": "A97AA1A91B749C63", "title": "SM64 Elise (hack)",
       "issues": [
-        {"status": "fixed", "devices": "all", "what": "froze on its title part-way through the fade-in (same on parallel-RDP, GLideN64, HLE/LLE RSP, LLE audio, interpreter, CountPerOp 3): the counter timing. Fixed by CountPerOp 1 in the core ini (MD5 193C195A5C5B28ACD0D7346F050DEEA5; core aa9ca58 / sp-dynarec b27858f, core e33d0279 = app-spfix3)", "evidence": "duo-elise1..7 2026-11-09: title fades in fully and file select appears with default settings on app-spfix3"}
+        {"status": "fixed", "devices": "all", "what": "froze on its title part-way through the fade-in (same on parallel-RDP, GLideN64, HLE/LLE RSP, LLE audio, interpreter, CountPerOp 3): the counter timing. Fixed by CountPerOp 1 in the core ini (MD5 193C195A5C5B28ACD0D7346F050DEEA5; core aa9ca58 / sp-dynarec b27858f, core e33d0279 = app-spfix3)", "evidence": "duo-elise1..7 2026-11-09: title fades in fully and file select appears with default settings on app-spfix3"},
+        {"status": "fixed", "devices": "Adreno 650-690 (Retroid Pocket 5)", "what": "coloured specks across the top of the picture before and on the file select at 1x (Joey 2026-11-22: \"Elise on the RP5 home screen had a ton of graphical issues\"): the TurnipZ driver, Auto's pick for the 650-690 from 2026-11-21 (also in DK64, GoldenEye, Conker); ARMSX2, Mr Purple T19 and the system driver draw it clean. Fixed by Auto taking ARMSX2 there (GpuRules.autoDriver / chain)", "evidence": "rp5elise 2026-11-22: TurnipZ specks, ARMSX2 / T19 / system none; armsx2c-rp5 short compat 21/21 at 1x, Elise's file select clean"}
       ]
     },
     {

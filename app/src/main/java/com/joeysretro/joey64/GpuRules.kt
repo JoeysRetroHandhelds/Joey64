@@ -117,7 +117,11 @@ object GpuRules {
             // in DK64, Paper Mario, Perfect Dark and Conker (short compat 17/21; the system driver 21/21), which the
             // trial, deciding at the first picture, can't catch
             f.vendor == Vendor.ADRENO && f.model in 600..649 -> listOf(Driver.SYSTEM, Driver.TURNIPZ, Driver.ARMSX2, Driver.FAUX123, Driver.TURNIP, Driver.PURPLE19, Driver.PURPLE, Driver.K11, Driver.R2)
-            f.vendor == Vendor.ADRENO && f.model in 650..699 -> listOf(Driver.TURNIPZ, Driver.ARMSX2, Driver.FAUX123, Driver.TURNIP, Driver.PURPLE19, Driver.PURPLE, Driver.K11, Driver.R2, Driver.SYSTEM)
+            // The 650-690: ARMSX2 first since 2026-11-22: TurnipZ draws coloured specks at the top of the picture at 1x
+            // (Elise's file select, DK64, GoldenEye, Conker on the Retroid Pocket 5; Joey: "Elise on the RP5 home screen had a
+            // ton of graphical issues"), ARMSX2 none, within 3% of its speed (drv650-rp5: 582/361/293/348/255 fps against
+            // TurnipZ 598/361/299/350/251, games 01/12/23/59/81), short compat 21/21 at 1x (armsx2c-rp5)
+            f.vendor == Vendor.ADRENO && f.model in 650..699 -> listOf(Driver.ARMSX2, Driver.TURNIPZ, Driver.FAUX123, Driver.TURNIP, Driver.PURPLE19, Driver.PURPLE, Driver.K11, Driver.R2, Driver.SYSTEM)
             // Other Adreno 7xx, the A32/A33 (G3 Gen 3, G3x Gen 2) and any Adreno with no model known
             // (smoke bench o2p-dz, Odin 2 Portal's 740: R2, faux123 and ARMSX2 even with Gen8, ARMSX2 up to 10% faster;
             // K11 R8 doesn't load there; Apex and Mr Purple about half speed)
@@ -173,7 +177,8 @@ object GpuRules {
         // Adreno 6xx: TurnipZ, the fastest on the 650 and 613 (see chain); T19 was first only while it was the one
         // driver with the 8-bit storage parallel-RDP needed there, before the core's fallback (2026-11-21)
         f.vendor == Vendor.ADRENO && f.model in 600..649 -> Pick(Driver.SYSTEM, "Adreno 610-640: system driver (TurnipZ lost the GPU mid-game on the 613)")
-        f.vendor == Vendor.ADRENO && f.model in 650..699 -> Pick(Driver.TURNIPZ, "Adreno 650+: TurnipZ")
+        // The 650-690: ARMSX2 (TurnipZ's specks at 1x, see chain)
+        f.vendor == Vendor.ADRENO && f.model in 650..699 -> Pick(Driver.ARMSX2, "Adreno 650+: ARMSX2 Turnip (TurnipZ draws specks at 1x)")
         f.vendor == Vendor.ADRENO && f.model in 700..899 -> Pick(Driver.TURNIP, "Adreno 6xx-8xx: bundled Turnip")
         // An Adreno with no model known (a marketing name not in the table: A32, A33...): Turnip Gen8 first
         f.vendor == Vendor.ADRENO && f.model == 0 -> Pick(Driver.TURNIP, "Adreno, model not known: bundled Turnip")

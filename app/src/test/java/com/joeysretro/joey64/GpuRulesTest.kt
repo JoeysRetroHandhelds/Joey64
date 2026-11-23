@@ -232,10 +232,10 @@ class GpuRulesTest {
         assertEquals(listOf(GpuRules.Driver.MALISX2, GpuRules.Driver.SYSTEM), g615.take(2))
         assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(adreno, "Adreno (TM) 830", null), 35).first())
         assertEquals(GpuRules.Driver.SYSTEM, names(GpuRules.family(0x13B5, "Mali-G52 MC2", null), 30).first())
-        // the 650: TurnipZ then ARMSX2 (the fastest with the core's no-8/16-bit fallback), the phone's own last; no repeats
+        // the 650: ARMSX2 then TurnipZ (TurnipZ draws specks at 1x, 2026-11-22), the phone's own last; no repeats
         val a650 = names(GpuRules.family(adreno, "Adreno (TM) 650", null), 33)
-        assertEquals(listOf(GpuRules.Driver.TURNIPZ, GpuRules.Driver.ARMSX2), a650.take(2))
-        // below Android 11 TurnipZ (and Mr Purple) are left out: ARMSX2 first
+        assertEquals(listOf(GpuRules.Driver.ARMSX2, GpuRules.Driver.TURNIPZ), a650.take(2))
+        // below Android 11 TurnipZ (and Mr Purple) are left out: ARMSX2 still first
         assertEquals(GpuRules.Driver.ARMSX2, names(GpuRules.family(adreno, "Adreno (TM) 650", null), 29).first())
         assertEquals(GpuRules.Driver.SYSTEM, a650.last())
         assertEquals(a650.size, a650.distinct().size)
@@ -243,7 +243,7 @@ class GpuRulesTest {
         assertFalse(GpuRules.Driver.APEX in names(GpuRules.family(adreno, "Adreno (TM) 740", null), 32))
         assertTrue(GpuRules.Driver.APEX in names(GpuRules.family(adreno, "Adreno (TM) 740", null), 33))
         assertFalse(GpuRules.Driver.PANVK in names(GpuRules.family(0x13B5, "Mali-G615", null), 34))
-        assertEquals(GpuRules.Driver.TURNIPZ, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 650", null)).value)
+        assertEquals(GpuRules.Driver.ARMSX2, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 650", null)).value)
         // the 610-640: the system driver first (TurnipZ lost the GPU mid-game on the 613), TurnipZ next
         val a613 = names(GpuRules.family(adreno, "Adreno (TM) 613", null), 33)
         assertEquals(listOf(GpuRules.Driver.SYSTEM, GpuRules.Driver.TURNIPZ), a613.take(2))
