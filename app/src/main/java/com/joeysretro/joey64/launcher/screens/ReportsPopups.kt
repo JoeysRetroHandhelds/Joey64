@@ -44,7 +44,7 @@ Netplay games
   • Whether you hosted or joined, how many players, input delay, ping, how often and how long the game waited, whether the games went out of step, players who left, and how the room ended. No names, room codes or addresses
 
 Problems
-  • For a game that crashed, froze, was closed by Android or stuttered, and for netplay games: the last lines of Joey64's own log for that game and its lines about each stutter, with folders, names and outside addresses taken out
+  • For a game that crashed, froze, was closed by Android or stuttered, and for netplay games: Joey64's whole log for that play (up to about 4 MB), with folders, names and outside addresses taken out
 
 Box art
   • Games with no cover, or whose cover you changed: the game's ID and file name
