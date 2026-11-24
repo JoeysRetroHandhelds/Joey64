@@ -1922,10 +1922,16 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         JLog.i(TAG, "cheats: ${lines.size} on, keys ${cheatKeys.joinToString()}")
     }
 
+    // A file that was moved or deleted since the library listed it makes the provider throw from query
+    // (IllegalArgumentException "Failed to determine if ...: FileNotFoundException", report 97: three crashes at start,
+    // Thor 0.2.7): fall back to the link's own name, and the ROM copy then fails the start the normal way.
     private fun displayName(uri: Uri): String? =
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0) else null
-        } ?: uri.lastPathSegment?.substringAfterLast('/')
+        runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.onFailure { JLog.w(TAG, "display name: ${it.javaClass.simpleName}: ${it.message?.take(120)}") }.getOrNull()
+            ?: uri.lastPathSegment?.substringAfterLast('/')
 
     private val romCache get() = File(cacheDir, "current.rom")
 
@@ -1937,7 +1943,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      * ROM, or null when it holds no N64 ROM.
      */
     private fun copyToCache(uri: Uri, name: String?): String? =
-        contentResolver.openInputStream(uri)?.use { RomFiles.extract(it, romCache, name) }
+        try { contentResolver.openInputStream(uri)?.use { RomFiles.extract(it, romCache, name) } }
+        catch (e: Exception) { JLog.e(TAG, "ROM $uri can't be read: ${e.javaClass.simpleName}: ${e.message?.take(120)}"); null }
 
     /** What [prepareGame] got ready off the main thread: the ROM, its save name, a 64DD disk's cartridge, Settings › Saves. */
     private class Prepared(val rom: String, val saveName: String, val ddCart: String?, val savesOpts: com.joeysretro.joey64.saves.SavesOptions,
