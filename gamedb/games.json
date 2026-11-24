@@ -1,6 +1,6 @@
 {
   "about": "Joey64 per-game database: what each game needs, what is wrong with it and where, and what was fixed. Seed for the M3 profile DB. Rules: gamedb/README.md. Update this file in the same commit as any change to a game's status (new problem found, fixed, regressed, setting added or dropped).",
-  "updated": "2026-11-22",
+  "updated": "2026-11-24",
   "games": [
     {
       "id": "NPF", "title": "Pokemon Snap",
@@ -1355,6 +1355,13 @@
       "id": "N8W", "crc": "F9FC3090FF014EC2", "title": "World Cup 98 (Europe) (En,Fr,De,Es,It,Nl,Sv,Da)",
       "settings": [
         {"what": "Crop edges Thin (4 lines) by default, while neither All games nor the game sets Crop edges", "where": "video/GameCrop.kt GAMES4 (code N8WP: this region's every revision and hack)", "why": "a border on both crop-pass shots (7 s and 30 s into the attract scene), and Thin is the largest size that cuts no picture (joey64-notes docs/crop/crop8-sum.tsv, f1189); Joey 2026-11-22 \"Yes, all of them\""}
+      ]
+    },
+    {
+      "id": "NMV",
+      "title": "Mario Party 3",
+      "fixed": [
+        {"what": "Star Lift mini-game: the star blew up (the rounding mode went stale in memory after CTC1, and the dynarec's cvt.w/l helpers read it there; reported and fixed by dento, not reproduced here)", "fix": "core 7001e72 (dento 45de646), app 7b9b568; the short list + this game 22/22 on RG477M, RG 476H, Pocket Block, Flip"}
       ]
     }
   ]
