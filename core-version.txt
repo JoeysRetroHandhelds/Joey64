@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: cpucopy-main
-commit: 77f08e23e4888e0e779fd2e714441160983a7c5d 2026-11-24 12:09:50 -0600 N64_RDP_CPUCOPY_UPSCALED=1 (measurement): let the CPU copy answer reads when upscaled too (fo
+branch: main
+commit: 311200b9f3b1488f88fa502e989e9f4db5ca17e0 2026-11-24 15:38:54 -0600 Granite: 8 MB GPU memory blocks by default (Huge class 256 KB; N64_VK_HUGE_KB=2048 for the ol
 uncommitted: none
-built: 2026-11-24 12:40
-md5: 703155550e00ee1dcaeb58ae97199183
+built: 2026-11-24 16:25
+md5: bc6fc5d1e2b4e66df5e0c93628f74bb8
