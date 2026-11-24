@@ -368,6 +368,8 @@ bool g_raFresh = false;
 bool g_raPrevShown = false;
 // g_raState: run-ahead is taking or putting back its state (GET_SAVESTATE_CONTEXT answers RUNAHEAD_SAME_INSTANCE).
 bool g_raState = false;
+// g_rbState: netplay rollback is taking or putting back one of its states (GET_SAVESTATE_CONTEXT answers ROLLBACK_NETPLAY).
+bool g_rbState = false;
 // Dev lag probe (N64_LAG_PROBE=<frame>[/0]): presses N64 A for 20 frames from that many frames after N64_STATE
 // loads (/0: no press, the baseline) and logs a hash of each shown frame around it, to count frames to a response.
 int g_probeMask = 0;
@@ -829,7 +831,9 @@ bool environment(unsigned cmd, void* data) {
         static_cast<retro_rumble_interface*>(data)->set_rumble_state = setRumble; return true;
     case RETRO_ENVIRONMENT_GET_SAVESTATE_CONTEXT:
         // run-ahead's state goes back into this same core within the frame (the core may keep part of it itself)
-        if (data) *static_cast<int*>(data) = g_raState ? RETRO_SAVESTATE_CONTEXT_RUNAHEAD_SAME_INSTANCE : RETRO_SAVESTATE_CONTEXT_NORMAL;
+        // (netplay rollback's states: many kept, any of them put back, so the core keeps none of them itself)
+        if (data) *static_cast<int*>(data) = g_rbState ? RETRO_SAVESTATE_CONTEXT_ROLLBACK_NETPLAY
+                                           : g_raState ? RETRO_SAVESTATE_CONTEXT_RUNAHEAD_SAME_INSTANCE : RETRO_SAVESTATE_CONTEXT_NORMAL;
         return true;
     case RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE:
         // bit 0 video, bit 1 audio, bit 3 (hard disable audio): run-ahead's extra frames, which are rolled back
@@ -1699,6 +1703,37 @@ void runLoop() {
     else if (runAheadAsked) LOGI("run-ahead: off in a netplay room");
     std::vector<uint8_t> raState;
     double raSaveMs = 0, raLoadMs = 0, raExtraMs = 0; int raFrames = 0, raRefused = 0, raSaveRamPutBack = 0; std::vector<uint8_t> raSaveRam;
+    // Netplay rollback prototype (dev N64_NETPLAY_ROLLBACK=<inputs> in a room, Joey 2026-11-24 "Yes, prototype it"): the
+    // core guesses inputs not here yet (its l_hist). Each frame's state is kept here with the core's input counts; when
+    // the core says a guess was wrong, the newest state from before that input goes back and the frames since run
+    // again, hidden and silent, with what was heard. Off unless the core was started with it.
+    auto rbWindowFn = reinterpret_cast<int (*)()>(dlsym(core.handle, "joey64_netplay_rb_window"));
+    auto rbMarkFn = reinterpret_cast<void (*)(uint32_t*)>(dlsym(core.handle, "joey64_netplay_rb_mark"));
+    auto rbRestoreFn = reinterpret_cast<void (*)(const uint32_t*)>(dlsym(core.handle, "joey64_netplay_rb_restore"));
+    auto rbBadFn = reinterpret_cast<unsigned (*)(uint32_t*)>(dlsym(core.handle, "joey64_netplay_rb_bad"));
+    auto rbReplayingFn = reinterpret_cast<void (*)(int)>(dlsym(core.handle, "joey64_netplay_rb_replaying"));
+    auto rbFloorFn = reinterpret_cast<void (*)(const uint32_t*)>(dlsym(core.handle, "joey64_netplay_rb_floor"));
+    auto rbNeedFn = reinterpret_cast<void (*)(uint32_t*)>(dlsym(core.handle, "joey64_netplay_rb_need"));
+    auto rbPumpFn = reinterpret_cast<int (*)(int)>(dlsym(core.handle, "joey64_netplay_rb_pump"));
+    const bool rbHave = netplay && rbWindowFn && rbMarkFn && rbRestoreFn && rbBadFn && rbReplayingFn && rbFloorFn && rbNeedFn && rbPumpFn;
+    struct RbSlot { uint32_t frame = 0; bool ok = false; uint32_t np[5] = {}; std::vector<uint8_t> st, sram; };
+    std::vector<RbSlot> rbRing;
+    uint32_t rbFrame = 0;
+    struct { int rollbacks = 0, replayed = 0, deepest = 0, tooDeep = 0, refused = 0, frames = 0, holds = 0, holdMs = 0; double takeMs = 0, replayMs = 0, loadMs = 0, worstMs = 0; } rbs;
+    auto rbTake = [&](uint32_t frame) {
+        RbSlot& s = rbRing[frame % rbRing.size()];
+        s.frame = frame;
+        rbMarkFn(s.np);
+        size_t n = core.serialize_size();
+        s.st.resize(n);
+        g_rbState = true;
+        s.ok = n > 0 && core.serialize(s.st.data(), n);
+        g_rbState = false;
+        auto* sram = static_cast<uint8_t*>(core.get_memory_data(RETRO_MEMORY_SAVE_RAM));
+        size_t sramSize = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
+        if (s.ok && sram && sramSize) s.sram.assign(sram, sram + sramSize); else s.sram.clear();
+        if (!s.ok) ++rbs.refused;
+    };
     readPressScript();
     const char* probeEnv = getenv("N64_LAG_PROBE");
     const int probeAt = probeEnv && *probeEnv ? atoi(probeEnv) : -1;
@@ -2071,7 +2106,120 @@ void runLoop() {
         const bool ahead = runAhead > 0 && !ff && !rewinding && !g_paused && stateWait <= 0 &&
                            g_framesRun >= (uint32_t)stateReadyFrames();
         if (probeAt >= 0 && probeFrame >= 0) g_probeMask = probePress && probeFrame >= probeAt && probeFrame < probeAt + 20 ? 1 : 0;
-        if (!ahead) {
+        const int rbWindow = rbHave ? rbWindowFn() : 0;
+        const bool rb = rbWindow > 0 && !rewinding && !g_paused && g_framesRun >= (uint32_t)stateReadyFrames();
+        if (!ahead && rb) {
+            using clk = std::chrono::steady_clock;
+            if (rbRing.empty()) {
+                rbRing.resize(rbWindow * 2 + 6); // games that read the pad every other frame need twice the frames
+                LOGI("netplay rollback: keeping %zu frames' states", rbRing.size());
+            }
+            double extra = 0;
+            uint32_t bad[4];
+            if (unsigned m = rbBadFn(bad)) {
+                // At the frame's start (before its own state and the shown frame): a wrong guess heard since goes back to the
+                // newest kept state from before it and runs the frames up to this one again. Done after the shown frame
+                // before, the picture those hidden frames drew was skipped as a repeat: 1.6 s without a new picture.
+                int best = -1;
+                for (size_t i = 0; i < rbRing.size(); ++i) {
+                    const RbSlot& s = rbRing[i];
+                    if (!s.ok || rbFrame - s.frame >= rbRing.size()) continue;
+                    bool before = true;
+                    for (int p = 0; p < 4; ++p)
+                        if ((m >> p & 1) && (int32_t)(s.np[p] - bad[p]) > 0) before = false;
+                    if (before && (best < 0 || (int32_t)(s.frame - rbRing[best].frame) > 0)) best = (int)i;
+                }
+                if (best < 0) {
+                    ++rbs.tooDeep;
+                    static int told = 0;
+                    if (told++ < 5) {
+                        uint32_t lo[5] = {}; uint32_t loFrame = 0; bool have = false;
+                        for (const RbSlot& s : rbRing)
+                            if (s.ok && rbFrame - s.frame < rbRing.size() && (!have || (int32_t)(s.frame - loFrame) < 0)) { loFrame = s.frame; memcpy(lo, s.np, sizeof lo); have = true; }
+                        LOGE("netplay rollback: too deep at frame %u: wrong guesses mask %u at counts %u/%u, oldest state frame %u counts %u/%u",
+                             rbFrame, m, bad[0], bad[1], loFrame, lo[0], lo[1]);
+                    }
+                } else {
+                    const uint32_t from = rbRing[best].frame;
+                    auto l0 = clk::now();
+                    g_rbState = true;
+                    const bool loaded = core.unserialize(rbRing[best].st.data(), rbRing[best].st.size());
+                    g_rbState = false;
+                    if (!loaded) LOGE("netplay rollback: the state from frame %u didn't load", rbRing[best].frame);
+                    auto* sram = static_cast<uint8_t*>(core.get_memory_data(RETRO_MEMORY_SAVE_RAM));
+                    size_t sramSize = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
+                    if (sram && rbRing[best].sram.size() == sramSize) memcpy(sram, rbRing[best].sram.data(), sramSize);
+                    rbRestoreFn(rbRing[best].np);
+                    auto l1 = clk::now();
+                    rbs.loadMs += std::chrono::duration<double, std::milli>(l1 - l0).count();
+                    rbReplayingFn(1);
+                    g_raReplay = g_raMute = g_raHide = true;
+                    for (uint32_t f = from; (int32_t)(f - rbFrame) < 0; ++f) {
+                        if (f != from) rbTake(f);
+                        double m2 = runOne(false);
+                        if (m2 > 0) extra += m2;
+                    }
+                    g_raReplay = g_raMute = g_raHide = false; // g_raFresh stays: the shown frame below shows what they drew
+                    rbReplayingFn(0);
+                    const int depth = (int)(rbFrame - from);
+                    ++rbs.rollbacks; rbs.replayed += depth; rbs.deepest = std::max(rbs.deepest, depth);
+                    extra += std::chrono::duration<double, std::milli>(l1 - l0).count();
+                }
+            }
+            auto k0 = clk::now();
+            {
+                // This frame's state replaces the oldest one. If no other kept state is from before an input still
+                // missing that a guess went past, the frame waits for the room instead (a game that doesn't read the
+                // pad for a while kept running and left the wrong guess impossible to undo).
+                const size_t R = rbRing.size();
+                auto coversNeed = [&](const uint32_t* need) {
+                    for (const RbSlot& s : rbRing) {
+                        if (&s == &rbRing[rbFrame % R] || !s.ok || rbFrame - s.frame >= R) continue; // (the one going)
+                        bool before = true;
+                        for (int p = 0; p < 4; ++p) if ((int32_t)(s.np[p] - need[p]) > 0) before = false;
+                        if (before) return true;
+                    }
+                    return false;
+                };
+                uint32_t need[4];
+                rbNeedFn(need);
+                if (rbFrame >= R && !coversNeed(need)) {
+                    int waited = 0;
+                    while (!coversNeed(need)) {
+                        if (!rbPumpFn(2)) break; // the room went quiet: the core's own wait says so next
+                        waited += 2;
+                        rbNeedFn(need);
+                    }
+                    ++rbs.holds; rbs.holdMs += waited;
+                }
+            }
+            rbTake(rbFrame);
+            {
+                // the core guesses only inputs a kept state is from before: the oldest one's counts
+                int oldest = -1;
+                for (size_t i = 0; i < rbRing.size(); ++i) {
+                    const RbSlot& s = rbRing[i];
+                    if (!s.ok || rbFrame - s.frame >= rbRing.size()) continue;
+                    if (oldest < 0 || (int32_t)(s.frame - rbRing[oldest].frame) < 0) oldest = (int)i;
+                }
+                if (oldest >= 0) rbFloorFn(rbRing[oldest].np);
+            }
+            auto k1 = clk::now();
+            rbs.takeMs += std::chrono::duration<double, std::milli>(k1 - k0).count();
+            double ms = runOne(show);
+            if (ms < 0) continue;
+            g_raFresh = false; // (a rollback's hidden frames drew it; this shown frame has used it)
+            ++rbFrame;
+            const double all = ms + extra + std::chrono::duration<double, std::milli>(k1 - k0).count();
+            rbs.replayMs += extra; rbs.worstMs = std::max(rbs.worstMs, all);
+            noteFrameTime(all);
+            if (++rbs.frames >= 300) {
+                LOGI("netplay rollback: in %d frames: %d rollbacks, %d frames run again (deepest %d), %d too deep, %d states refused, %d frames held for a missing input (%d ms); per frame: keep state %.2f ms, rollback %.2f ms (load %.2f); worst frame %.1f ms",
+                     rbs.frames, rbs.rollbacks, rbs.replayed, rbs.deepest, rbs.tooDeep, rbs.refused, rbs.holds, rbs.holdMs,
+                     rbs.takeMs / rbs.frames, rbs.replayMs / rbs.frames, rbs.loadMs / rbs.frames, rbs.worstMs);
+                rbs = {};
+            }
+        } else if (!ahead) {
             double ms = runOne(show);
             if (ms < 0) continue;
             noteFrameTime(ms);
