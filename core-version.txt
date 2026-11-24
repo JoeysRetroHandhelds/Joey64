@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: fcr31-fix (local; worktree joey64-core-main)
-commit: 62f17287a02bdbcac60868bfd202dd0a58c52041 2026-11-23 23:42:53 -0600 parallel-RDP: run-ahead's native-frame state starts over at RDP::init (release audit 0.2.7 item 4)
+branch: hoist
+commit: 895b4525e4b3be2b9e44863f94ae00c363f26bef 2026-11-24 01:12:19 -0600 Dynarec: hoist loop-invariant register lookups out of pass 3/4's host-register loops and memo
 uncommitted: none
-built: 2026-11-23 23:02
-md5: e517dd89bf94cdce427405c400921e12
+built: 2026-11-24 08:31
+md5: d455014b4cd6d093722da3fc81ea0cc1
