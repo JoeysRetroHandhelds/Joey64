@@ -33,7 +33,8 @@ when a new one is out.
   reads (Pokémon Snap's photos, Resident Evil 2) keep them without paying for full synchronous mode everywhere.
   On Adreno, the GPU clock is kept up while a game runs, so frames that wait for the GPU don't run long.
   With parallel-RDP, the RSP's recompiler does the chip's vector maths in ARM64 code of its own, and upscaled
-  pictures are read back without drawing each frame a second time at the N64's own resolution.
+  pictures are read back without drawing each frame a second time at the N64's own resolution. Full-width screen
+  and depth clears are written in one go instead of drawn.
 - **Netplay built for handhelds.** Host a room on your own device and share an 8-character room code. Rooms on
   the same Wi-Fi show up by themselves, and public rooms are listed worldwide. The router's port is opened for
   you (NAT-PMP or UPnP) and input delay adjusts to the connection while you play. No relay server sits in the
@@ -123,7 +124,8 @@ when a new one is out.
 - Cheats: GameShark lists downloaded for each game, with notes, and a GameShark button for codes that need one.
 - RetroAchievements: sign in, unlock pop-ups and sounds, progress, subsets as tabs. Unlocks made offline are
   sent later, or through RAOfflineProxy. Softcore only for now.
-- Emulation settings per game: overclock, CPU core, Expansion Pak, thermal fallback, run-ahead.
+- Emulation settings per game: overclock, CPU core, Expansion Pak, thermal fallback, run-ahead, frame skip
+  (when behind or every other frame, for devices that can't quite keep up).
 - Audio settings: volume, latency, mono, fast-forward sound, playing alongside music from other apps.
 - On-screen stats: frame rate, speed, a frame-time graph, CPU, GPU, battery, temperature, RAM, driver and
   renderer, in a corner or down the side of the picture. Also pop-ups for states, screenshots and hotkeys.
