@@ -170,8 +170,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         launcherString(EXTRA_NETPLAY_NAME)?.let { android.system.Os.setenv("N64_NETPLAY_NAME", it, true) }
         launcherString(EXTRA_NETPLAY_KEYS)?.let { android.system.Os.setenv("N64_NETPLAY_KEYS", it, true) }
         launcherString(EXTRA_NETPLAY_KEY)?.let { android.system.Os.setenv("N64_NETPLAY_KEY", it, true) }
-        // The last game's settings (frame pacing, run-ahead, frame skip, thermal fallback) go first: the game screen
-        // shares the launcher's process, so a game's own frame skip stayed on for every later game (release audit 0.2.7)
+        // The last start's settings (frame pacing, run-ahead, frame skip, thermal fallback) go first. A guard only:
+        // each game already gets a fresh process (release audit 0.2.7 found no game whose settings carried over),
+        // but a game screen started again in the same process must not keep the previous start's values
         for (k in settingsEnvKeys) android.system.Os.unsetenv(k)
         settingsEnvKeys.clear()
         // Dev: --es env "PARALLEL_RDP_UBERSHADER=1,KEY=value" (process environment, read by the core).
