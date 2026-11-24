@@ -2860,13 +2860,22 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
     return JNI_TRUE;
 }
 
-JNIEXPORT void JNICALL JNI(start)(JNIEnv*, jobject) {
+JNIEXPORT void JNICALL JNI(start)(JNIEnv* env, jobject) {
     if (g_running) return;
     if (g_coreStuck) { LOGE("start: the core is stuck from the last game, not started"); return; }
     g_running = true;
     { std::lock_guard<std::mutex> lk(g_threadEndMutex); g_threadEnded = false; }
-    g_thread = std::thread([] {
+    JavaVM* vm = nullptr;
+    env->GetJavaVM(&vm);
+    g_thread = std::thread([vm] {
+        // The emulation thread is attached to the JVM for its whole life (2026-11-24): it can drop the last reference to
+        // an old window (attachWindow's vkDestroySurfaceKHR), and Android's BLASTBufferQueue destructor then runs its
+        // Java hang callback's cleanup, which needs a JNIEnv. Unattached that was a null dereference: RG 476H, a game
+        // in the background and a frontend launching another (SIGSEGV in nativeSetTransactionHangCallback's lambda).
+        JNIEnv* threadEnv = nullptr;
+        bool attached = vm && vm->AttachCurrentThread(&threadEnv, nullptr) == JNI_OK;
         runLoop();
+        if (attached) vm->DetachCurrentThread();
         hitch::threadEnd();
         { std::lock_guard<std::mutex> lk(g_threadEndMutex); g_threadEnded = true; }
         g_threadEndCv.notify_all();
