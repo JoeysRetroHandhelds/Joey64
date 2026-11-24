@@ -327,6 +327,16 @@ std::atomic<double> g_ffSpeedNow{1.0};
 std::atomic<int> g_slowPct{0};
 // The speed slow motion runs at this frame (0: not slowed), for the audio callbacks.
 std::atomic<double> g_slowNow{0.0};
+// Netplay catch-up: the core asks (RETRO_ENVIRONMENT_SET_FASTFORWARDING_OVERRIDE, every input poll) to run fast while
+// this player is behind the lead and holds more input than the room's buffer target. It is a full fast-forward in
+// RetroArch; here it is a gentle trim (kCatchUpSpeed, like RMG-K's netplay), so the game and its sound only speed up
+// a little: the sound is resampled at that speed (pitch a little higher), so the audio wait (kept: without it the
+// ring ran dry, RG 476H 8-23 underruns per 5 s against 0-4) lets frames come that much sooner; the speed cap runs at
+// that speed and the panel is unthrottled so vsync doesn't hold it at 60. Only in a netplay room; the host ignored
+// the request before.
+std::atomic<bool> g_catchUpAsked{false};
+std::atomic<double> g_catchUpNow{0.0}; // the speed catch-up runs at this frame (0: not catching up), for the audio callbacks
+static const double kCatchUpSpeed = getenv("N64_CATCHUP_PCT") ? std::clamp(atoi(getenv("N64_CATCHUP_PCT")), 100, 400) / 100.0 : 1.05;
 // Rewind (same mockup; rewind.h). Settings come from any thread and are applied on the emulation thread.
 Rewind g_rewind;
 // The state-request ring (state_ring.h): on when the game screen sets N64_STATE_RING=<dir> before the game starts.
@@ -849,6 +859,13 @@ bool environment(unsigned cmd, void* data) {
         return true;
     case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS:
         return true;
+    case RETRO_ENVIRONMENT_SET_FASTFORWARDING_OVERRIDE: { // netplay catch-up (g_catchUpAsked)
+        auto* o = static_cast<const retro_fastforwarding_override*>(data);
+        if (!o) return true; // a query: supported
+        if (!g_netplay) return false;
+        g_catchUpAsked = o->fastforward;
+        return true;
+    }
     case RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK: {
         auto* c = static_cast<const retro_audio_buffer_status_callback*>(data);
         g_audioStatusCb = c ? c->callback : nullptr;
@@ -893,6 +910,7 @@ void audio_sample(int16_t l, int16_t r) {
     int16_t s[2] = {l, r};
     if (double sl = g_slowNow.load(); sl > 0) { if (int m = g_ffSound.load()) g_audio.writeFast(s, 1, sl, m == 1 ? 0.25f : 1.0f); return; }
     if (g_fastForward) { if (int m = g_ffSound.load()) g_audio.writeFast(s, 1, g_ffSpeedNow.load(), m == 1 ? 0.25f : 1.0f); return; }
+    if (double cu = g_catchUpNow.load(); cu > 0) { g_audio.writeFast(s, 1, cu, 1.0f); return; }
     g_audio.write(s, 1);
 }
 size_t g_frameAudio = 0; // audio frames the core gave during this retro_run (N64_FRAME_TRACE)
@@ -902,6 +920,7 @@ size_t audio_batch(const int16_t* d, size_t frames) {
     // A blocking write would throttle fast-forward: its sound (if any) goes through writeFast; slow motion's too.
     if (double sl = g_slowNow.load(); sl > 0) { if (int m = g_ffSound.load()) g_audio.writeFast(d, frames, sl, m == 1 ? 0.25f : 1.0f); }
     else if (g_fastForward) { if (int m = g_ffSound.load()) g_audio.writeFast(d, frames, g_ffSpeedNow.load(), m == 1 ? 0.25f : 1.0f); }
+    else if (double cu = g_catchUpNow.load(); cu > 0) g_audio.writeFast(d, frames, cu, 1.0f);
     else g_audio.write(d, frames);
     g_frameAudio += frames;
     return frames;
@@ -1663,7 +1682,9 @@ void runLoop() {
     LOGI("late input %s", g_lateInput ? "on" : "off");
     int splitIn = 300; // frames: the core's threads exist by then
     int framesSinceSaveCheck = 0;
-    bool ffApplied = false, benchApplied = false;
+    bool ffApplied = false, benchApplied = false, catchUpApplied = false;
+    int catchUps = 0, catchUpFrames = 0; // netplay catch-up, logged every 5 s while it happens
+    auto catchUpLogAt = std::chrono::steady_clock::now();
     // Dev (env N64_STATE=<raw save state file>): load it once the core has run a little (mupen64plus-next
     // can't load before), for repeatable benchmark scenes. RetroArch's RZIP states must be unpacked first.
     const char* statePath = getenv("N64_STATE");
@@ -1817,6 +1838,20 @@ void runLoop() {
         bool ff = g_fastForward && !rewinding;
         const bool slow = slowPct > 0 && !ff && !rewinding && !g_bench;
         g_slowNow = slow ? slowPct / 100.0 : 0.0;
+        const bool catchUp = g_netplay && g_catchUpAsked && !ff && !slow && !rewinding && !g_bench && !g_paused;
+        g_catchUpNow = catchUp ? kCatchUpSpeed : 0.0;
+        if (catchUp != catchUpApplied) {
+            catchUpApplied = catchUp;
+            if (g_vulkan) g_vk.setUnthrottled(catchUp);
+            else g_egl.setSwapInterval(catchUp ? 0 : 1);
+            if (catchUp) ++catchUps;
+        }
+        if (catchUp) ++catchUpFrames;
+        if (g_netplay && catchUps && std::chrono::steady_clock::now() - catchUpLogAt > std::chrono::seconds(5)) {
+            catchUpLogAt = std::chrono::steady_clock::now();
+            LOGI("netplay: caught up %d times, %d frames at %d%% in the last 5 s", catchUps, catchUpFrames, (int)(kCatchUpSpeed * 100 + 0.5));
+            catchUps = catchUpFrames = 0;
+        }
         if (slow || rewinding || ff) g_audioRefillWindows = 2; // and fast-forward: its end refills the emptied ring (Duo 2026-11-10: 257 underruns, target 20 -> 30 ms)
         if (ff != ffApplied) {
             ffApplied = ff;
@@ -1941,7 +1976,7 @@ void runLoop() {
         // The monitor's frame window: from here (pacing) to the next frame's pacing. Not measured: fast-forward, a
         // benchmark, paused (a frame advance step), rewind, slow motion.
         hitch::rates(g_av.timing.fps);
-        hitch::frame(ff || g_bench || g_paused || rewinding || slow);
+        hitch::frame(ff || g_bench || g_paused || rewinding || slow || catchUp);
         // Dev (2026-11-22, moving benches): a benchmark logs the time at every 600th frame, so a fixed frame range (the same game
         // frames every run from a state with scripted input) can be timed.
         if (g_bench) {
@@ -1968,7 +2003,7 @@ void runLoop() {
             auto now = std::chrono::steady_clock::now();
             // Dev: N64_SLOW_PCT=<n> caps the game at n% of full speed, as a device that can't keep up (time stretch test).
             static const double capSpeed = getenv("N64_SLOW_PCT") ? std::clamp(atoi(getenv("N64_SLOW_PCT")), 10, 100) / 100.0 : 1.02;
-            capNext += std::chrono::microseconds((long long)(1e6 / (g_av.timing.fps * (slow ? slowPct / 100.0 : capSpeed))));
+            capNext += std::chrono::microseconds((long long)(1e6 / (g_av.timing.fps * (slow ? slowPct / 100.0 : catchUp ? kCatchUpSpeed : capSpeed))));
             if (capNext > now) { hitch::Span span(hitch::PACE); std::this_thread::sleep_until(capNext); }
             else if (now - capNext > std::chrono::milliseconds(50)) capNext = now; // behind: don't sprint
             if (logResume) { // the queue item "Resume wait": what the first frame after a pause waited on
@@ -2272,6 +2307,8 @@ void runLoop() {
     npPauseStop();
     NetplayServer::stop();
     g_netplay = false;
+    g_catchUpAsked = false;
+    g_catchUpNow = 0.0;
     g_npRoomSave = false;
     core.deinit();
     g_coreInited = false;

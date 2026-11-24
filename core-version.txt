@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
-branch: main
-commit: 498d6d9316310b9d8821e9c31880ae97ad5da45f 2026-11-23 17:17:25 -0600 Merge zfill: fill fast path (whole-row 16-bit fills written with buffer fills; N64_RDP_FILL_F
+branch: fcr31-fix (local; worktree joey64-core-main)
+commit: 62f17287a02bdbcac60868bfd202dd0a58c52041 2026-11-23 23:42:53 -0600 parallel-RDP: run-ahead's native-frame state starts over at RDP::init (release audit 0.2.7 item 4)
 uncommitted: none
-built: 2026-11-23 20:39
-md5: 344ddc2ce9332810f63b5577b1e847ee
+built: 2026-11-23 23:02
+md5: e517dd89bf94cdce427405c400921e12
