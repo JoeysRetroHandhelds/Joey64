@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
 branch: main
-commit: 394f00c9b88b3d027120eaf9792e7325589acdaf 2026-11-22 10:46:30 -0600 README: 0.2.6's core (no-storage fallbacks, smart sync row lock, TMEM overlap flush, beebono'
+commit: 498d6d9316310b9d8821e9c31880ae97ad5da45f 2026-11-23 17:17:25 -0600 Merge zfill: fill fast path (whole-row 16-bit fills written with buffer fills; N64_RDP_FILL_F
 uncommitted: none
-built: 2026-11-22 10:46
-md5: 920347dca8b07f59533c49eb80b6a157
+built: 2026-11-23 20:39
+md5: 344ddc2ce9332810f63b5577b1e847ee
