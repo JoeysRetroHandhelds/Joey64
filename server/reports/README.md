@@ -124,6 +124,9 @@ as it is), then `wrangler deploy`.
 States: deployed 2026-11-12 (Joey's go; version e4cb97c3, the bucket in Western North America, no public URL, a live test state stored and removed). For a new account: `wrangler r2 bucket create joey64-states`,
 `wrangler d1 execute joey64-reports --remote --file migrations/0005-states.sql`, then `wrangler deploy`.
 
+Whole session logs: deployed 2026-11-24 (Joey's go; version df1e5820, bucket joey64-logs, no public URL; live checks: an unknown id 404, a bad id 400, GET 405). For a new account: `wrangler r2 bucket create joey64-logs`,
+`wrangler d1 execute joey64-reports --remote --file migrations/0008-session-logs.sql`, then `wrangler deploy`.
+
 ## Free plan limits (checked 2026-11-08, Cloudflare's pages of 2026-10-29/30)
 
 | Limit (free) | What one report uses | Room |
