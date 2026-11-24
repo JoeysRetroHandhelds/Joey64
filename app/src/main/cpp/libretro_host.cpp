@@ -2770,6 +2770,15 @@ JNIEXPORT jboolean JNICALL JNI(loadGame)(JNIEnv* env, jobject, jstring rom, jstr
     else if (idIn(kNoFrameSkipGames) && getenv("N64_FRAMESKIP")) { unsetenv("N64_FRAMESKIP"); LOGI("frame skip: off for this game (it reads its last picture back)"); }
     else if (const char* fs = getenv("N64_FRAMESKIP"))
         LOGI("frame skip: %s", *fs == '2' ? "when behind" : *fs == '1' ? "every other frame" : "off");
+    // RDP CPU copy on slow GPUs (GpuRules N64_CPU_COPY_GPU, Adreno 610-640; Joey 2026-11-24 "Yes, per game"): for the
+    // listed games the core draws a CPU copy of the RDP's work and answers read-backs from it rather than waiting for
+    // the GPU. Smart sync only (the answer lives in its page fault path), never in a netplay room, and an explicit
+    // N64_RDP_CPUCOPY wins. Conker on the RG 55G1: +37% (39.4 -> 53.7 fps, ccab3-55g1); games with no read-backs to
+    // answer only pay its CPU cost, so they stay off.
+    static const char* const kCpuCopyGames[] = {"NFU"};
+    if (getenv("N64_CPU_COPY_GPU") && idIn(kCpuCopyGames) && g_rdpSync && !g_netplay && !getenv("N64_RDP_CPUCOPY")) {
+        setenv("N64_RDP_CPUCOPY", "1", 1); setenv("N64_RDP_CPUCOPY_ANSWER", "1", 1);
+        LOGI("RDP CPU copy: on for this game (slow GPU)"); }
     // The room's address stays out of the session log (code audit 3, p1 L4): its port and this player's number.
     if (g_netplay) { const char* np = getenv("N64_NETPLAY"); const char* tail = strchr(np, ':');
         LOGI("netplay: on (port and player %s): state loads, Reset, rewind, fast-forward, slow motion, frame advance and cheat changes are off",

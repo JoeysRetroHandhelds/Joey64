@@ -169,6 +169,7 @@
     {
       "id": "NFU", "title": "Conker's Bad Fur Day",
       "settings": [
+        {"what": "RDP CPU copy on Adreno 610-640 (N64_RDP_CPUCOPY=1 + _ANSWER=1): the CPU draws a copy of the RDP's work and answers the game's read-backs from it instead of waiting for the GPU; smart sync only, not in netplay", "where": "libretro_host.cpp kCpuCopyGames + GpuRules N64_CPU_COPY_GPU (2026-11-24, Joey: \"Yes, per game\")", "why": "RG 55G1 39.4 -> 53.7 fps (+37%); fast GPUs gain nothing (Odin 2 Portal 4x, RP5 2x)"},
         {"what": "Widescreen's \"When a game has one\" gives the 16:9 picture (no code): the game has a 16:9 mode of its own, drawn squeezed for a widescreen TV; the player sets it in the game (its options)", "where": "GameExtras.kt OwnWidescreen + ExtrasOn.withOwnMode (2026-11-10, Joey: \"Yes, use it\")", "why": "a 16:9 mode made for a stretched TV only needs the picture stretched; not in Hardcore"}
       ],
       "notes": ["Original frame rate since 2026-11-14 (Joey: \"All games should run at original framerate\"): it had smoother timing (CountPerOp=1) on Adreno 730+ from 2026-11-06; Overclock 2x gives it back", "100-140 ms boot frames on the Flip", "RSP chunk cache made it 10.9% slower (dropped)", "Europe ROM (07) has no bench state; use the USA ROM (81)", "the intro has black gaps between scenes (gamma-dither values 0-1, black to the eye): compat shots at 20/45 s land on them on the Flip at full speed; not a bug (README open bugs (a), settled 2026-11-09, flip-conkq1/q3 time series)"]

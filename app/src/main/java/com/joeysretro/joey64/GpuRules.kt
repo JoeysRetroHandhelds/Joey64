@@ -343,6 +343,11 @@ object GpuRules {
         // Smoother timing (CountPerOp=1) for the games that lag on hardware, strong devices only (Joey 2026-11-06;
         // compat passed on the Odin 3 and Portal): Adreno 730 and up. The host picks the games (kSmootherGames).
         if (adreno && f.model >= 730) add(Setting("N64_SMOOTHER", "1", false, "Adreno 730+: smoother timing"))
+        // RDP CPU copy (core N64_RDP_CPUCOPY + _ANSWER, Joey 2026-11-24 "Yes, per game"): on a slow GPU the CPU draws a
+        // copy of the RDP's work and answers the game's read-backs from it instead of waiting for the GPU. Only Adreno
+        // 610-640 gain (RG 55G1 Conker +37%); fast GPUs gain nothing and pay the CPU cost. The host picks the games
+        // (kCpuCopyGames).
+        if (adreno && f.model in 600..649) add(Setting("N64_CPU_COPY_GPU", "1", false, "Adreno 610-640: RDP CPU copy for its games"))
         // parallel-RDP synchronous on Adreno: async there gives black screens (Yoshi's Story, Resident Evil 2, Cruis'n
         // USA) or halts (New Tetris), and sync costs ~1-2 ms a frame. On Mali sync can cost a third of the frame
         // rate, so async plus kSyncRdpGames.
