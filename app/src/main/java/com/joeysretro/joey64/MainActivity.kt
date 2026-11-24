@@ -170,6 +170,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         launcherString(EXTRA_NETPLAY_NAME)?.let { android.system.Os.setenv("N64_NETPLAY_NAME", it, true) }
         launcherString(EXTRA_NETPLAY_KEYS)?.let { android.system.Os.setenv("N64_NETPLAY_KEYS", it, true) }
         launcherString(EXTRA_NETPLAY_KEY)?.let { android.system.Os.setenv("N64_NETPLAY_KEY", it, true) }
+        // The last game's settings (frame pacing, run-ahead, frame skip, thermal fallback) go first: the game screen
+        // shares the launcher's process, so a game's own frame skip stayed on for every later game (release audit 0.2.7)
+        for (k in settingsEnvKeys) android.system.Os.unsetenv(k)
+        settingsEnvKeys.clear()
         // Dev: --es env "PARALLEL_RDP_UBERSHADER=1,KEY=value" (process environment, read by the core).
         // Set before setupGpu: the driver hooks (N64_KGSL_PRIO) read it while the custom driver loads
         devString("env")?.split(',')?.forEach { kv ->
@@ -183,7 +187,10 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // Frame pacing (Settings › Video), Thermal fallback and Run-ahead (Settings › Emulation) are read by the host
         // from the environment; --es env wins.
         for ((k, v) in com.joeysretro.joey64.video.VideoApply.of(video, true).env + com.joeysretro.joey64.emulation.EmuApply.of(emuAtStart, true).env)
-            if (android.system.Os.getenv(k) == null) android.system.Os.setenv(k, v, true)
+            if (android.system.Os.getenv(k) == null) {
+                android.system.Os.setenv(k, v, true)
+                settingsEnvKeys.add(k)
+            }
         // Driver and renderer by GPU (setupGpu), or Settings › Video's choice. Override with: am start ... --es renderer parallel|gliden64
         val renderer = setupGpu()
         // The trial's driver can't work here: the game screen is starting again with the next one.
@@ -4473,6 +4480,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     }
 
     companion object {
+        /** The environment keys Settings set at the last game start (not --es env's), cleared at the next one. */
+        private val settingsEnvKeys = HashSet<String>()
         private const val NOTHING_TO_UNDO = "Nothing to undo"
         /** A core in one frame this long is stuck (a frame takes ms): no quit save is taken from it. */
         private const val STUCK_MS = 2000L

@@ -1981,7 +1981,11 @@ void runLoop() {
         auto runOne = [&](bool showIt) -> double {
             if (g_vulkan) {
                 auto t0 = std::chrono::steady_clock::now();
-                if (!g_vk.beginFrame(showIt)) { hitch::unmeasured(); return -1; }   // swapchain recreated, try again
+                if (!g_vk.beginFrame(showIt)) { // swapchain recreated, try again
+                    hitch::unmeasured();
+                    g_vk.takePacedMs(); // its pacing sleep isn't the next frame's
+                    return -1;
+                }
                 auto t1 = std::chrono::steady_clock::now();
                 const int presentsBefore = g_statPresents;
                 runCoreFrame();

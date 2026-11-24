@@ -43,7 +43,10 @@ public:
     bool surfaceLost() const { return surfaceLost_; }
     void retrySwapchain();
     uint64_t refreshNs() const { return refreshNs_; } // panel refresh period (display timing), 0 = unknown
-    bool timedPacing() const { return swapMode_ == 2; } // timed pacing on: the display grid paces the frames, not audio
+    // Timed pacing pacing frames: the display grid paces them, not audio. paceFrame's own test: at one refresh a frame
+    // (a 60 Hz panel, PAL on 60/120 Hz) or uncapped it returns at once and audio paces (release audit 0.2.7: the drain
+    // then ran the game and its sound 1% fast for the rest of the play)
+    bool timedPacing() const { return swapMode_ == 2 && swapInterval_ >= 2 && !unthrottled_ && refreshNs_; }
 
     // Around retro_run: acquire a swapchain image (= sync index) and present it afterwards.
     // endFrame re-presents the last image if the core produced no new one.
