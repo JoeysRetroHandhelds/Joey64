@@ -57,7 +57,11 @@ object ReportSender {
         // and what's kept is cleared after, as Off does.
         val once = !ReportPrefs.on(ctx) && ReportPrefs.once(ctx)
         if (!ReportPrefs.on(ctx) && !once) return@withContext null
-        if (!force && !once && ReportPrefs.lastSentDay(ctx) == today()) return@withContext null
+        if (!force && !once && ReportPrefs.lastSentDay(ctx) == today()) {
+            // The day's report went: whole logs that couldn't go then still go now.
+            if (sending.compareAndSet(false, true)) try { SessionLogs.uploadReady(ctx, base(ctx)) } catch (e: Exception) { JLog.w(TAG, "reports: $e") } finally { sending.set(false) }
+            return@withContext null
+        }
         if (!sending.compareAndSet(false, true)) return@withContext null
         try {
             send(ctx, once).also { if (once && it == Outcome.Sent) { ReportPrefs.setOnce(ctx, false); ReportFiles.clear(ctx) } }
@@ -89,6 +93,16 @@ object ReportSender {
             val pid = f.nameWithoutExtension.substringAfter('-').toIntOrNull() ?: continue
             val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
             logExcerpt(ctx, pid, names)?.let { o.put("log", it); try { ReportFiles.write(f, o.toString()) } catch (e: Exception) { } }
+        }
+        // And the whole log (Joey 2026-11-24): the same sessions get an id and their process's logs, cleaned and gzipped,
+        // posted after the report is taken. One id a process: its sessions share the log.
+        val logIds = HashMap<Int, String?>()
+        for ((f, o) in sessions) if (!o.has("logId") && ReportJson.wantsLog(o, testing)) {
+            val pid = f.nameWithoutExtension.substringAfter('-').toIntOrNull() ?: continue
+            val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+            val id = logIds.getOrPut(pid) { SessionLogs.prepare(ctx, pid, names) } ?: continue
+            o.put("logId", id)
+            try { ReportFiles.write(f, o.toString()) } catch (e: Exception) { }
         }
         val db = LibraryDb.get(ctx)
         val headers = db.headersOf(sessions.mapNotNull { ReportJson.md5(it.second.optString("md5")) }.toSet())
@@ -149,6 +163,7 @@ object ReportSender {
                 // after the cut above) the same, so one report can't hold up the ones after it for good (code audit 3, M22).
                 if (code != 204) JLog.e(TAG, "reports: the server refused the report ($code): ${lastError ?: ""}")
                 sentSessions.forEach { it.first.delete() }
+                for ((_, ev) in sentSessions) ev.optString("logId").takeIf { it.isNotEmpty() }?.let { SessionLogs.reportDone(ctx, it, code == 204) }
                 ReportFiles.coversSent(ctx).appendText(sentCovers.joinToString("") { it.second + "\n" })
                 coversLeft = coversLeft.drop(sentCovers.size)
                 // A report that took no covers though some are left (one too big alone): they wait, or this loops.
@@ -174,6 +189,7 @@ object ReportSender {
         // Only a report the server took uses up the day. A check with nothing to send marked it too, so a game finished
         // later that day waited for the next one: a tester's first report never came the day they played (2026-11-11).
         if (anySent) ReportPrefs.setLastSentDay(ctx, today())
+        if (!dayLimit) try { SessionLogs.uploadReady(ctx, base(ctx)) } catch (e: Exception) { JLog.w(TAG, "reports: whole logs: $e") }
         return when { dayLimit -> Outcome.DayLimit; slowDown -> Outcome.SlowDown; failed -> Outcome.Failed; anySent -> Outcome.Sent; !anyEvents -> Outcome.NothingToSend; else -> Outcome.Sent }
     }
 
@@ -298,8 +314,10 @@ object ReportSender {
         return ReportJson.logText(if (head.isEmpty()) tail else "$head\n...\n$tail")
     }
 
-    /** Names (whole ones only), paths and public addresses out of a part of an excerpt. */
-    private fun clean(s: String, names: List<String>): String {
+    private fun clean(s: String, names: List<String>): String = cleanText(s, names)
+
+    /** Names (whole ones only), paths and public addresses out of a part of an excerpt or a whole log (SessionLogs). */
+    internal fun cleanText(s: String, names: List<String>): String {
         var text = s
         // Whole names only (review 2026-11-15: a plain replace made "Joey64" "<player>64" for a player called Joey).
         for (n in names.map { it.trim() }.filter { it.length >= 2 }.sortedByDescending { it.length })

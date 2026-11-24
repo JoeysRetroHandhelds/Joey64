@@ -57,9 +57,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   netplay         TEXT,      -- JSON: a netplay room's figures (role, players, delay, pings, waits, outOfStep, left, end); NULL: no room
   log             TEXT,      -- the app's log excerpt for a session that ended badly or played in a room (16,000 characters at most)
   work_ms         REAL,      -- mean frame work time (ms, fast-forward left out), for the drivers' ranking (migrations/0007-driver-speed.sql)
-  driver_id       TEXT       -- the driver that ran: a GpuRules id ("turnip", "armsx2"...), "system" or "custom"
+  driver_id       TEXT,      -- the driver that ran: a GpuRules id ("turnip", "armsx2"...), "system" or "custom"
+  log_id          TEXT,      -- the app's id for the session's whole log (32 hex; migrations/0008-session-logs.sql)
+  log_bytes       INTEGER,   -- that log's gzipped size, once POST /v1/log took it (src/logs.js); NULL: not here (yet)
+  log_key         TEXT       -- its R2 key in the bucket joey64-logs
 );
 CREATE INDEX IF NOT EXISTS sessions_md5 ON sessions (md5);
+CREATE INDEX IF NOT EXISTS sessions_log_id ON sessions (log_id);
 
 -- Box art: a library game that got no cover, or one whose downloaded cover the user replaced (a wrong cover, most likely).
 CREATE TABLE IF NOT EXISTS covers (
@@ -116,3 +120,12 @@ CREATE TABLE IF NOT EXISTS states (
 );
 CREATE INDEX IF NOT EXISTS states_md5 ON states (md5);
 CREATE INDEX IF NOT EXISTS states_day ON states (day, who);
+
+-- Whole session logs taken today (POST /v1/log, src/logs.js; 2026-11-24), by address block's hash, for that day's limits
+-- only: rows from days before are deleted as logs come in. The logs themselves are in the R2 bucket joey64-logs, under
+-- sessions.log_key.
+CREATE TABLE IF NOT EXISTS logs_sent (
+  day TEXT NOT NULL,
+  who TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS logs_sent_day ON logs_sent (day, who);

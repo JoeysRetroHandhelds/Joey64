@@ -16,11 +16,11 @@ export const BLOCK_DAY_BYTES = 1 << 20;
 
 /**
  * Rows a report writes as D1 counts them (README "Free plan limits"): the report row and its index entry, a session or
- * cover and its md5 index entry, a crash, and the day's two counts.
+ * cover and its md5 index entry (a session with a logId its log_id index entry too), a crash, and the day's two counts.
  */
 export function rowsOf(r) {
   let n = 2 + 2;
-  for (const e of r.events) n += e.type === "crash" ? 1 : 2;
+  for (const e of r.events) n += e.type === "crash" ? 1 : e.log_id ? 3 : 2;
   return n;
 }
 
@@ -53,10 +53,10 @@ export async function store(db, r, day, count) {
     switch (e.type) {
       case "session":
         return db.prepare(
-          "INSERT INTO sessions (report, md5, header, renderer, scale, settings, seconds, emu_fps, drawn_fps, dupes, underruns, ended, frames, first_frame_ms, frames_timed, p95_ms, p99_ms, slow_frames, lag_ms, lag_max_ms, thermal_max, headroom_max, thermal_drops, rdp_sync, cpu_core, refresh_hz, cheats, from_state, driver_rule, renderer_rule, trial_level, picked_by, netplay, log, work_ms, driver_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO sessions (report, md5, header, renderer, scale, settings, seconds, emu_fps, drawn_fps, dupes, underruns, ended, frames, first_frame_ms, frames_timed, p95_ms, p99_ms, slow_frames, lag_ms, lag_max_ms, thermal_max, headroom_max, thermal_drops, rdp_sync, cpu_core, refresh_hz, cheats, from_state, driver_rule, renderer_rule, trial_level, picked_by, netplay, log, work_ms, driver_id, log_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ).bind(id, e.md5, e.header, e.renderer, e.scale, e.settings, e.seconds, e.emu_fps, e.drawn_fps, e.dupes, e.underruns, e.ended,
             e.frames, e.first_frame_ms, e.frames_timed, e.p95_ms, e.p99_ms, e.slow_frames, e.lag_ms, e.lag_max_ms, e.thermal_max, e.headroom_max, e.thermal_drops, e.rdp_sync, e.cpu_core, e.refresh_hz, e.cheats, e.from_state,
-            e.driver_rule, e.renderer_rule, e.trial_level, e.picked_by, e.netplay, e.log, e.work_ms, e.driver_id);
+            e.driver_rule, e.renderer_rule, e.trial_level, e.picked_by, e.netplay, e.log, e.work_ms, e.driver_id, e.log_id ?? null);
       case "cover":
         return db.prepare("INSERT INTO covers (report, md5, kind, header, title, cover) VALUES (?, ?, ?, ?, ?, ?)")
           .bind(id, e.md5, e.kind, e.header, e.title, e.cover);

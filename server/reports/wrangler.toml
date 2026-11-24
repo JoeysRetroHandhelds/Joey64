@@ -29,3 +29,9 @@ simple = { limit = 10, period = 60 }
 [[r2_buckets]]
 binding = "STATES"
 bucket_name = "joey64-states"
+
+# Players' whole session logs (POST /v1/log, src/logs.js; 2026-11-24). Private: never served. Made once in the Joey64
+# account (wrangler r2 bucket create joey64-logs), with Joey's go, before the first deploy that has this binding.
+[[r2_buckets]]
+binding = "LOGS"
+bucket_name = "joey64-logs"

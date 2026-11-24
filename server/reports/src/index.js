@@ -2,6 +2,7 @@ import { Invalid, MAX_BYTES, validate } from "./validate.js";
 import { BLOCK_DAY_BYTES, BLOCK_DAY_ROWS, DAY_ROWS, PER_INSTALL_DAY, rowsOf, store, today } from "./store.js";
 import { blockOf, limiterKeyOf, scramble } from "./address.js";
 import { handleState } from "./state.js";
+import { handleLog } from "./logs.js";
 
 /**
  * Joey64's report server (Joey 2026-11-07: "a server collecting reports, so that we can get information on
@@ -21,6 +22,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/health") return text(200, "ok");
     if (url.pathname === "/v1/state") return handleState(request, env, text);
+    if (url.pathname === "/v1/log") return handleLog(request, env, text);
     if (url.pathname !== "/v1/report") return text(404, "not found");
     if (request.method !== "POST") return text(405, "POST only");
 

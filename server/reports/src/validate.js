@@ -14,6 +14,12 @@ const HEADER = /^[A-Za-z0-9 ]{4}$/;
 
 export class Invalid extends Error {}
 
+/** A whole log's id: 32 lower-case hex characters, made by the app (a random UUID without its dashes). */
+export function logId(v) {
+  if (typeof v !== "string" || !/^[0-9a-f]{32}$/.test(v)) throw new Invalid("logId not 32 hex characters");
+  return v;
+}
+
 function driverId(v) {
   if (typeof v !== "string" || !/^[a-z0-9]{1,16}$/.test(v)) throw new Invalid("driverId not a driver id");
   return v;
@@ -131,6 +137,8 @@ function event(e) {
         // with a session that ended badly or played in a room.
         netplay: netplay(e.netplay),
         log: e.log === undefined || e.log === null ? null : logText(e.log),
+        // Added 2026-11-24 (migrations/0008-session-logs.sql): the id the session's whole log is posted under (/v1/log).
+        log_id: e.logId === undefined || e.logId === null ? null : logId(e.logId),
       };
     case "nocover":
     case "replaced":

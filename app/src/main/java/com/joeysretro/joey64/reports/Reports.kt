@@ -287,6 +287,8 @@ object ReportJson {
             // Added 2026-11-14 (server migrations/0006-netplay-log.sql): the room's figures and the log excerpt.
             stored.optJSONObject("netplay")?.let { n -> netplay(n)?.let { put("netplay", it) } }
             stored.optString("log").takeIf { it.isNotEmpty() }?.let { put("log", packLog(logText(it))) }
+            // Added 2026-11-24 (server migrations/0008-session-logs.sql): the id its whole log is posted under (SessionLogs).
+            stored.optString("logId").takeIf { Regex("[0-9a-f]{32}").matches(it) }?.let { put("logId", it) }
         }
     }
 
