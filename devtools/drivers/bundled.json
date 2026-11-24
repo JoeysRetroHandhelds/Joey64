@@ -113,16 +113,16 @@
       "bundled": "2026-11-15"
     },
     {
-      "name": "ARMSX2 Turnip (bmdhacks)",
+      "name": "ARMSX2 Turnip (bmdhacks), our build",
       "file": "armsx2/libvulkan_freedreno.so",
-      "used_on": "Adreno 7xx step-down",
+      "used_on": "Auto first on Adreno 740, 722 and 650-690; step-down elsewhere",
       "repo": "bmdhacks/armsx2-turnip",
       "match": "",
-      "release": "turnip-axfl3-002",
-      "shown": "ARMSX2 Turnip axfl3-002",
-      "tag": "axfl3-002",
-      "md5": "4ee0a634b02b5fd5941bb11b36aae6a5",
-      "bundled": "2026-11-15"
+      "release": "ours004: built by us from armsx2-turnip 90852cba6f0 (their axfl3-004) with NDK r29 / clang 21; replaced their prebuilt axfl3-002 (4ee0a634) 2026-11-24, Joey: yes",
+      "shown": "ARMSX2 Turnip 004 (Joey64 build)",
+      "tag": "90852cba6f0",
+      "md5": "30a556f32b7521cf8b1c0b11a0b44d10",
+      "bundled": "2026-11-24"
     },
     {
       "name": "malisx2 (bmdhacks)",
