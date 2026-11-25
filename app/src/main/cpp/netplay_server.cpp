@@ -15,7 +15,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -940,6 +942,17 @@ int openSocket(int type, int port) {
         ok = bind(fd, (sockaddr*)&a, sizeof a);
     }
     if (ok != 0 || (type == SOCK_STREAM && listen(fd, 8) != 0)) { close(fd); return -1; }
+    if (type == SOCK_DGRAM) {
+        // 2026-11-24: the room's packets in Wi-Fi's voice queue (0xC0, CS6), as the core's own (it was 0x80 there, the
+        // video queue, in which the Odin 2 Portal held a joiner's inputs back ~107 ms). Unset, the room's were 0.
+        // N64_NETPLAY_TOS=<byte> picks another, as in the core.
+        int tos = 0xC0;
+        if (const char* t = getenv("N64_NETPLAY_TOS"); t && *t) tos = (int)strtol(t, nullptr, 0);
+        int r4 = setsockopt(fd, IPPROTO_IP, IP_TOS, &tos, sizeof tos); // IPv4 (and v4-mapped on a v6 socket)
+        int r6 = v6 ? setsockopt(fd, IPPROTO_IPV6, IPV6_TCLASS, &tos, sizeof tos) : 0;
+        NLOGI("netplay server: UDP packets marked 0x%02x (IPv4 %s, IPv6 %s)", tos, r4 == 0 ? "ok" : strerror(errno),
+              !v6 ? "n/a" : r6 == 0 ? "ok" : strerror(errno));
+    }
     return fd;
 }
 
