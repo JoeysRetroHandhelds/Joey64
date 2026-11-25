@@ -89,8 +89,13 @@ bool AudioOut::openStream() {
     const char* sm = getenv("N64_AUDIO_START_MS");
     const char* ra = getenv("N64_RUNAHEAD");
     const bool netplay = (getenv("N64_NETPLAY") && *getenv("N64_NETPLAY")) || (getenv("N64_NETPLAY_SERVE") && *getenv("N64_NETPLAY_SERVE"));
+    // Timed pacing (Steady, less lag; N64_SWAP_INTERVAL=2, the 120 Hz default since 0.2.8) also starts at 40 ms: at 20 ms
+    // it underran for the first ~20 s until the target had grown (Odin 3 Portal DK64 256-263 underruns -> 24-25 at 40 ms,
+    // RG 476H 151-161 -> 38-42, RG477M 42-49 -> 13-17; 50 ms the same as 40; poll->display unchanged).
+    const char* si = getenv("N64_SWAP_INTERVAL");
+    const bool timed = si && atoi(si) == 2;
     const int autoStart = sm && atoi(sm) > 0 ? std::min(atoi(sm), (int)kMaxTargetMs)
-                        : ra && atoi(ra) > 0 && !netplay ? std::min(40, (int)kMaxTargetMs) : kTargetMs;
+                        : (ra && atoi(ra) > 0 && !netplay) || timed ? std::min(40, (int)kMaxTargetMs) : kTargetMs;
     const int startMs = mode == 1 ? 10 : mode == 2 ? 60 : autoStart;
     grow_ = mode != 1;
     target_ = (size_t)dstRate * startMs / 1000 * 2;

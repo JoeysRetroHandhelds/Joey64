@@ -79,8 +79,11 @@ enum class VideoKey(val key: String, private val base: String) {
      * The value a row has when nobody set it. Frame pacing is Steady on a screen running at 120 Hz (Joey 2026-11-15:
      * RG477M, Paper Mario at 30 fps: Lowest lag showed 9-14% of frames for 3 refreshes instead of 4, Steady none,
      * at the same poll-to-display, 19-33 ms); 60 Hz screens keep Lowest lag (Steady costs 8-16 ms there).
+     * Since 0.2.8 the 120 Hz default is Steady, less lag (Joey 2026-11-25, "Yes, with limit 8": 22/22 short compat on all
+     * four 120 Hz devices; 10 minutes of DK64 upscaled 191 -> 13, 21 -> 0, 131 -> 1 stutters; Odin 2 Portal Smash 4x
+     * 56.6 -> 60.3 fps; 0-9 ms more lag), with a 40 ms audio start (audio_out.cpp) and 8 missed slots allowed (vk_context.cpp).
      */
-    val default: String get() = if (this == Pacing && highRefresh) "steady" else base
+    val default: String get() = if (this == Pacing && highRefresh) "timed" else base
 
     companion object {
         /** The screen runs at 100 Hz or more (set by [ScreenRefresh.update] when an activity starts). */

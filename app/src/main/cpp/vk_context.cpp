@@ -702,8 +702,11 @@ void VkContext::paceFrame() {
         int late;
         { std::lock_guard<std::mutex> lk(timingMutex_); late = fastLate_; fastLate_ = 0; }
         fastN_ = 0;
-        // N64_PACE_FAST_LATE (dev, 2026-11-22): how many missed slots in a window turn it off (2).
-        static const int lateMax = getenv("N64_PACE_FAST_LATE") ? atoi(getenv("N64_PACE_FAST_LATE")) : 2;
+        // N64_PACE_FAST_LATE (dev, 2026-11-22): how many missed slots in a window turn it off. 8 with Steady, less lag
+        // (Joey 2026-11-25, "Yes, with limit 8": upscaled, 2 tripped in DK64 / Conker on three of the four 120 Hz devices
+        // and cost 3-5 ms of lag; 8 kept it on, 20 added nothing), 2 for Steady's auto pacing (not measured at 8).
+        static const char* lateEnv = getenv("N64_PACE_FAST_LATE");
+        const int lateMax = lateEnv ? atoi(lateEnv) : autoPace_ ? 2 : 8;
         static const bool lateLog = getenv("N64_PACE_LOG") && *getenv("N64_PACE_LOG") == '1';
         if (lateLog) LOGI("pacing: fast window, %d slots missed in 300", late);
         if (late > lateMax) { fastPace_ = false; LOGI("pacing: %d slots missed in 300, back to the longer lead for this game", late); }

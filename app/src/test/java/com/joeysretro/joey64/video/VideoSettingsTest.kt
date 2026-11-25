@@ -74,10 +74,11 @@ class VideoSettingsTest {
     @Test fun pacingGoesToTheEnvironment() {
         assertEquals("1", VideoApply.of(VideoSettings(mapOf(VideoKey.Pacing to "steady")), true).env["N64_SWAP_INTERVAL"])
         assertEquals("2", VideoApply.of(VideoSettings(mapOf(VideoKey.Pacing to "timed")), true).env["N64_SWAP_INTERVAL"])
-        // 120 Hz screens default to Steady, which is auto pacing there (3, Joey 2026-11-17); a value someone set still wins
+        // 120 Hz screens default to Steady, less lag (timed, 2; Joey 2026-11-25); Steady is auto pacing there (3, Joey
+        // 2026-11-17); a value someone set still wins
         VideoKey.highRefresh = true
         try {
-            assertEquals("3", VideoApply.of(VideoSettings.DEFAULTS, true).env["N64_SWAP_INTERVAL"])
+            assertEquals("2", VideoApply.of(VideoSettings.DEFAULTS, true).env["N64_SWAP_INTERVAL"])
             assertEquals("3", VideoApply.of(VideoSettings(mapOf(VideoKey.Pacing to "steady")), true).env["N64_SWAP_INTERVAL"])
             assertEquals(null, VideoApply.of(VideoSettings(mapOf(VideoKey.Pacing to "lowest")), true).env["N64_SWAP_INTERVAL"])
         } finally {
