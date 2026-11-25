@@ -403,10 +403,11 @@ struct Room {
         }
     }
     // Connection numbers per player, logged every 10 s: new inputs, copies (resends), requests, last packet heard.
-    struct NetStats { uint32_t inputs = 0, copies = 0, requests = 0; std::chrono::steady_clock::time_point heard, lastNew; bool any = false, anyNew = false; long gapMax = 0; };
+    struct NetStats { uint32_t inputs = 0, copies = 0, requests = 0; std::chrono::steady_clock::time_point heard, lastNew; bool any = false, anyNew = false; long gapMax = 0;
+                      uint32_t lastNewCc = 0, pktsSinceNew = 0; int gapTold = 0; };
     NetStats ns[4];
     std::chrono::steady_clock::time_point nsSince = std::chrono::steady_clock::now();
-    void heard(int p) { ns[p].heard = std::chrono::steady_clock::now(); ns[p].any = true; }
+    void heard(int p) { ns[p].heard = std::chrono::steady_clock::now(); ns[p].any = true; ns[p].pktsSinceNew++; }
     void logNet() {
         auto now = std::chrono::steady_clock::now();
         double secs = std::chrono::duration<double>(now - nsSince).count();
@@ -701,8 +702,18 @@ struct Room {
         ns[p].inputs++;
         {
             auto t = std::chrono::steady_clock::now();
-            if (ns[p].anyNew) ns[p].gapMax = std::max<long>(ns[p].gapMax, (long)std::chrono::duration_cast<std::chrono::milliseconds>(t - ns[p].lastNew).count());
-            ns[p].lastNew = t; ns[p].anyNew = true;
+            if (ns[p].anyNew) {
+                const long g = (long)std::chrono::duration_cast<std::chrono::milliseconds>(t - ns[p].lastNew).count();
+                ns[p].gapMax = std::max<long>(ns[p].gapMax, g);
+                // rb23 diagnosis: a joiner sends every frame and Wi-Fi pings are clean, yet the room sees 110-130 ms
+                // gaps: what came in meanwhile, and which counts
+                if (g > 90 && ns[p].gapTold < 30) {
+                    ns[p].gapTold++;
+                    NLOGI("netplay server: player %d: no new input for %ld ms (count %u, then %u), %u packets of theirs meanwhile",
+                          p + 1, g, ns[p].lastNewCc, cc, ns[p].pktsSinceNew - 1);
+                }
+            }
+            ns[p].lastNew = t; ns[p].anyNew = true; ns[p].lastNewCc = cc; ns[p].pktsSinceNew = 0;
         }
         put(p, count, {keys, plugin});
         fillRaise(p, cc);
