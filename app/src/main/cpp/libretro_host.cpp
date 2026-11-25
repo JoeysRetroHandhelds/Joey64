@@ -918,6 +918,9 @@ void audio_sample(int16_t l, int16_t r) {
     g_audio.write(s, 1);
 }
 size_t g_frameAudio = 0; // audio frames the core gave during this retro_run (N64_FRAME_TRACE)
+// rb25: a rollback room's last shown frame's sound (interleaved stereo), played again for a time-sync hold
+std::vector<int16_t> g_rbAudioNow, g_rbLastAudio;
+bool g_rbKeepAudio = false;
 size_t audio_batch(const int16_t* d, size_t frames) {
     if (g_bench || g_paused) return frames; // paused: a frame advance step (the stream is paused, nothing drains)
     if (g_rewindActive || g_raMute) return frames; // going back, or run-ahead's extra frames: no sound
@@ -925,7 +928,10 @@ size_t audio_batch(const int16_t* d, size_t frames) {
     if (double sl = g_slowNow.load(); sl > 0) { if (int m = g_ffSound.load()) g_audio.writeFast(d, frames, sl, m == 1 ? 0.25f : 1.0f); }
     else if (g_fastForward) { if (int m = g_ffSound.load()) g_audio.writeFast(d, frames, g_ffSpeedNow.load(), m == 1 ? 0.25f : 1.0f); }
     else if (double cu = g_catchUpNow.load(); cu > 0) g_audio.writeFast(d, frames, cu, 1.0f);
-    else g_audio.write(d, frames);
+    else {
+        g_audio.write(d, frames);
+        if (g_rbKeepAudio) g_rbAudioNow.insert(g_rbAudioNow.end(), d, d + frames * 2);
+    }
     g_frameAudio += frames;
     return frames;
 }
@@ -1715,11 +1721,14 @@ void runLoop() {
     auto rbFloorFn = reinterpret_cast<void (*)(const uint32_t*)>(dlsym(core.handle, "joey64_netplay_rb_floor"));
     auto rbNeedFn = reinterpret_cast<void (*)(uint32_t*)>(dlsym(core.handle, "joey64_netplay_rb_need"));
     auto rbPumpFn = reinterpret_cast<int (*)(int)>(dlsym(core.handle, "joey64_netplay_rb_pump"));
+    // rb25: time sync's holds (a core without it sleeps 16 ms itself, which the audio pacing made up straight after)
+    auto rbHoldFn = netplay ? reinterpret_cast<int (*)()>(dlsym(core.handle, "joey64_netplay_rb_hold")) : nullptr;
+    if (const char* h = getenv("N64_NETPLAY_HOLD"); h && !strcmp(h, "sleep")) rbHoldFn = nullptr;
     const bool rbHave = netplay && rbWindowFn && rbMarkFn && rbRestoreFn && rbBadFn && rbReplayingFn && rbFloorFn && rbNeedFn && rbPumpFn;
     struct RbSlot { uint32_t frame = 0; bool ok = false; uint32_t np[5] = {}; std::vector<uint8_t> st, sram; };
     std::vector<RbSlot> rbRing;
     uint32_t rbFrame = 0;
-    struct { int rollbacks = 0, replayed = 0, deepest = 0, tooDeep = 0, refused = 0, frames = 0, holds = 0, holdMs = 0; double takeMs = 0, replayMs = 0, loadMs = 0, worstMs = 0; } rbs;
+    struct { int rollbacks = 0, replayed = 0, deepest = 0, tooDeep = 0, refused = 0, frames = 0, holds = 0, holdMs = 0, syncHolds = 0; double takeMs = 0, replayMs = 0, loadMs = 0, worstMs = 0; } rbs;
     auto rbTake = [&](uint32_t frame) {
         RbSlot& s = rbRing[frame % rbRing.size()];
         s.frame = frame;
@@ -2114,6 +2123,15 @@ void runLoop() {
                 rbRing.resize(rbWindow * 2 + 6); // games that read the pad every other frame need twice the frames
                 LOGI("netplay rollback: keeping %zu frames' states", rbRing.size());
             }
+            if (rbHoldFn && rbHoldFn()) {
+                // rb25: time sync says we're ahead: this frame isn't run. The last frame's sound plays again through the
+                // paced write, so the sound keeps its rate and the game really falls one frame back (a 16 ms sleep was made
+                // up by the next frames' audio waits).
+                rbPumpFn(0);
+                if (!g_rbLastAudio.empty()) g_audio.write(g_rbLastAudio.data(), g_rbLastAudio.size() / 2);
+                ++rbs.syncHolds;
+                continue;
+            }
             double extra = 0;
             {
                 // This frame's state (taken below) replaces the oldest one. If no other kept state is from before an
@@ -2214,7 +2232,11 @@ void runLoop() {
             }
             auto k1 = clk::now();
             rbs.takeMs += std::chrono::duration<double, std::milli>(k1 - k0).count();
+            g_rbAudioNow.clear();
+            g_rbKeepAudio = rbHoldFn != nullptr;
             double ms = runOne(show);
+            g_rbKeepAudio = false;
+            if (!g_rbAudioNow.empty()) g_rbLastAudio.swap(g_rbAudioNow);
             if (ms < 0) continue;
             g_raFresh = false; // (a rollback's hidden frames drew it; this shown frame has used it)
             ++rbFrame;
@@ -2222,8 +2244,8 @@ void runLoop() {
             rbs.replayMs += extra; rbs.worstMs = std::max(rbs.worstMs, all);
             noteFrameTime(all);
             if (++rbs.frames >= 300) {
-                LOGI("netplay rollback: in %d frames: %d rollbacks, %d frames run again (deepest %d), %d too deep, %d states refused, %d frames held for a missing input (%d ms); per frame: keep state %.2f ms, rollback %.2f ms (load %.2f); worst frame %.1f ms",
-                     rbs.frames, rbs.rollbacks, rbs.replayed, rbs.deepest, rbs.tooDeep, rbs.refused, rbs.holds, rbs.holdMs,
+                LOGI("netplay rollback: in %d frames: %d rollbacks, %d frames run again (deepest %d), %d too deep, %d states refused, %d frames held for a missing input (%d ms), %d skipped for time sync; per frame: keep state %.2f ms, rollback %.2f ms (load %.2f); worst frame %.1f ms",
+                     rbs.frames, rbs.rollbacks, rbs.replayed, rbs.deepest, rbs.tooDeep, rbs.refused, rbs.holds, rbs.holdMs, rbs.syncHolds,
                      rbs.takeMs / rbs.frames, rbs.replayMs / rbs.frames, rbs.loadMs / rbs.frames, rbs.worstMs);
                 rbs = {};
             }
