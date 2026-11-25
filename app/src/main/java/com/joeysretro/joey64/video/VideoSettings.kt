@@ -145,7 +145,8 @@ object VideoChoices {
     val pacing = listOf(
         VideoChoice("lowest", "Lowest lag", "Each frame shows as soon as it's ready"),
         VideoChoice("steady", "Steady", "Each frame shows for the same time on 120 Hz screens. More lag"),
-        VideoChoice("timed", "Steady, less lag", "Steady, with frames timed to the screen", experimental = true))
+        // No Experimental tag since it became the 120 Hz default (Joey 2026-11-25, "Yes, drop the tag").
+        VideoChoice("timed", "Steady, less lag", "Steady, with frames timed to the screen"))
     val look = listOf(
         VideoChoice("auto", "Auto", "Sharp at 2x and up, Original at Native"),
         VideoChoice("original", "Original", "The N64's own soft picture"),
