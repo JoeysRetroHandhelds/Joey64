@@ -44,7 +44,10 @@ enum : uint8_t { UDP_SEND_KEY_INFO = 0, UDP_RECEIVE_KEY_INFO = 1, UDP_REQUEST_KE
                  // [9, player, R32, offset at R, H32, n, n x (count32, change int8)], from the room to the game playing
                  // that player, after each of its inputs (2026-11-13): where its inputs go, so it can use its own at once
                  // (see Room::announce)
-                 UDP_JOEY_OWN_PLAN = 9 };
+                 UDP_JOEY_OWN_PLAN = 9,
+                 // [10, player, 0, 0, 4 x int16 lead*16]: a rollback game's lead over each player, passed on to the
+                 // others for time sync (2026-11-24, rollback prototype)
+                 UDP_JOEY_LEAD = 10 };
 enum : uint8_t { TCP_SEND_SAVE = 1, TCP_RECEIVE_SAVE = 2, TCP_SEND_SETTINGS = 3, TCP_RECEIVE_SETTINGS = 4,
                  TCP_REGISTER_PLAYER = 5, TCP_GET_REGISTRATION = 6, TCP_DISCONNECT_NOTICE = 7,
                  // Joey64's own (2026-11-10): [0x40, ROM MD5 as 32 hex characters], answered 2 = the host's ROM,
@@ -374,6 +377,8 @@ struct Room {
     struct Late { std::chrono::steady_clock::time_point at; sockaddr_storage to; socklen_t len; std::vector<uint8_t> d; };
     std::deque<Late> late;
     uint32_t simDropped = 0, simSent = 0;
+    long simOverMax = 0; // the most a late packet went out past its time (the room thread not running)
+    int offMin[1] = {0}, offMax[1] = {0}; // rollback diagnosis: hi[1] - hi[0] range in the log window
     void udpSend(const uint8_t* d, size_t n, const sockaddr_storage& to, socklen_t len) {
         // the host's own game (loopback) isn't on the internet: the sim leaves it alone (2026-11-12, it waited on its own inputs)
         const bool loop = (to.ss_family == AF_INET && ntohl(((const sockaddr_in&)to).sin_addr.s_addr) == INADDR_LOOPBACK) ||
@@ -392,12 +397,13 @@ struct Room {
         auto now = std::chrono::steady_clock::now();
         while (!late.empty() && late.front().at <= now) {
             auto& l = late.front();
+            simOverMax = std::max<long>(simOverMax, (long)std::chrono::duration_cast<std::chrono::milliseconds>(now - l.at).count());
             sendto(udp, l.d.data(), l.d.size(), 0, (const sockaddr*)&l.to, l.len);
             late.pop_front();
         }
     }
     // Connection numbers per player, logged every 10 s: new inputs, copies (resends), requests, last packet heard.
-    struct NetStats { uint32_t inputs = 0, copies = 0, requests = 0; std::chrono::steady_clock::time_point heard; bool any = false; };
+    struct NetStats { uint32_t inputs = 0, copies = 0, requests = 0; std::chrono::steady_clock::time_point heard, lastNew; bool any = false, anyNew = false; long gapMax = 0; };
     NetStats ns[4];
     std::chrono::steady_clock::time_point nsSince = std::chrono::steady_clock::now();
     void heard(int p) { ns[p].heard = std::chrono::steady_clock::now(); ns[p].any = true; }
@@ -410,13 +416,18 @@ struct Room {
         for (int i = 0; i < 4; i++) {
             if (!reg[i].id) continue;
             long ago = ns[i].any ? (long)std::chrono::duration_cast<std::chrono::milliseconds>(now - ns[i].heard).count() : -1;
-            snprintf(b, sizeof b, "%splayer %d: %u inputs, %u copies, %u requests, heard %ld ms ago%s", line.empty() ? "" : "; ",
-                     i + 1, ns[i].inputs, ns[i].copies, ns[i].requests, ago, disconnected[i] ? " (left)" : (pausedMask & (1 << i)) ? " (paused)" : "");
+            snprintf(b, sizeof b, "%splayer %d: %u inputs, %u copies, %u requests, longest gap %ld ms, heard %ld ms ago%s", line.empty() ? "" : "; ",
+                     i + 1, ns[i].inputs, ns[i].copies, ns[i].requests, ns[i].gapMax, ago, disconnected[i] ? " (left)" : (pausedMask & (1 << i)) ? " (paused)" : "");
             line += b;
-            ns[i].inputs = ns[i].copies = ns[i].requests = 0;
+            ns[i].inputs = ns[i].copies = ns[i].requests = 0; ns[i].gapMax = 0;
         }
         if (!line.empty()) NLOGI("netplay server: net in %.1f s: %s", secs, line.c_str());
-        if (simSent) { NLOGI("netplay server: simulated internet: %u of %u packets dropped", simDropped, simSent); simSent = simDropped = 0; }
+        if (offMax[0] || offMin[0]) {
+            NLOGI("netplay server: player 2's newest input count less player 1's: %d to %d (now %d)", offMin[0], offMax[0],
+                  (int)(hi[1] - hi[0]));
+            offMin[0] = offMax[0] = 0;
+        }
+        if (simSent) { NLOGI("netplay server: simulated internet: %u of %u packets dropped, sent up to %ld ms past their time", simDropped, simSent, simOverMax); simSent = simDropped = 0; simOverMax = 0; }
         nsSince = now;
     }
     // The status byte sent: bit 0 de-synced, bits 1-4 player 1-4 left, bits 5-7 the first paused player (1-4), 0 = none.
@@ -678,11 +689,21 @@ struct Room {
     void gotInput(int p, uint32_t cc, uint32_t keys, uint8_t plugin) {
         heard(p);
         if (!started[p] || after(cc, hi[p])) { hi[p] = cc; started[p] = true; }
+        if (started[0] && started[1]) {
+            int d = (int)(hi[1] - hi[0]);
+            if (d < offMin[0] || (!offMin[0] && !offMax[0])) offMin[0] = d;
+            if (d > offMax[0] || (!offMin[0] && !offMax[0])) offMax[0] = d;
+        }
         uint32_t count = cc + (uint32_t)offsetOf(p, cc);
         if (inputs[p].count(count)) { ns[p].copies++; return; }
         // a frame taken away at this count: its slot is the one before's, so this input is dropped
         if (changeAt(p, cc) < 0) { ns[p].copies++; return; }
         ns[p].inputs++;
+        {
+            auto t = std::chrono::steady_clock::now();
+            if (ns[p].anyNew) ns[p].gapMax = std::max<long>(ns[p].gapMax, (long)std::chrono::duration_cast<std::chrono::milliseconds>(t - ns[p].lastNew).count());
+            ns[p].lastNew = t; ns[p].anyNew = true;
+        }
         put(p, count, {keys, plugin});
         fillRaise(p, cc);
         // keep the last ~10 s
@@ -696,6 +717,13 @@ struct Room {
             addPeer(from, len);
             for (int i = 0, k = 3; i < d[2] && k + 9 <= n; i++, k += 9) gotInput(d[1], r32(d + k), r32(d + k + 4), d[k + 8]);
             announce(d[1], from, len);
+            break;
+        }
+        case UDP_JOEY_LEAD: {
+            // rollback time sync (2026-11-24): passed on as it is to every other game
+            if (n < 12 || d[1] >= 4 || !fromPlayer(from, d[1])) return;
+            for (auto& peer : peers)
+                if (!(peer.len == len && memcmp(&peer.addr, &from, len) == 0)) udpSend(d, 12, peer.addr, peer.len);
             break;
         }
         case UDP_SEND_KEY_INFO: {
@@ -721,6 +749,13 @@ struct Room {
             for (auto& [rid, c] : lastAsked[p]) if (c > lead && c - lead < 0x80000000u) lead = c;
             fillLeft(p, count);
             asked(p, count, me);
+            if (!inputs[p].count(count) && inputs[p].upper_bound(count) != inputs[p].end()) {
+                // rb14 diagnosis: a slot the room never got while later ones are in
+                static int told = 0;
+                if (told++ < 20)
+                    NLOGI("netplay server: player %d asks player %d's slot %u: not here, newest %u (sent count %u)",
+                          me + 1, p + 1, count, inputs[p].rbegin()->first, hi[p]);
+            }
             if (adaptive && active(p) && !inputs[p].count(count)) {
                 auto now = std::chrono::steady_clock::now();
                 if (missing.size() >= kMaxMapped) missing.erase(missing.begin());

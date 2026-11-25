@@ -2115,6 +2115,38 @@ void runLoop() {
                 LOGI("netplay rollback: keeping %zu frames' states", rbRing.size());
             }
             double extra = 0;
+            {
+                // This frame's state (taken below) replaces the oldest one. If no other kept state is from before an
+                // input still missing that a guess went past, the frame waits for the room instead (a game that doesn't
+                // read the pad for a while kept running and left the wrong guess impossible to undo). Before the
+                // rollback (rb13): an input heard while waiting that shows a guess wrong is undone from the state the
+                // wait kept; done after it, that state was dropped first ("too deep", then a desync).
+                const size_t R = rbRing.size();
+                auto coversNeed = [&](const uint32_t* need) {
+                    for (const RbSlot& s : rbRing) {
+                        if (&s == &rbRing[rbFrame % R] || !s.ok || rbFrame - s.frame >= R) continue; // (the one going)
+                        bool before = true;
+                        for (int p = 0; p < 4; ++p) if ((int32_t)(s.np[p] - need[p]) > 0) before = false;
+                        if (before) return true;
+                    }
+                    return false;
+                };
+                uint32_t need[4];
+                rbNeedFn(need);
+                if (rbFrame >= R && !coversNeed(need)) {
+                    int waited = 0;
+                    bool quiet = false;
+                    while (!coversNeed(need)) {
+                        if (!rbPumpFn(2)) { quiet = true; break; } // the room went quiet: the core's own wait says so next
+                        waited += 2;
+                        rbNeedFn(need);
+                    }
+                    if (waited >= 40 || quiet)
+                        LOGI("netplay rollback: frame %u held %d ms for counts %u/%u%s", rbFrame, waited, need[0], need[1],
+                             quiet ? " (room quiet: gave up)" : "");
+                    ++rbs.holds; rbs.holdMs += waited;
+                }
+            }
             uint32_t bad[4];
             if (unsigned m = rbBadFn(bad)) {
                 // At the frame's start (before its own state and the shown frame): a wrong guess heard since goes back to the
@@ -2123,7 +2155,9 @@ void runLoop() {
                 int best = -1;
                 for (size_t i = 0; i < rbRing.size(); ++i) {
                     const RbSlot& s = rbRing[i];
-                    if (!s.ok || rbFrame - s.frame >= rbRing.size()) continue;
+                    // (rb20: a full ring back is still there: this frame's state replaces it only below, and the wait
+                    // above may have kept it for exactly this guess; skipping it gave "too deep" and a desync)
+                    if (!s.ok || rbFrame - s.frame > rbRing.size()) continue;
                     bool before = true;
                     for (int p = 0; p < 4; ++p)
                         if ((m >> p & 1) && (int32_t)(s.np[p] - bad[p]) > 0) before = false;
@@ -2167,32 +2201,6 @@ void runLoop() {
                 }
             }
             auto k0 = clk::now();
-            {
-                // This frame's state replaces the oldest one. If no other kept state is from before an input still
-                // missing that a guess went past, the frame waits for the room instead (a game that doesn't read the
-                // pad for a while kept running and left the wrong guess impossible to undo).
-                const size_t R = rbRing.size();
-                auto coversNeed = [&](const uint32_t* need) {
-                    for (const RbSlot& s : rbRing) {
-                        if (&s == &rbRing[rbFrame % R] || !s.ok || rbFrame - s.frame >= R) continue; // (the one going)
-                        bool before = true;
-                        for (int p = 0; p < 4; ++p) if ((int32_t)(s.np[p] - need[p]) > 0) before = false;
-                        if (before) return true;
-                    }
-                    return false;
-                };
-                uint32_t need[4];
-                rbNeedFn(need);
-                if (rbFrame >= R && !coversNeed(need)) {
-                    int waited = 0;
-                    while (!coversNeed(need)) {
-                        if (!rbPumpFn(2)) break; // the room went quiet: the core's own wait says so next
-                        waited += 2;
-                        rbNeedFn(need);
-                    }
-                    ++rbs.holds; rbs.holdMs += waited;
-                }
-            }
             rbTake(rbFrame);
             {
                 // the core guesses only inputs a kept state is from before: the oldest one's counts
