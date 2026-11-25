@@ -93,9 +93,10 @@ bool AudioOut::openStream() {
     // it underran for the first ~20 s until the target had grown (Odin 3 Portal DK64 256-263 underruns -> 24-25 at 40 ms,
     // RG 476H 151-161 -> 38-42, RG477M 42-49 -> 13-17; 50 ms the same as 40; poll->display unchanged).
     const char* si = getenv("N64_SWAP_INTERVAL");
+    // Not in a netplay room (release audit 0.2.8): rooms keep 20 ms, as with run-ahead; timed pacing there wasn't measured.
     const bool timed = si && atoi(si) == 2;
     const int autoStart = sm && atoi(sm) > 0 ? std::min(atoi(sm), (int)kMaxTargetMs)
-                        : (ra && atoi(ra) > 0 && !netplay) || timed ? std::min(40, (int)kMaxTargetMs) : kTargetMs;
+                        : ((ra && atoi(ra) > 0) || timed) && !netplay ? std::min(40, (int)kMaxTargetMs) : kTargetMs;
     const int startMs = mode == 1 ? 10 : mode == 2 ? 60 : autoStart;
     grow_ = mode != 1;
     target_ = (size_t)dstRate * startMs / 1000 * 2;

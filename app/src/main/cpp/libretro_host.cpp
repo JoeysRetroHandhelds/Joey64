@@ -3059,8 +3059,13 @@ JNIEXPORT void JNICALL JNI(start)(JNIEnv* env, jobject) {
         // an old window (attachWindow's vkDestroySurfaceKHR), and Android's BLASTBufferQueue destructor then runs its
         // Java hang callback's cleanup, which needs a JNIEnv. Unattached that was a null dereference: RG 476H, a game
         // in the background and a frontend launching another (SIGSEGV in nativeSetTransactionHangCallback's lambda).
+        // Attached under the name it already has (release audit 0.2.8): with no name ART names it "Thread-NN", the core's
+        // threads made from it take that name, and coreWorkerThreads, which finds them by the process name, found none.
         JNIEnv* threadEnv = nullptr;
-        bool attached = vm && vm->AttachCurrentThread(&threadEnv, nullptr) == JNI_OK;
+        char name[16] = {};
+        pthread_getname_np(pthread_self(), name, sizeof(name));
+        JavaVMAttachArgs args{JNI_VERSION_1_6, name[0] ? name : nullptr, nullptr};
+        bool attached = vm && vm->AttachCurrentThread(&threadEnv, &args) == JNI_OK;
         runLoop();
         if (attached) vm->DetachCurrentThread();
         hitch::threadEnd();
