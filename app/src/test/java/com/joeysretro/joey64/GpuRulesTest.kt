@@ -244,10 +244,15 @@ class GpuRulesTest {
         assertTrue(GpuRules.Driver.APEX in names(GpuRules.family(adreno, "Adreno (TM) 740", null), 33))
         assertFalse(GpuRules.Driver.PANVK in names(GpuRules.family(0x13B5, "Mali-G615", null), 34))
         assertEquals(GpuRules.Driver.ARMSX2, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 650", null)).value)
-        // the 610-640: the system driver first (TurnipZ lost the GPU mid-game on the 613), TurnipZ next
+        // the 613: our Turnip first (no GPU lost in 10-minute plays), the system driver next
         val a613 = names(GpuRules.family(adreno, "Adreno (TM) 613", null), 33)
-        assertEquals(listOf(GpuRules.Driver.SYSTEM, GpuRules.Driver.TURNIPZ), a613.take(2))
+        assertEquals(listOf(GpuRules.Driver.ARMSX2, GpuRules.Driver.SYSTEM), a613.take(2))
         assertEquals(a613.size, a613.distinct().size)
+        assertEquals(GpuRules.Driver.ARMSX2, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 613", null)).value)
+        // the rest of the 610-640: the system driver first (TurnipZ lost the GPU mid-game on the 613), TurnipZ next
+        val a618 = names(GpuRules.family(adreno, "Adreno (TM) 618", null), 33)
+        assertEquals(listOf(GpuRules.Driver.SYSTEM, GpuRules.Driver.TURNIPZ), a618.take(2))
+        assertEquals(GpuRules.Driver.SYSTEM, GpuRules.autoDriver(GpuRules.family(adreno, "Adreno (TM) 618", null)).value)
         // PowerVR: the phone's own driver is tried with parallel-RDP during a trial
         val other = GpuRules.family(0x1010, "PowerVR B-Series BXM-8-256", null)
         assertEquals(listOf(GpuRules.Driver.SYSTEM), names(other, 35))

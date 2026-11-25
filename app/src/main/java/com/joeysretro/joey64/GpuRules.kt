@@ -115,7 +115,11 @@ object GpuRules {
             // 76/53/60/60, system 60/38/50/51; Gen8, T30 and faux123 don't start there (the trial steps past them).
             // But the 610-640 keep the system driver first: on the 613 TurnipZ 0.3.0 and 0.4.0 both lost the GPU mid-game
             // in DK64, Paper Mario, Perfect Dark and Conker (short compat 17/21; the system driver 21/21), which the
-            // trial, deciding at the first picture, can't catch
+            // trial, deciding at the first picture, can't catch.
+            // The 613 itself: our Turnip (ours004, bundled as ARMSX2) first since 2026-11-24: short list + Mario Party 3
+            // 22/22 with no lost-GPU line (od-55g), 10-minute plays of those four games alive with 0 lost-GPU, hang or
+            // crash lines (long613-55g), 1.25x the system driver uncapped (k819b)
+            f.vendor == Vendor.ADRENO && f.model == 613 -> listOf(Driver.ARMSX2, Driver.SYSTEM, Driver.TURNIPZ, Driver.FAUX123, Driver.TURNIP, Driver.PURPLE19, Driver.PURPLE, Driver.K11, Driver.R2)
             f.vendor == Vendor.ADRENO && f.model in 600..649 -> listOf(Driver.SYSTEM, Driver.TURNIPZ, Driver.ARMSX2, Driver.FAUX123, Driver.TURNIP, Driver.PURPLE19, Driver.PURPLE, Driver.K11, Driver.R2)
             // The 650-690: ARMSX2 first since 2026-11-22: TurnipZ draws coloured specks at the top of the picture at 1x
             // (Elise's file select, DK64, GoldenEye, Conker on the Retroid Pocket 5; Joey: "Elise on the RP5 home screen had a
@@ -176,6 +180,7 @@ object GpuRules {
         f.vendor == Vendor.ADRENO && f.model in 800..899 -> Pick(Driver.SYSTEM, "Adreno 8xx: system driver")
         // Adreno 6xx: TurnipZ, the fastest on the 650 and 613 (see chain); T19 was first only while it was the one
         // driver with the 8-bit storage parallel-RDP needed there, before the core's fallback (2026-11-21)
+        f.vendor == Vendor.ADRENO && f.model == 613 -> Pick(Driver.ARMSX2, "Adreno 613: our Turnip (no GPU lost in 10-minute plays, 1.25x the system driver)")
         f.vendor == Vendor.ADRENO && f.model in 600..649 -> Pick(Driver.SYSTEM, "Adreno 610-640: system driver (TurnipZ lost the GPU mid-game on the 613)")
         // The 650-690: ARMSX2 (TurnipZ's specks at 1x, see chain)
         f.vendor == Vendor.ADRENO && f.model in 650..699 -> Pick(Driver.ARMSX2, "Adreno 650+: ARMSX2 Turnip (TurnipZ draws specks at 1x)")
