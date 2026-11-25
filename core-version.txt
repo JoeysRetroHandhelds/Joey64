@@ -1,7 +1,7 @@
 # The core bundled in app/src/main/jniLibs (written by devtools/bundle-core.sh; the .so itself is not committed)
 repo: JoeysRetroHandhelds/joey64-core
 branch: main
-commit: 311200b9f3b1488f88fa502e989e9f4db5ca17e0 2026-11-24 15:38:54 -0600 Granite: 8 MB GPU memory blocks by default (Huge class 256 KB; N64_VK_HUGE_KB=2048 for the ol
+commit: 21914ae18d107a252751610463cd2020c91998b3 2026-11-25 08:45:07 -0600 Rollback mode 3: with smart sync, a rollback state's RDRAM is copied by a worker after the ta
 uncommitted: none
-built: 2026-11-24 16:25
-md5: bc6fc5d1e2b4e66df5e0c93628f74bb8
+built: 2026-11-25 10:02
+md5: d607f8df7145ba718969e6f56778f42d
