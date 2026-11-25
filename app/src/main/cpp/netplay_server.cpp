@@ -54,7 +54,14 @@ enum : uint8_t { TCP_SEND_SAVE = 1, TCP_RECEIVE_SAVE = 2, TCP_SEND_SETTINGS = 3,
                  TCP_REGISTER_PLAYER = 5, TCP_GET_REGISTRATION = 6, TCP_DISCONNECT_NOTICE = 7,
                  // Joey64's own (2026-11-10): [0x40, ROM MD5 as 32 hex characters], answered 2 = the host's ROM,
                  // 1 = another one, 0 = no host ROM within 30 s. The host's is the one from this device (127.0.0.1).
-                 TCP_JOEY_ROM_CHECK = 0x40 };
+                 TCP_JOEY_ROM_CHECK = 0x40,
+                 // Automatic rollback (2026-11-24, Joey: "No setting. The room uses rollback when every device can
+                 // afford it, else today's shared delay"). This room answers a registration with 3 for ok (older cores
+                 // take any non-zero as ok); a core that sees 3 sends [0x41, the most inputs it can guess ahead, 0 =
+                 // none] and, after the registration, [0x42], answered with the room's window: the smallest of every
+                 // player's, or 0 = the shared delay when any player said 0 or is a core that never says (its
+                 // TCP_GET_REGISTRATION came with no 0x41 before it).
+                 TCP_JOEY_RB_CAP = 0x41, TCP_JOEY_RB_MODE = 0x42 };
 constexpr int kSettingsSize = 24;     // SETTINGS_SIZE: six 32-bit settings
 constexpr int kMaxPerPacket = 56;     // (512 - 5) / 9 input events in one reply
 constexpr uint8_t kBufferTarget = 2;  // the client's local buffer above which it may catch up (fast-forward)
@@ -81,6 +88,9 @@ struct Client {
     std::vector<uint8_t> in;          // bytes not handled yet
     uint32_t regId = 0;               // from its TCP_REGISTER_PLAYER
     bool waitingRegistration = false; // a TCP_GET_REGISTRATION not answered yet
+    bool askedRegistration = false;   // it sent one (so a core that says nothing about rollback never will)
+    int rbCap = -1;                   // its TCP_JOEY_RB_CAP, -1 = none yet
+    bool waitingRbMode = false;       // a TCP_JOEY_RB_MODE not answered yet
     std::chrono::steady_clock::time_point regAskedAt;
     bool waitingSettings = false;
     std::vector<std::string> waitingSaves; // TCP_RECEIVE_SAVE extensions not answered yet
@@ -144,6 +154,7 @@ struct Room {
     // (promised, sent in UDP_JOEY_OWN_PLAN), so a change is planned at H or later and the game can place its own
     // inputs below H at once instead of waiting a round trip for the room to send them back.
     bool adaptive = false;
+    int rbWindow = -1; // the room's rollback window once decided (decideRollback): 0 = the shared delay
     static constexpr int kMinDelay = 2, kMaxDelay = 12;
     static constexpr uint32_t kHorizon = 24; // frames past its newest input a game is promised no change (400 ms)
     int base[4] = {};
@@ -564,7 +575,42 @@ struct Room {
               a == 2 ? "the host's" : a == 1 ? "NOT the host's" : "no host ROM yet");
         c.romAsked.clear();
     }
+    // Rollback or the shared delay, once for the room (TCP_JOEY_RB_CAP): when every place is taken (or a registration
+    // was answered without them, after 30 s) and every registered player's game has said what it can do or asked for
+    // the registration without saying. Rollback runs the room at a fixed delay of 1, as the rollback tests did: the
+    // games guess the rest. No game has sent an input yet (they start after TCP_JOEY_RB_MODE's answer; a core that
+    // never asks is a delay-mode room's), so the blank first inputs can be laid again.
+    void decideRollback(bool timedOut) {
+        if (rbWindow >= 0 || (registered() < players && !timedOut)) return;
+        int w = 60; std::string said;
+        for (int p = 0; p < 4; p++) {
+            if (!reg[p].id) continue;
+            const Client* cl = clientOf(p);
+            if (cl && cl->rbCap < 0 && !cl->askedRegistration) return; // its 0x41 may still come
+            const int cap = cl ? std::max(cl->rbCap, 0) : 0;
+            w = std::min(w, cap);
+            char b[48]; snprintf(b, sizeof b, "%splayer %d %s", said.empty() ? "" : ", ", p + 1,
+                                 !cl || cl->rbCap < 0 ? "says nothing" : cap ? std::to_string(cap).c_str() : "can't");
+            said += b;
+        }
+        // A registration answered after 30 s with a place still free: whoever takes it later can be any build, so the
+        // shared delay (rba1 2026-11-24: a joiner that never came left the host's room in rollback alone)
+        if (registered() < players) { w = 0; said += said.empty() ? "a place still free" : ", a place still free"; }
+        rbWindow = w;
+        if (!w) { NLOGI("netplay server: shared input delay, not rollback (%s)", said.c_str()); return; }
+        adaptive = false; delay = 1; g_delay = 1;
+        for (int p = 0; p < 4; p++) {
+            if (!reg[p].id) continue;
+            inputs[p].clear(); inputs[p][0] = {0, reg[p].plugin};
+            base[p] = 1; plan[p].clear(); promised[p] = 0; started[p] = false;
+        }
+        NLOGI("netplay server: rollback, up to %d inputs guessed ahead, input delay 1 (%s)", w, said.c_str());
+    }
     void answerPending(Client& c) {
+        if (c.waitingRbMode) {
+            decideRollback(std::chrono::steady_clock::now() - c.regAskedAt > std::chrono::seconds(30));
+            if (rbWindow >= 0) { const uint8_t a = (uint8_t)rbWindow; queue(c, &a, 1); c.waitingRbMode = false; }
+        }
         if (!c.romAsked.empty()) {
             if (!hostRom.empty()) answerRom(c, c.romAsked == hostRom ? 2 : 1);
             else if (std::chrono::steady_clock::now() - c.romAskedAt > std::chrono::seconds(30)) answerRom(c, 0);
@@ -618,12 +664,20 @@ struct Room {
             // A key isn't logged (session logs can be shared); a keyed room's ids are the keys.
             if (keyed) NLOGI("netplay server: player %d register: %s", p + 1, ok ? "ok" : keyOk ? "taken" : "not this place's key");
             else NLOGI("netplay server: player %d register %08x: %s", p + 1, id, ok ? "ok" : "taken");
-            uint8_t out[2] = {ok, kBufferTarget};
+            uint8_t out[2] = {(uint8_t)(ok ? 3 : 0), kBufferTarget}; // 3: ok, and this room decides rollback (TCP_JOEY_RB_CAP)
             queue(c, out, 2);
             return 8;
         }
         case TCP_GET_REGISTRATION:
-            c.waitingRegistration = true; c.regAskedAt = std::chrono::steady_clock::now();
+            c.waitingRegistration = true; c.askedRegistration = true; c.regAskedAt = std::chrono::steady_clock::now();
+            return 1;
+        case TCP_JOEY_RB_CAP:
+            if (b.size() < 2) return 0;
+            c.rbCap = std::min<int>(b[1], 60);
+            NLOGI("netplay server: %s can guess %d inputs ahead", who(c).c_str(), c.rbCap);
+            return 2;
+        case TCP_JOEY_RB_MODE:
+            c.waitingRbMode = true;
             return 1;
         case TCP_SEND_SETTINGS:
             if (b.size() < 1 + kSettingsSize) return 0;

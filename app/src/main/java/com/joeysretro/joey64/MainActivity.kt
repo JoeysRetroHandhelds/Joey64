@@ -83,6 +83,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
      * saves and loads already ([netBlocked]); the host refuses loads and rewind.
      */
     private var roomPlay = false
+    /** The GPU setupGpu found (GpuRules.familyKey), for the room's rollback ([com.joeysretro.joey64.netplay.RollbackCap]). */
+    private var gpuFamilyKey: String? = null
 
     private fun launcherString(name: String): String? = if (fromJoey64) intent?.getStringExtra(name) else null
     private fun launcherBool(name: String): Boolean = fromJoey64 && intent?.getBooleanExtra(name, false) == true
@@ -649,6 +651,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         val systemFamily = GpuRules.family(system?.vendor ?: 0, system?.name.orEmpty(), kgsl)
         // For Settings › Video › Resolution's note (the launcher doesn't open Vulkan).
         if (systemFamily.vendor != GpuRules.Vendor.OTHER) com.joeysretro.joey64.video.ResNote.remember(this, GpuRules.familyKey(systemFamily))
+        gpuFamilyKey = if (systemFamily.vendor != GpuRules.Vendor.OTHER) GpuRules.familyKey(systemFamily) else null
         val upscale = wantedUpscale()
         val auto = GpuRules.autoDriver(systemFamily, upscale)
         // Every driver Auto tries on this GPU, best first (GpuRules.chain; Joey 2026-11-15)
@@ -2172,6 +2175,17 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         // The router's address for a hosted room's NAT-PMP (when no UPnP router answers): from the network's default
         // route, since Android's main route table that libnatpmp reads has none. --es env N64_NETPLAY_GW=<ip> wins.
         if (devString("env")?.contains("N64_NETPLAY_GW=") != true) com.joeysretro.joey64.netplay.RouterAddress.set(this)
+        // Automatic rollback (Joey 2026-11-24): the core tells the room how many inputs ahead this device can guess
+        // (netplay/RollbackCap.kt); the room picks rollback or its shared delay. --es env N64_NETPLAY_RB_CAP wins (0 =
+        // never), N64_NETPLAY_ROLLBACK=<n> still forces it on this device without asking the room (dev).
+        if (roomPlay && devString("env")?.contains("N64_NETPLAY_RB_CAP=") != true) {
+            val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            val mem = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.totalMem shr 20
+            val mhz = com.joeysretro.joey64.netplay.RollbackCap.maxCpuMhz()
+            val cap = com.joeysretro.joey64.netplay.RollbackCap.of(mem, mhz, gpuFamilyKey)
+            android.system.Os.setenv("N64_NETPLAY_RB_CAP", cap.toString(), true)
+            JLog.i(TAG, "netplay: this device can guess $cap inputs ahead for rollback ($mem MB, ${mhz} MHz, ${gpuFamilyKey ?: "GPU unknown"})")
+        }
         // State-request ring (Joey 2026-11-12; host state_ring.h): for a game on the wanted list the launcher sets
         // EXTRA_STATE_RING, and the host keeps a few recent states and meta.json in files/states/ring/<md5>/ for the
         // launcher to read after quit. The env lives on in the process, so it is cleared for every other start.
@@ -4572,7 +4586,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
         const val EXTRA_NETPLAY_KEYS = "com.joeysretro.joey64.NETPLAY_KEYS"
         /** Play together, a joiner: its one-time key (N64_NETPLAY_KEY: the core registers with it). */
         const val EXTRA_NETPLAY_KEY = "com.joeysretro.joey64.NETPLAY_KEY"
-        private val NETPLAY_ENV = listOf("N64_NETPLAY", "N64_NETPLAY_SERVE", "N64_NETPLAY_NAME", "N64_NETPLAY_KEYS", "N64_NETPLAY_KEY")
+        private val NETPLAY_ENV = listOf("N64_NETPLAY", "N64_NETPLAY_SERVE", "N64_NETPLAY_NAME", "N64_NETPLAY_KEYS", "N64_NETPLAY_KEY", "N64_NETPLAY_RB_CAP")
         /** Extras only Joey64's own starts may carry ([fromJoey64]); a start from another app has them dropped. */
         private val LAUNCHER_EXTRAS = listOf(EXTRA_ROM_PATH, EXTRA_SAVE_NAME, EXTRA_LOAD_STATE, EXTRA_SOURCE_URI, EXTRA_SOURCE_NAME,
             EXTRA_TITLE, EXTRA_MD5, EXTRA_GAME_CODE, EXTRA_KNOWN_MD5, EXTRA_DD_CART, EXTRA_NETPLAY_HOST, EXTRA_NETPLAY_JOIN, EXTRA_NETPLAY_NAME,
