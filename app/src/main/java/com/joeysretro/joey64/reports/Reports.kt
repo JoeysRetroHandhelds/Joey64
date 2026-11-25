@@ -37,6 +37,19 @@ object ReportPrefs {
     fun on(ctx: Context) = p(ctx).getBoolean("on", testing)
 
     /**
+     * The RetroAchievements names this device has signed in with (user and display name), masked in every log a report
+     * sends (release audit 0.2.8: whole logs carried rcheevos' and older builds' "signing in as" lines). Kept after a
+     * sign-out, so logs written before it are still cleaned; local only, like the sign-in itself.
+     */
+    fun maskNames(ctx: Context): List<String> = p(ctx).getStringSet("mask_names", null)?.toList().orEmpty()
+    fun addMaskNames(ctx: Context, names: List<String>) {
+        val add = names.map { it.trim() }.filter { it.length >= 2 }
+        val old = p(ctx).getStringSet("mask_names", null).orEmpty()
+        if (old.containsAll(add)) return
+        p(ctx).edit().putStringSet("mask_names", (old + add).toSet()).apply()
+    }
+
+    /**
      * One report with Send reports off (the driver trial's end card, "Send what happened, then start"; approved gputry
      * mockup 2026-11-15, screen 3c): the game screen records that play and the library sends it once, sessions only.
      */

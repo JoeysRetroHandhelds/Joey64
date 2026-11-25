@@ -111,7 +111,8 @@ object RaBridge {
         io.launch {
             val kept = try { SignInStore(app).load() } catch (e: Exception) { JLog.e(TAG, "kept sign-in unreadable: $e"); null } ?: return@launch
             _account.value = Account(kept.user, kept.user, null, null, avatarFile(app).takeIf { it.exists() })
-            JLog.i(TAG, "signing in as ${kept.user} (kept account)")
+            JLog.i(TAG, "signing in (kept account)")
+            com.joeysretro.joey64.reports.ReportPrefs.addMaskNames(app, listOf(kept.user))
             login = Login.Token
             loginWithToken(kept.user, kept.token)
         }
@@ -119,7 +120,7 @@ object RaBridge {
 
     /** Sign-in from the Sign in popup. The answer shows in [signInState] and [account]. */
     fun signIn(user: String, password: String) {
-        JLog.i(TAG, "signing in as ${user.trim()}")
+        JLog.i(TAG, "signing in (password)")
         _signIn.value = SignInState.Busy
         login = Login.Password
         loginWithPassword(user.trim(), password)
@@ -187,7 +188,7 @@ object RaBridge {
         io.launch {
             val kept = try { SignInStore(ctx).load() } catch (e: Exception) { null } ?: return@launch
             if (!waiting()) return@launch
-            JLog.i(TAG, "signing in again as ${kept.user} (the server changed)")
+            JLog.i(TAG, "signing in again (the server changed)")
             login = Login.Token
             loginWithToken(kept.user, kept.token)
         }
@@ -294,6 +295,8 @@ object RaBridge {
             user.remove("token") // the listeners don't get it
             if (kind == Login.Cancelled) { JLog.i(TAG, "sign-in cancelled; signing out again"); logout(); return }
             val name = user.optString("user")
+            // Reports mask the account's names in logs (release audit 0.2.8: whole logs carried them).
+            if (ctx != null) com.joeysretro.joey64.reports.ReportPrefs.addMaskNames(ctx, listOf(name, user.optString("display")))
             if (ctx != null && token.isNotEmpty()) io.launch { SignInStore(ctx).save(SignIn(name, token)) }
             _account.value = Account(name, user.optString("display").ifEmpty { name }, user.optInt("score"), user.optInt("softcore"),
                 ctx?.let { avatarFile(it) }?.takeIf { it.exists() })
@@ -303,7 +306,7 @@ object RaBridge {
             // Hardcore On for a new sign-in (approved part B mockup 2026-11-16, screen 1).
             if (kind == Login.Password && ctx != null) RaSettings.newSignIn(ctx)
             sendLater(5_000)
-            JLog.i(TAG, "signed in: ${user.optString("display")}, ${user.optInt("score")} points, ${user.optInt("softcore")} softcore points")
+            JLog.i(TAG, "signed in: ${user.optInt("score")} points, ${user.optInt("softcore")} softcore points")
             return
         }
         JLog.e(TAG, "sign-in failed ($result): ${ev.optString("error")}")

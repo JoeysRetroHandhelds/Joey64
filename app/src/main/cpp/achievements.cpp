@@ -205,7 +205,14 @@ void serverCall(const rc_api_request_t* req, rc_client_server_callback_t cb, voi
     if (post) e.env->DeleteLocalRef(post);
 }
 
-void logMessage(const char* msg, const rc_client_t*) { RLOGI("%s", msg); }
+// rcheevos names the account in its login lines ("Attempting to log in <user>", "<user> logged in successfully"): logged
+// without it, since session logs go out with reports (release audit 0.2.8; a failed sign-in's name is never masked).
+void logMessage(const char* msg, const rc_client_t*) {
+    if (!strncmp(msg, "Attempting to log in ", 21)) { RLOGI("Attempting to log in"); return; }
+    if (const char* s = strstr(msg, " logged in successfully")) { RLOGI("%s", s + 1); return; }
+    if (!strncmp(msg, "Logging ", 8) && strstr(msg, " out")) { RLOGI("Logging out"); return; }
+    RLOGI("%s", msg);
+}
 
 const char* eventName(uint32_t t) {
     switch (t) {

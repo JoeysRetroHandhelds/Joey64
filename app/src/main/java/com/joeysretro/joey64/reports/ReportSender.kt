@@ -89,9 +89,10 @@ object ReportSender {
         // 2026-11-14, dips 2026-11-15), and in a testing build every session does (Joey 2026-11-12 night: "can it be any
         // session, at least for the beginning?"); read now while LogFiles still has it ("<time>-<pid>.json" names the process).
         val testing = com.joeysretro.joey64.launcher.update.Releases.isTesting(com.joeysretro.joey64.BuildConfig.VERSION_NAME)
+        val raNames = ReportPrefs.maskNames(ctx)
         for ((f, o) in sessions) if (!o.has("log") && ReportJson.wantsLog(o, testing)) {
             val pid = f.nameWithoutExtension.substringAfter('-').toIntOrNull() ?: continue
-            val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+            val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty() + raNames
             logExcerpt(ctx, pid, names)?.let { o.put("log", it); try { ReportFiles.write(f, o.toString()) } catch (e: Exception) { } }
         }
         // And the whole log (Joey 2026-11-24): the same sessions get an id and their process's logs, cleaned and gzipped,
@@ -99,7 +100,7 @@ object ReportSender {
         val logIds = HashMap<Int, String?>()
         for ((f, o) in sessions) if (!o.has("logId") && ReportJson.wantsLog(o, testing)) {
             val pid = f.nameWithoutExtension.substringAfter('-').toIntOrNull() ?: continue
-            val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+            val names = o.optJSONArray("maskNames")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty() + raNames
             val id = logIds.getOrPut(pid) { SessionLogs.prepare(ctx, pid, names) } ?: continue
             o.put("logId", id)
             try { ReportFiles.write(f, o.toString()) } catch (e: Exception) { }
@@ -319,9 +320,10 @@ object ReportSender {
     /** Names (whole ones only), paths and public addresses out of a part of an excerpt or a whole log (SessionLogs). */
     internal fun cleanText(s: String, names: List<String>): String {
         var text = s
-        // Whole names only (review 2026-11-15: a plain replace made "Joey64" "<player>64" for a player called Joey).
-        for (n in names.map { it.trim() }.filter { it.length >= 2 }.sortedByDescending { it.length })
-            text = text.replace(Regex("(?<![\\p{L}\\p{N}_])" + Regex.escape(n) + "(?![\\p{L}\\p{N}_])"), "<player>")
+        // Whole names only (review 2026-11-15: a plain replace made "Joey64" "<player>64" for a player called Joey), in any
+        // case (a RetroAchievements display name can differ from the sign-in name's case).
+        for (n in names.map { it.trim() }.filter { it.length >= 2 }.distinct().sortedByDescending { it.length })
+            text = text.replace(Regex("(?<![\\p{L}\\p{N}_])" + Regex.escape(n) + "(?![\\p{L}\\p{N}_])", RegexOption.IGNORE_CASE), "<player>")
         return com.joeysretro.joey64.LogMask.addresses(scrub(text))
     }
 

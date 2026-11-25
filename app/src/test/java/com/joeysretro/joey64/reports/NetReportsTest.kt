@@ -135,6 +135,12 @@ class NetReportsTest {
         assertEquals("I Joey64: <player> joined\nI room: <player>'s turn, joey64x", x)
     }
 
+    @Test fun excerptHidesNamesInAnyCase() {
+        // A RetroAchievements display name can differ from the sign-in name's case (release audit 0.2.8).
+        val x = ReportSender.excerpt(listOf("I signing in as rauser (kept account)", "I RAUser logged in successfully"), listOf("RAUser"))
+        assertEquals("I signing in as <player> (kept account)\nI <player> logged in successfully", x)
+    }
+
     @Test fun androidReasonsToEndings() {
         assertEquals("crash", ReportSender.endedOf(android.app.ApplicationExitInfo.REASON_CRASH_NATIVE))
         assertEquals("anr", ReportSender.endedOf(android.app.ApplicationExitInfo.REASON_ANR))
