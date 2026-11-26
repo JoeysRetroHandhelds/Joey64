@@ -73,6 +73,13 @@ when a new one is out.
 - Continue where you quit, or pick where to start from a list of auto save states and slots with their
   pictures.
 
+### BIOS
+Cartridge games need no BIOS. 64DD disks need the 64DD's IPL BIOS, which you dump yourself:
+- **Japan v1.2** (MD5 `8d3d9f294b6e174bc7b1d2fd1c727530`) starts every retail disk. This is the one to have.
+- Optional: the USA prototype (`37c36e4286d36892a9fc70eafe4104be`) and the development IPL (`aad37b1492886b892f1821f37fd3ae34`), used only for disks made for them.
+
+Pick the folder in Settings › Library › BIOS › 64DD BIOS. Any file name works, plain or in a .zip or .7z. Joey64 finds the file by its MD5 and keeps a copy in the data folder's `bios/`.
+
 ### Video
 - Renderers: parallel-RDP (Vulkan, accurate) and GLideN64 (OpenGL ES), chosen per device and per game, or by
   hand.

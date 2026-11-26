@@ -379,7 +379,7 @@ private fun describe(key: String): Pair<String, String> = when (key) {
     "now" -> "Look now" to "Reads the ROM folders for new, changed and removed games."
     "art" -> "Download box art" to "Covers from ScreenScraper, once per game. Off: no downloads; covers already here stay."
     "artq" -> "Box art quality" to "High: covers 640 pixels wide. Low: 320, a quarter of the space and quicker to download. Covers already here stay as they are."
-    "bios" -> "64DD BIOS" to "Needed for 64DD disks. Pick the folder with your BIOS files; Joey64 keeps a copy of each one it knows."
+    "bios" -> "64DD BIOS" to "Only 64DD disks need a BIOS; cartridge games don't. The one to have is the Japan 64DD IPL v1.2 (MD5 8d3d9f294b6e174bc7b1d2fd1c727530), which starts every retail disk. Any file name works, zipped or not: pick the folder it's in and Joey64 keeps a copy."
     else -> "Download cheats" to "Each game's cheat lists from joey64-data. Off: no downloads; lists already here stay."
 }
 
