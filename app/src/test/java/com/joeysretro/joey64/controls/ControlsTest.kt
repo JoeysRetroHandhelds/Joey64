@@ -268,6 +268,18 @@ class ControlsTest {
         assertTrue(AutoMap.layoutsFor(0x2022, 0x3001, "Retroid Pocket Controller", allKeys, hasRx = false).isEmpty())
     }
 
+    @Test fun aPadAynPassesOnIsKnownByItsName() {
+        // Odin 3 Portal 2026-11-26: the 8BitDo 64 over Bluetooth reaches apps as 2020:0111, the Odin pad's own ID.
+        val l = AutoMap.layoutsFor(0x2020, 0x0111, "8BitDo 64 BT", allKeys, hasRx = false).single()
+        assertEquals("8BitDo 64", l.name)
+        assertTrue(AutoMap.aynPassThrough(0x2020, 0x0111, "8BitDo 64 BT"))
+        assertTrue(AutoMap.passedOn(0x2020, 0x0111, "8BitDo 64 BT"))
+        // The handheld's own pad in both toggle positions stays the handheld's.
+        assertFalse(AutoMap.passedOn(0x2020, 0x0111, "Odin Controller"))
+        assertFalse(AutoMap.passedOn(0x2020, 0x0112, "Xbox Wireless Controller"))
+        assertTrue(AutoMap.layoutsFor(0x2020, 0x0111, "Odin Controller", allKeys, hasRx = false).isEmpty())
+    }
+
     @Test fun passedOnPadsAreKnownByTheNamesTheyReport() {
         fun rowOf(name: String, rx: Boolean = false) = AutoMap.layoutsFor(0x2022, 0x3001, name, allKeys, hasRx = rx).map { it.name }.distinct()
         // Names from RetroArch's Linux / SDL profiles; USB names come padded with spaces.

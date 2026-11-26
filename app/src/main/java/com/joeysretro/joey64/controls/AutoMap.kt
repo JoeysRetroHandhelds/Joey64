@@ -61,8 +61,8 @@ object AutoMap {
      */
     fun layoutsFor(vendor: Int, product: Int, name: String, hasKeys: (IntArray) -> BooleanArray, hasRx: Boolean): List<Layout> {
         if (name.contains("Brawler64", ignoreCase = true)) return listOf(PadTable.brawler64)
-        // A pad Retroid's service passes on has lost its own ID: known by its name instead ("8BitDo 64 BT").
-        val passed = retroidPassThrough(vendor, product, name)
+        // A pad Retroid's or AYN's service passes on has lost its own ID: known by its name instead ("8BitDo 64 BT").
+        val passed = passedOn(vendor, product, name)
         val rows = PadTable.rows.filter { r ->
             (r.ids.any { it == (vendor shl 16 or product) } || passed && r.named(name)) &&
                 (r.needsRx == null || r.needsRx == hasRx)
@@ -79,6 +79,21 @@ object AutoMap {
     fun retroidPassThrough(vendor: Int, product: Int, name: String): Boolean =
         vendor == 0x2022 && product == 0x3001 &&
             !name.startsWith("Retroid Pocket", ignoreCase = true) && !name.equals("X-Box Controller", ignoreCase = true)
+
+    /**
+     * A Bluetooth pad on an AYN handheld: AYN's input service (rsinput) holds the pad and passes it on to apps as a copy
+     * with the handheld's own pad's ID, 2020:0111, and the pad's own name (Odin 3 Portal 2026-11-26, Joey's 8BitDo 64:
+     * "8BitDo 64 BT" as 2020:0111, its real device hidden, so it was taken for the built-in pad: no new controller card,
+     * and no player could pick it). The handheld's own pad is "Odin Controller", "Xbox Wireless Controller" (2020:0112)
+     * in its Xbox position. Not told apart: a real Xbox Wireless Controller passed on in the Xbox position's ID.
+     */
+    fun aynPassThrough(vendor: Int, product: Int, name: String): Boolean =
+        vendor == 0x2020 && (product == 0x0111 || product == 0x0112) &&
+            !name.equals("Odin Controller", ignoreCase = true) && !name.equals("Xbox Wireless Controller", ignoreCase = true)
+
+    /** A pad a handheld's own service passed on under the handheld's pad ID ([retroidPassThrough], [aynPassThrough]). */
+    fun passedOn(vendor: Int, product: Int, name: String): Boolean =
+        retroidPassThrough(vendor, product, name) || aynPassThrough(vendor, product, name)
 
     /** A layout fits when the pad has every key it uses (the D-pad aside: hats don't count as keys). */
     private fun fits(l: Layout, hasKeys: (IntArray) -> BooleanArray): Boolean {
