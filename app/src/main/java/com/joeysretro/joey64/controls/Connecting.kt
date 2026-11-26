@@ -99,7 +99,10 @@ class NewPadCard(val set: ControlsSet, val pad: DeviceChoice.Pad, val seen: Bool
      * [p] had moves as [movesTo] says, with its setup; a swap swaps the two setups (as the Controls page's Controller row).
      */
     fun pick(p: Int, fresh: PlayerSetup): ControlsSet {
-        if (current == p) return set
+        // Kept its player: with Turn off, the built-in controls an earlier pick moved elsewhere go off now (Joey 2026-11-26:
+        // Turn off chosen on the card for a controller already on Player 1 left them on Player 2).
+        if (current == p) return if (settings.builtIn != BuiltInTaken.Off) set
+            else ControlsSet(set.players.map { if (it.device == DeviceChoice.BuiltIn) it.copy(device = DeviceChoice.None) else it })
         val old = set.players[p]
         val dest = movesTo(p)
         var out = set

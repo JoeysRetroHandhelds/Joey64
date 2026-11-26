@@ -81,6 +81,14 @@ class NewPadCardTest {
         assertEquals(DeviceChoice.None, out.players[2].device)
     }
 
+    @Test fun keepingItsPlayerWithTurnOffTurnsOffTheBuiltInControlsMovedEarlier() {
+        val set = card().pick(0, fresh()) // Move: P1 8BitDo, P2 built in
+        val out = card(set, seen = true, s = ConnectSettings(ask = AskWhen.Every, builtIn = BuiltInTaken.Off)).pick(0, fresh())
+        assertEquals(set.players[0], out.players[0])
+        assertTrue(out.players.none { it.device == DeviceChoice.BuiltIn })
+        assertEquals(set, card(set, seen = true, s = ConnectSettings(ask = AskWhen.Every)).pick(0, fresh()))
+    }
+
     @Test fun settingsRoundTrip() {
         val s = ConnectSettings(AskWhen.Never, BuiltInTaken.Off)
         assertEquals(s, ConnectSettings.fromJson(s.toJson()))

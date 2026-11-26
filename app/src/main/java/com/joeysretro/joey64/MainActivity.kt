@@ -3777,7 +3777,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback2 {
     private val unplugged = HashSet<Int>()
 
     private val padListener = object : android.hardware.input.InputManager.InputDeviceListener {
-        override fun onInputDeviceAdded(id: Int) { padConnected(id) }
+        // Settled first, as on the launcher: AYN's short-lived copy of a pad is gone before this runs (2026-11-26).
+        override fun onInputDeviceAdded(id: Int) {
+            fpsHandler.postDelayed({ if (InputDevice.getDevice(id) != null && !destroyed) padConnected(id) },
+                com.joeysretro.joey64.controls.NewPads.SETTLE_MS)
+        }
         override fun onInputDeviceRemoved(id: Int) { padGone(id) }
         override fun onInputDeviceChanged(id: Int) {}
     }

@@ -13,6 +13,9 @@ object NewPads {
      * (unless Ask every time and it connected just now, [event]), or a phone's first controller (no built-in controls here:
      * it plays as the built-in player, as before).
      */
+    /** How long a controller that just connected is left to settle before it's asked about (AYN adds a short-lived copy). */
+    const val SETTLE_MS = 400L
+
     fun cardFor(store: ControlsStore, d: InputDevice, event: Boolean): NewPadCard? {
         if (!PadDevices.isPad(d) || PadDevices.isBuiltIn(d)) return null
         val s = store.connecting()

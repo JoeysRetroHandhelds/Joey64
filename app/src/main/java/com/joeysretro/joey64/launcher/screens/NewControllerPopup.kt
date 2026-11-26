@@ -111,6 +111,10 @@ internal fun NewControllerHost(enabled: Boolean) {
         if (shown != null || !enabled || cardsOpen > 0) return@LaunchedEffect
         while (queue.isNotEmpty()) {
             val (id, event) = queue.first()
+            // A controller that just connected settles first: AYN's input service adds a short-lived copy of it (another
+            // descriptor, gone ~80 ms later) before the one that stays, and that copy got a "New controller" card
+            // (Odin 3 Portal, 2026-11-26). Its removal takes it off the queue and restarts this.
+            if (event) kotlinx.coroutines.delay(NewPads.SETTLE_MS)
             queue = queue.drop(1)
             val d = InputDevice.getDevice(id) ?: continue
             val card = NewPads.cardFor(store, d, event) ?: continue
