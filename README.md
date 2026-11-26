@@ -25,9 +25,9 @@ when a new one is out.
   ROM hacks, prototypes, homebrew and 64DD disk dumps that don't run as dumped.
 - **Lower lag.** Each frame is shown about one frame (~16 ms) sooner than mupen64plus normally does. Audio
   uses an exclusive low-latency stream where the device allows it, and the audio buffer grows only when a device
-  needs it. On 120 Hz screens the Steady frame pacing setting gives even motion, and switches to timed pacing
-  by itself when a game would otherwise build up lag. Run-ahead (1-4 frames, off unless you turn it on) takes
-  off more.
+  needs it. On 120 Hz screens frame pacing defaults to "Steady, less lag": each frame is timed to the screen, so
+  motion is even without building up lag ("Lowest lag" is there if you prefer it). Run-ahead (1-4 frames, off
+  unless you turn it on) takes off more.
 - **Faster parallel-RDP.** Joey64 skips refreshes that would show the same picture again, and uses a "smart
   sync" that waits for the GPU only when the game reads back what it drew. Games that need exact framebuffer
   reads (Pokémon Snap's photos, Resident Evil 2) keep them without paying for full synchronous mode everywhere.
@@ -37,8 +37,10 @@ when a new one is out.
   and depth clears are written in one go instead of drawn.
 - **Netplay built for handhelds.** Host a room on your own device and share an 8-character room code. Rooms on
   the same Wi-Fi show up by themselves, and public rooms are listed worldwide. The router's port is opened for
-  you (NAT-PMP or UPnP) and input delay adjusts to the connection while you play. No relay server sits in the
-  middle. It supports up to 4 players, and checks that everyone has the same ROM.
+  you (NAT-PMP or UPnP). When every device in the room is fast enough, the room uses rollback: your inputs show
+  after one frame and the game corrects itself when a late input arrives; otherwise input delay adjusts to the
+  connection while you play. No relay server sits in the middle. It supports up to 4 players, and checks that
+  everyone has the same ROM.
 - **Works with RetroArch.** Joey64 reads and writes RetroArch's Mupen64Plus-Next saves and save states as they
   are, imports a RetroArch setup on first run, and uses your RetroArch shader presets (.slangp, through
   librashader) and overlay packs straight from their folders. Saves and states from M64Plus FZ can be imported
@@ -140,8 +142,9 @@ Pick the folder in Settings › Library › BIOS › 64DD BIOS. Any file name wo
 ### Settings and data
 - Global or one game: Video, Emulation, Audio and Controls settings are set for every game (Global), then
   changed for a single game, which keeps only what you changed. Game settings shows and resets what a game has of its own, and copies it to another game.
-- Data folder: saves, states, screenshots, cheats and backups in Joey64's own storage or any folder you pick,
-  moved over for you.
+- Data folder: saves, states, screenshots, the cheats you turned on, save backups, BIOS files and a copy of your
+  settings, in Joey64's own storage or any folder you pick, moved over for you. Box art and texture packs stay in
+  Joey64's own storage.
 - Save backups on every start or daily, and a full Joey64 backup (everything, saves only or settings only) to a
   .zip you can restore.
 - First run: ROM folder, where saves go, import from RetroArch or M64Plus FZ, RetroAchievements sign-in.
